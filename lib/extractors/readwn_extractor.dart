@@ -1,0 +1,373 @@
+import 'dart:io';
+import 'package:html/parser.dart' as html_parser;
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
+import '../core/models/novel.dart';
+import '../core/models/chapter.dart';
+import '../core/models/chapter_content.dart';
+import '../core/services/webview_session_manager.dart';
+import '../core/utils/text_cleaner.dart';
+import 'novel_source.dart';
+
+/// Generic Extractor for the ReadWN / WuxiaBox / EmpireCMS MTL novel network.
+/// Powers WuxiaBox, FanMTL, WuxiaSpot, and sister high-speed webnovel portals.
+class ReadWnExtractor implements NovelSource {
+  @override
+  final String id;
+  @override
+  final String name;
+  @override
+  final String baseUrl;
+  @override
+  final String lang;
+  @override
+  final String iconUrl;
+  @override
+  final int estimatedNovelCount;
+
+  late final http.Client _client;
+
+  ReadWnExtractor({
+    required this.id,
+    required this.name,
+    required this.baseUrl,
+    this.lang = 'en',
+    this.iconUrl = '',
+    this.estimatedNovelCount = 25000,
+    http.Client? client,
+  }) {
+    if (client != null) {
+      _client = client;
+    } else {
+      final nativeHttpClient = HttpClient();
+      nativeHttpClient.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+      nativeHttpClient.connectionTimeout = const Duration(seconds: 15);
+      _client = IOClient(nativeHttpClient);
+    }
+  }
+
+  Map<String, String> get _headers {
+    final headers = <String, String>{
+      'User-Agent': WebViewSessionManager.defaultUserAgent,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': baseUrl,
+    };
+    final cookie = WebViewSessionManager.instance.getCookieHeader(baseUrl);
+    if (cookie != null && cookie.isNotEmpty) {
+      headers['Cookie'] = cookie;
+    }
+    return headers;
+  }
+
+  String _cleanUrl(String url) {
+    if (url.startsWith('//')) {
+      return 'https:$url';
+    } else if (url.startsWith('/')) {
+      return '$baseUrl$url';
+    }
+    return url;
+  }
+
+  @override
+  Future<List<Novel>> search(String query, {int page = 1}) async {
+    final cleanQuery = Uri.encodeComponent(query);
+    final targetUrl = '$baseUrl/search.html?keyword=$cleanQuery';
+
+    try {
+      final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
+      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
+        final list = parseNovelList(response.body);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrl);
+    if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
+      final list = parseNovelList(wvHtml);
+      if (list.isNotEmpty) return list;
+    }
+
+    return [];
+  }
+
+  @override
+  Future<List<Novel>> getPopular({int page = 1}) async {
+    final pageIndex = (page - 1) < 0 ? 0 : page - 1;
+    final candidates = [
+      '$baseUrl/list/all/all-onclick-$pageIndex.html',
+      '$baseUrl/all-novels/?page=$page',
+      '$baseUrl/novel-list/?page=$page',
+      '$baseUrl/list/all/all-all-$pageIndex.html',
+      '$baseUrl/',
+    ];
+
+    for (final url in candidates) {
+      try {
+        final resp = await _client.get(Uri.parse(url), headers: _headers);
+        if (resp.statusCode == 200 && !resp.body.contains('Just a moment...')) {
+          final list = parseNovelList(resp.body);
+          if (list.isNotEmpty) return list;
+        }
+      } catch (_) {}
+    }
+
+    final primaryUrl = '$baseUrl/list/all/all-onclick-$pageIndex.html';
+    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(primaryUrl);
+    if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
+      final list = parseNovelList(wvHtml);
+      if (list.isNotEmpty) return list;
+    }
+
+    throw HttpException('Could not load popular novels from $name.');
+  }
+
+  @override
+  Future<List<Novel>> getLatest({int page = 1}) async {
+    final pageIndex = (page - 1) < 0 ? 0 : page - 1;
+    final candidates = [
+      '$baseUrl/list/all/all-lastupdate-$pageIndex.html',
+      '$baseUrl/all-novels/?page=$page',
+      '$baseUrl/novel-list/?page=$page',
+      '$baseUrl/',
+    ];
+
+    for (final url in candidates) {
+      try {
+        final resp = await _client.get(Uri.parse(url), headers: _headers);
+        if (resp.statusCode == 200 && !resp.body.contains('Just a moment...')) {
+          final list = parseNovelList(resp.body);
+          if (list.isNotEmpty) return list;
+        }
+      } catch (_) {}
+    }
+
+    final primaryUrl = '$baseUrl/list/all/all-lastupdate-$pageIndex.html';
+    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(primaryUrl);
+    if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
+      final list = parseNovelList(wvHtml);
+      if (list.isNotEmpty) return list;
+    }
+
+    throw HttpException('Could not load latest novels from $name.');
+  }
+
+  List<Novel> parseNovelList(String html) {
+    final doc = html_parser.parse(html);
+    final List<Novel> list = [];
+
+    final items = doc.querySelectorAll('.content-list li, .item, li.list-item, div.media, .novel-item');
+    for (final item in items) {
+      final linkEl = item.querySelector('a.name, h4.media-heading a, .title a, a[title]');
+      if (linkEl == null) continue;
+
+      final href = linkEl.attributes['href'] ?? '';
+      if (href.isEmpty || !href.contains('/novel/')) continue;
+
+      String title = linkEl.text.trim();
+      if (title.contains('\n')) {
+        title = title.split('\n').first.trim();
+      }
+      if (title.isEmpty) continue;
+      if (!TextCleaner.isValidNovelTitle(title, href)) continue;
+
+      final imgEl = item.querySelector('img');
+      String coverUrl = '';
+      if (imgEl != null) {
+        coverUrl = imgEl.attributes['data-src'] ??
+            imgEl.attributes['data-original'] ??
+            imgEl.attributes['src'] ??
+            '';
+        if (coverUrl.contains('placeholder') || coverUrl.contains('blank')) {
+          coverUrl = imgEl.attributes['data-src'] ?? imgEl.attributes['data-original'] ?? '';
+        }
+        coverUrl = _cleanUrl(coverUrl);
+        if (coverUrl.contains('placeholder') || coverUrl.startsWith('data:')) {
+          coverUrl = '';
+        }
+      }
+
+      final uri = Uri.tryParse(href);
+      final segments = uri?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
+      final slug = segments.isNotEmpty ? segments.last.replaceAll('.html', '') : href.hashCode.toString();
+      final novelId = '${id}_$slug';
+
+      list.add(Novel(
+        id: novelId,
+        sourceId: id,
+        sourceUrl: _cleanUrl(href),
+        title: title,
+        coverUrl: coverUrl,
+      ));
+    }
+    return list;
+  }
+
+  @override
+  Future<Novel> getNovelDetails(String novelUrl) async {
+    String body = '';
+    try {
+      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
+        body = response.body;
+      }
+    } catch (_) {}
+
+    if (body.isEmpty) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
+      if (wvHtml != null) body = wvHtml;
+    }
+
+    if (body.isEmpty) {
+      throw HttpException('Failed to load details on $name');
+    }
+    return parseNovelDetails(novelUrl, body);
+  }
+
+  Novel parseNovelDetails(String novelUrl, String html) {
+    final doc = html_parser.parse(html);
+    final title = doc.querySelector('h1, .novel-title, .title')?.text.trim() ?? 'Unknown Novel';
+
+    final authorEl = doc.querySelector('.author, span[itemprop="author"]');
+    var author = authorEl?.text.replaceAll('Author:', '').replaceAll('\n', '').trim() ?? 'Unknown Author';
+
+    final descEl = doc.querySelector('.desc, .description, .summary');
+    final desc = descEl?.text.trim() ?? '';
+
+    final imgEl = doc.querySelector('.cover img, .novel-cover img, .thumb img, img[itemprop="image"], img');
+    String coverUrl = '';
+    if (imgEl != null) {
+      coverUrl = imgEl.attributes['data-src'] ??
+          imgEl.attributes['data-original'] ??
+          imgEl.attributes['src'] ??
+          '';
+      if (coverUrl.contains('placeholder') || coverUrl.contains('blank')) {
+        coverUrl = imgEl.attributes['data-src'] ?? imgEl.attributes['data-original'] ?? '';
+      }
+      coverUrl = _cleanUrl(coverUrl);
+      if (coverUrl.contains('placeholder') || coverUrl.startsWith('data:')) {
+        coverUrl = '';
+      }
+    }
+
+    final uri = Uri.tryParse(novelUrl);
+    final segments = uri?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
+    final slug = segments.isNotEmpty ? segments.last.replaceAll('.html', '') : novelUrl.hashCode.toString();
+
+    return Novel(
+      id: '${id}_$slug',
+      sourceId: id,
+      sourceUrl: novelUrl,
+      title: title,
+      author: author,
+      description: desc,
+      coverUrl: coverUrl,
+    );
+  }
+
+  @override
+  Future<List<Chapter>> getChapterList(String novelUrl) async {
+    String body = '';
+    try {
+      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
+        body = response.body;
+      }
+    } catch (_) {}
+
+    if (body.isEmpty) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
+      if (wvHtml != null) body = wvHtml;
+    }
+
+    if (body.isEmpty) {
+      throw HttpException('Failed to load chapter list on $name');
+    }
+    return parseChapterList(novelUrl, body);
+  }
+
+  List<Chapter> parseChapterList(String novelUrl, String html) {
+    final doc = html_parser.parse(html);
+    final List<Chapter> chapters = [];
+
+    final uri = Uri.tryParse(novelUrl);
+    final segments = uri?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
+    final novelSlug = segments.isNotEmpty ? segments.last.replaceAll('.html', '') : novelUrl.hashCode.toString();
+    final novelId = '${id}_$novelSlug';
+
+    final links = doc.querySelectorAll('.chapter-list a, .chapters a, ul.list a, a.chapter');
+    int order = 0;
+    for (final l in links) {
+      final href = l.attributes['href'] ?? '';
+      if (href.isEmpty) continue;
+
+      String title = l.text.trim();
+      if (title.contains('\n')) {
+        title = title.split('\n').where((s) => s.trim().isNotEmpty).join(' - ');
+      }
+      if (title.isEmpty) continue;
+
+      final chSlug = Uri.tryParse(href)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull?.replaceAll('.html', '') ??
+          '${chapters.length + 1}';
+
+      chapters.add(Chapter(
+        id: '${novelId}_$chSlug',
+        novelId: novelId,
+        title: title,
+        url: _cleanUrl(href),
+        chapterNumber: order + 1.0,
+      ));
+      order++;
+    }
+    return chapters;
+  }
+
+  @override
+  Future<ChapterContent> getChapterContent(String chapterUrl) async {
+    String body = '';
+    try {
+      final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
+      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
+        body = response.body;
+      }
+    } catch (_) {}
+
+    if (body.isEmpty) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(chapterUrl);
+      if (wvHtml != null) body = wvHtml;
+    }
+
+    if (body.isEmpty) {
+      throw HttpException('Failed to load chapter content on $name');
+    }
+    return parseChapterContent(chapterUrl, body);
+  }
+
+  ChapterContent parseChapterContent(String chapterUrl, String html) {
+    final doc = html_parser.parse(html);
+    final container = doc.querySelector('.chapter-content, #content, .content, .reading-content');
+
+    final title = doc.querySelector('h1, h2.chapter-title')?.text.trim() ?? 'Chapter';
+
+    final List<String> rawParagraphs = [];
+    if (container != null) {
+      for (final p in container.querySelectorAll('p')) {
+        final text = p.text.trim();
+        if (text.isNotEmpty) {
+          rawParagraphs.add(text);
+        }
+      }
+    }
+    final paragraphs = TextCleaner.cleanParagraphs(rawParagraphs);
+
+    final raw = TextCleaner.toCleanRawText(paragraphs);
+    return ChapterContent(
+      chapterId: chapterUrl.hashCode.toString(),
+      novelId: '',
+      title: title,
+      rawText: raw,
+      paragraphs: paragraphs,
+    );
+  }
+}
+

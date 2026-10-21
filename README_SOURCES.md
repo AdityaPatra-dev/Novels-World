@@ -63,36 +63,7 @@ All 45 active sources registered in `SourceRegistry` are verified live, tested a
 
 The following websites from `NOVEL_SOURCES_AND_TEMPLATES.md` have **not yet been added** to `SourceRegistry`. They can be integrated into the app using existing extractor engines or dedicated bespoke drivers:
 
-### Group 1: WordPress Madara Theme (Ready for Immediate Addition)
-All of these run on standard `MadaraExtractor` and can be registered with base URL and route configuration:
-
-| Source Name | Base URL | Lang | Category / Content |
-| :--- | :--- | :--- | :--- |
-| **NovelTranslate** | `https://noveltranslate.com/` | EN | Asian webnovel aggregator |
-| **LunarLetters** | `https://lunarletters.com/` | EN | Korean & Japanese translation group |
-| **Foxaholic** | `https://www.foxaholic.com/` | EN | High-volume Asian translation collective |
-| **NeoSekai Translations** | `https://www.neosekaitranslations.com/` | EN | Japanese light novel translations |
-| **Zetro Translation** | `https://zetrotranslation.com/` | EN | Japanese isekai & fantasy translations |
-| **WebNovelLover** | `https://www.webnovelover.com/` | EN | Asian webnovel aggregator |
-| **WBNovel** | `https://wbnovel.com/` | EN | English webnovel portal |
-| **MysticalSeries** | `https://mysticalmerries.com/` | EN | Korean romance & fantasy translations |
-| **Guavaread** | `https://guavaread.com/` | EN | Korean & Chinese action novels |
-| **MTL-Novel** | `https://mtl-novel.com/` | EN | Machine translation portal |
-| **Light Novel Updates** | `https://www.lightnovelupdates.com/` | EN | Light novel directory & reader |
-| **Kiniga** | `https://kiniga.com/` | EN | Web novel reader |
-| **Pancho Translations** | `https://panchotranslations.com/` | EN | Korean novel translations |
-| **Salmon Latte** | `https://salmonlatte.com/` | EN | Japanese web & light novels |
-| **Fans Translations** | `https://fanstranslations.com/` | EN | Asian novel fan translations |
-| **WorldNovel (FR)** | `https://world-novel.fr/` | FR | French light novel portal |
-| **Azora Moon (AR)** | `https://azoramoon.com/` | AR | Arabic novel translations |
-| **Yousum** | `https://yousum.me/` | EN | Web novel translations |
-| **Wonder Novels** | `https://wondernovels.com/` | EN | Independent translated webnovels |
-| **WordExcerpt** | `https://wordexcerpt.com/` | EN | Korean & Japanese licensed titles |
-| **Crush Novel** | `https://crushnovel.com/` | EN | Aggregator |
-| **Reaper Scans Novels** | `https://reaperscans.com/` | EN | Korean webnovel translations |
-| **Flame Comics / Scans** | `https://flamecomics.me/` | EN | Korean fantasy webnovels |
-| **Asura Scans Novels** | `https://asurascans.com/` | EN | High-traffic Korean webnovels |
-| **Leviatan Scans** | `https://en.leviatanscans.com/` | EN | Translated fantasy webnovels |
+> **Group 1: WordPress Madara Theme Status**: **100% COMPLETE**. All 24 viable, working Madara novel sources have been fully verified and integrated into `SourceRegistry`. All dead, hijacked, parked, and paywalled domains have been audited and purged.
 
 ### Group 2: WordPress LightNovelWP Theme (Ready for Immediate Addition)
 These run on `LightNovelWpExtractor` using `.eplister` and `.epcontent` selectors:

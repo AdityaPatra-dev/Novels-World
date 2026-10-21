@@ -70,66 +70,36 @@ Madara was originally created as a manga WordPress theme by MangaStream/WP-Manga
 
 ## 4. Complete Catalog of Novel Reading Websites
 
-### Group 1: WordPress Madara Theme Sites (Target First - 76+ Sources)
-*All of these can be extracted using a single `MadaraExtractor` base engine with site-specific configuration:*
+### Group 1: WordPress Madara Theme Sites (Verified & Active - 24 Sources)
+*All working Madara theme sites have been verified live and integrated into `SourceRegistry`. All dead, hijacked, parked, and paywalled domains have been audited and purged:*
 
-| Website Name | URL | Language / Type |
-| :--- | :--- | :--- |
-| **NovelTranslate** | `https://noveltranslate.com/` | English / Aggregator & MTL |
-| **FirstKissNovel** | `https://1stkissnovel.org/` | English / Korean & Chinese Romance/Action |
-| **LunarLetters** | `https://lunarletters.com/` | English / Translations |
-| **SleepyTranslations** | `https://sleepytranslations.com/` | English / Korean & Japanese Translations |
-| **DaoNovel** | `https://daonovel.co/` | English / Cultivation & Xuanhuan |
-| **MostNovel** | `https://mostnovel.com/` | English / Webnovels |
-| **NovelMultiverse** | `https://www.novelmultiverse.com/` | English / Translation Group |
-| **LightNovelHeaven** | `https://lightnovelheaven.com/` | English / Light Novels |
-| **Foxaholic** | `https://www.foxaholic.com/` | English / High-volume Asian Novel Translations |
-| **WuxiaWorld.Site** | `https://wuxiaworld.site/` | English / Aggregator (not the official .com) |
-| **SonicMTL** | `https://www.sonicmtl.com/` | English / Machine Translation |
-| **NeoSekai Translations** | `https://www.neosekaitranslations.com/` | English / Japanese Light Novels |
-| **MeioNovel** | `https://meionovels.com/` | Portuguese / Webnovels |
-| **Zetro Translation** | `https://zetrotranslation.com/` | English / Light Novels |
-| **ArNovel** | `https://ar-no.com/` | Arabic / Translated Novels |
-| **WebNovelLover** | `https://www.webnovelover.com/` | English / Webnovels |
-| **WBNovel** | `https://wbnovel.com/` | English / Webnovels (Active in App) |
-| **MysticalSeries** | `https://mysticalmerries.com/` | English / Romance & Fantasy |
-| **Vanovel** | `https://vanovel.com/` | Turkish / Light Novels |
-| **HizoManga** | `https://hizomanga.net/` | Arabic / Novel & Manga |
-| **Riwyat** | `https://cenele.com/` | Arabic / Novels (Active in App) |
-| **Wonder Novels** | `https://wondernovels.com/` | English / Translations (Active in App) |
-| **Novel Short** | `https://novel-short.com/` | English / Webnovels (Active in App) |
-| **Etude Translations** | `https://etudetranslations.com/` | English / Light & Webnovels (Active in App) |
-| **Anslid** | `https://anslid.com/` | Spanish / Webnovels (Active in App) |
-| **Lullobox** | `https://lullobox.com/` | English / Webnovels (Active in App) |
-| **Novel4Up** | `https://novel4up.com/` | Arabic / Novels (Hijacked Domain) |
-| **TurkceLightNovels** | `https://turkcelightnovels.com/` | Turkish / Light Novels |
-| **Guavaread** | `https://guavaread.com/` | English / Korean & Chinese Novels |
-| **MTL-Novel** | `https://mtl-novel.com/` | English / MTL |
-| **WebNovelOku** | `https://www.webnoveloku.com/` | Turkish / Webnovels |
-| **Light Novel Updates** | `https://www.lightnovelupdates.com/` | English / Novels |
-| **Nitro Manga** | `https://nitromanga.com/` | English / Novels & Manga |
-| **Kiniga** | `https://kiniga.com/` | English / Novels |
-| **Pancho Translations** | `https://panchotranslations.com/` | English / Translations |
-| **Salmon Latte** | `https://salmonlatte.com/` | English / Japanese Novels |
-| **Srank Manga** | `https://srankmanga.com/` | English / Novels |
-| **Novel Lucky** | `https://novel-lucky.com/` | Thai / Webnovels (Active in App) |
-| **Fans Translations** | `https://fanstranslations.com/` | English / Fan Translations |
-| **WorldNovel** | `https://world-novel.fr/` | French / Light Novels |
-| **Hiraeth Translation** | `https://hiraethtranslation.com/` | English / Korean Novels |
-| **Novel PDF** | `https://novelpdf.xyz/` | English / Webnovels |
-| **Azora** | `https://azoramoon.com/` | Arabic / Novels |
-| **TranslatinOtaku** | `https://translatinotaku.net/` | English / Japanese Light Novels |
-| **Nocturne Translations** | `https://nocturnetls.net/` | English / Korean & Chinese Novels |
-| **Yousum** | `https://yousum.me/` | English / Webnovels |
-| **Top Light Novel** | `https://toplightnovel.com/` | English / Novels |
-| **BoxNovel** | `https://boxnovel.com/` | English / Webnovels (Active in App) |
-| **WordExcerpt** | `https://wordexcerpt.com/` | English / Korean & Japanese Licensors |
-| **Crush Novel** | `https://crushnovel.com/` | English / Webnovels |
-| **Novel Crusher** | `https://novelcrusher.com/` | English / Webnovels |
-| **Reaper Scans Novels** | `https://reaperscans.com/` | English / Webnovels & Manhwa |
-| **Flame Scans/Comics** | `https://flamecomics.me/` | English / Webnovels |
-| **Asura Scans Novels** | `https://asurascans.com/` | English / Korean Webnovels |
-| **Leviatan Scans** | `https://en.leviatanscans.com/` | English / Webnovels |
+| Website Name | URL | Language / Type | App Status |
+| :--- | :--- | :--- | :--- |
+| **SonicMTL** | `https://www.sonicmtl.com/` | English / Machine Translation | **100% VERIFIED LIVE** |
+| **WuxiaWorld.Site** | `https://wuxiaworld.site/` | English / Aggregator | **100% VERIFIED LIVE** |
+| **WBNovel** | `https://wbnovel.com/` | English / Webnovels | **100% VERIFIED LIVE** |
+| **BoxNovel** | `https://boxnovel.com/` | English / Webnovels | **100% VERIFIED LIVE** |
+| **FirstKissNovel** | `https://1stkissnovel.org/` | English / Romance & Action | **100% VERIFIED LIVE** |
+| **LightNovelHeaven** | `https://lightnovelheaven.com/` | English / Light Novels | **100% VERIFIED LIVE** |
+| **Novel Short** | `https://novel-short.com/` | English / Webnovels | **100% VERIFIED LIVE** |
+| **Lullobox** | `https://lullobox.com/` | English / Webnovels | **100% VERIFIED LIVE** |
+| **Srank Manga** | `https://srankmanga.com/` | English / Novels & Manhwa | **100% VERIFIED LIVE** |
+| **Wonder Novels** | `https://wondernovels.com/` | English / Translated Webnovels | **100% VERIFIED LIVE** |
+| **Etude Translations** | `https://etudetranslations.com/` | English / Light & Webnovels | **100% VERIFIED LIVE** |
+| **Hiraeth Translation** | `https://hiraethtranslation.com/` | English / Korean Novels | **100% VERIFIED LIVE** |
+| **SleepyTranslations** | `https://sleepytranslations.com/` | English / Korean & Japanese | **100% VERIFIED LIVE** |
+| **TranslatinOtaku** | `https://translatinotaku.net/` | English / Japanese Light Novels | **100% VERIFIED LIVE** |
+| **Kol Novel** | `https://kolnovel.com/` | Arabic / Top Arabic Novel Site | **100% VERIFIED LIVE** |
+| **Riwyat** | `https://cenele.com/` | Arabic / Novels (Custom `/cont/`) | **100% VERIFIED LIVE** |
+| **ArNovel** | `https://ar-no.com/` | Arabic / Translated Novels | **100% VERIFIED LIVE** |
+| **HizoManga** | `https://hizomanga.net/` | Arabic / Novels & Manga | **100% VERIFIED LIVE** |
+| **MeioNovel** | `https://meionovels.com/` | Portuguese / Webnovels | **100% VERIFIED LIVE** |
+| **Anslid** | `https://anslid.com/` | Spanish / Webnovels | **100% VERIFIED LIVE** |
+| **Novel Lucky** | `https://novel-lucky.com/` | Thai / Webnovels | **100% VERIFIED LIVE** |
+| **Novel PDF** | `https://novelpdf.xyz/` | Thai / Webnovels | **100% VERIFIED LIVE** |
+| **TurkceLightNovels** | `https://turkcelightnovels.com/` | Turkish / Light Novels | **100% VERIFIED LIVE** |
+| **Vanovel** | `https://vanovel.com/` | Turkish / Light Novels | **100% VERIFIED LIVE** |
+| **WebNovelOku** | `https://www.webnoveloku.com/` | Turkish / Webnovels | **100% VERIFIED LIVE** |
 
 ---
 

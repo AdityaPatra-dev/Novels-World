@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novels_world/core/models/chapter.dart';
 import 'package:novels_world/core/models/chapter_content.dart';
@@ -180,14 +179,6 @@ void main() {
         name: 'Failing Source',
         baseUrl: 'https://failing.com',
         searchHandler: (q) => throw Exception('500 Internal Server Error'),
-      );
-
-      final timeoutSource = MockSearchSource(
-        id: 'timeout',
-        name: 'Timeout Source',
-        baseUrl: 'https://timeout.com',
-        delay: const Duration(seconds: 15),
-        searchHandler: (q) => [],
       );
 
       // Overriding timeout for fast unit testing

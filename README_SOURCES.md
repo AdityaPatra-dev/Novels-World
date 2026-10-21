@@ -7,7 +7,7 @@
 
 ## 1. Verified Active Sources (Live in Application Registry)
 
-All 39 active sources registered in `SourceRegistry` are verified live, tested against real endpoints, and guaranteed to have working DNS and content parsing. *(Note: VDoc and OceanofPDF have been removed per user specification)*:
+All 45 active sources registered in `SourceRegistry` are verified live, tested against real endpoints, and guaranteed to have working DNS and content parsing. *(Note: VDoc and OceanofPDF have been removed per user specification)*:
 
 | Rank | Lang | Source Name | Template / CMS | Est. Novels | Base URL | Popular Path / Mechanism | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -36,20 +36,26 @@ All 39 active sources registered in `SourceRegistry` are verified live, tested a
 | 23 | **EN** | **1stKissNovel** | WordPress Madara | 8,000 | `https://1stkissnovel.org` | `/novel-tag/popular/?m_orderby=views` | **100% VERIFIED (AppHttpOverrides SSL)** |
 | 24 | **EN** | **LightNovelHeaven** | WordPress Madara | 6,000 | `https://lightnovelheaven.com` | `/` | **100% VERIFIED FULL STACK** |
 | 25 | **EN** | **Divine Dao Library** | WordPress Fictioneer | 5,000 | `https://www.divinedaolibrary.com` | `/` | **100% VERIFIED FULL STACK** |
-| 26 | **EN** | **Srank Manga** | WordPress Madara | 4,000 | `https://srankmanga.com` | `/` | **100% VERIFIED FULL STACK** |
-| 27 | **EN** | **Hiraeth Translation** | WordPress Madara | 1,500 | `https://hiraethtranslation.com` | `/` | **100% VERIFIED FULL STACK** |
-| 28 | **EN** | **SleepyTranslations** | WordPress Madara | 1,500 | `https://sleepytranslations.com` | `/` | **100% VERIFIED FULL STACK** |
-| 29 | **EN** | **TranslatinOtaku** | WordPress Madara | 1,000 | `https://translatinotaku.net` | `/` | **100% VERIFIED FULL STACK** |
-| 30 | **AR** | **Kol Novel** | LightNovelWP | 8,000 | `https://kolnovel.com` | `/series/?order=popular` | **100% VERIFIED FULL STACK** |
-| 31 | **AR** | **ArNovel** | WordPress Madara | 5,000 | `https://ar-no.com` | `/` | **100% VERIFIED FULL STACK** |
-| 32 | **AR** | **HizoManga** | WordPress Madara | 4,000 | `https://hizomanga.net` | `/mangas/?m_orderby=views` | **100% VERIFIED FULL STACK** |
-| 33 | **PT** | **MeioNovel** | WordPress Madara | 5,000 | `https://meionovels.com` | `/` | **100% VERIFIED FULL STACK** |
-| 34 | **TH** | **NovelLucky** | WordPress Madara | 5,000 | `https://novel-lucky.com` | `/novel/?m_orderby=views` | **100% VERIFIED FULL STACK** |
-| 35 | **TH** | **NovelPDF** | WordPress Madara | 2,500 | `https://novelpdf.xyz` | `/novel/?m_orderby=views` | **100% VERIFIED FULL STACK** |
-| 36 | **TR** | **TurkceLightNovels** | WordPress Madara | 3,000 | `https://turkcelightnovels.com` | `/` | **100% VERIFIED FULL STACK** |
-| 37 | **TR** | **Vanovel** | WordPress Madara | 3,000 | `https://vanovel.com` | `/manga/?m_orderby=views` | **100% VERIFIED FULL STACK** |
-| 38 | **TR** | **WebNovelOku** | WordPress Madara | 3,000 | `https://www.webnoveloku.com` | `/manga/?m_orderby=views` | **100% VERIFIED FULL STACK** |
-| 39 | **JA** | **Kakuyomu** | Kadokawa Official / SSR | 600,000 | `https://kakuyomu.jp` | `/rankings/entire/weekly` | **100% VERIFIED FULL STACK** |
+| 26 | **EN** | **Novel Short** | WordPress Madara | 5,000 | `https://novel-short.com` | `/novel/` | **100% VERIFIED FULL STACK** |
+| 27 | **EN** | **Lullobox** | WordPress Madara | 4,000 | `https://lullobox.com` | `/manga/` | **100% VERIFIED FULL STACK** |
+| 28 | **EN** | **Srank Manga** | WordPress Madara | 4,000 | `https://srankmanga.com` | `/` | **100% VERIFIED FULL STACK** |
+| 29 | **EN** | **Wonder Novels** | WordPress Madara | 3,000 | `https://wondernovels.com` | `/novels/` | **100% VERIFIED FULL STACK** |
+| 30 | **EN** | **Etude Translations** | WordPress Madara | 2,000 | `https://etudetranslations.com` | `/novel/` | **100% VERIFIED FULL STACK** |
+| 31 | **EN** | **Hiraeth Translation** | WordPress Madara | 1,500 | `https://hiraethtranslation.com` | `/` | **100% VERIFIED FULL STACK** |
+| 32 | **EN** | **SleepyTranslations** | WordPress Madara | 1,500 | `https://sleepytranslations.com` | `/` | **100% VERIFIED FULL STACK** |
+| 33 | **EN** | **TranslatinOtaku** | WordPress Madara | 1,000 | `https://translatinotaku.net` | `/` | **100% VERIFIED FULL STACK** |
+| 34 | **AR** | **Kol Novel** | LightNovelWP | 8,000 | `https://kolnovel.com` | `/series/?order=popular` | **100% VERIFIED FULL STACK** |
+| 35 | **AR** | **Riwyat** | WordPress Madara | 6,000 | `https://cenele.com` | `/cont/` | **100% VERIFIED FULL STACK** |
+| 36 | **AR** | **ArNovel** | WordPress Madara | 5,000 | `https://ar-no.com` | `/` | **100% VERIFIED FULL STACK** |
+| 37 | **AR** | **HizoManga** | WordPress Madara | 4,000 | `https://hizomanga.net` | `/mangas/?m_orderby=views` | **100% VERIFIED FULL STACK** |
+| 38 | **PT** | **MeioNovel** | WordPress Madara | 5,000 | `https://meionovels.com` | `/` | **100% VERIFIED FULL STACK** |
+| 39 | **ES** | **Anslid** | WordPress Madara | 3,000 | `https://anslid.com` | `/novela/` | **100% VERIFIED FULL STACK** |
+| 40 | **TH** | **NovelLucky** | WordPress Madara | 5,000 | `https://novel-lucky.com` | `/novel/?m_orderby=views` | **100% VERIFIED FULL STACK** |
+| 41 | **TH** | **NovelPDF** | WordPress Madara | 2,500 | `https://novelpdf.xyz` | `/novel/?m_orderby=views` | **100% VERIFIED FULL STACK** |
+| 42 | **TR** | **TurkceLightNovels** | WordPress Madara | 3,000 | `https://turkcelightnovels.com` | `/` | **100% VERIFIED FULL STACK** |
+| 43 | **TR** | **Vanovel** | WordPress Madara | 3,000 | `https://vanovel.com` | `/manga/?m_orderby=views` | **100% VERIFIED FULL STACK** |
+| 44 | **TR** | **WebNovelOku** | WordPress Madara | 3,000 | `https://www.webnoveloku.com` | `/manga/?m_orderby=views` | **100% VERIFIED FULL STACK** |
+| 45 | **JA** | **Kakuyomu** | Kadokawa Official / SSR | 600,000 | `https://kakuyomu.jp` | `/rankings/entire/weekly` | **100% VERIFIED FULL STACK** |
 
 ---
 

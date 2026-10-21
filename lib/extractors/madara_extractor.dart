@@ -28,6 +28,7 @@ class MadaraExtractor implements NovelSource {
   final String? customChapterAjaxUrl;
   final String? customContentSelector;
   final String? customPopularPath;
+  final String? customSearchPostType;
 
   late final http.Client _client;
 
@@ -42,6 +43,7 @@ class MadaraExtractor implements NovelSource {
     this.customChapterAjaxUrl,
     this.customContentSelector,
     this.customPopularPath,
+    this.customSearchPostType,
     http.Client? client,
   }) {
     if (client != null) {
@@ -80,9 +82,12 @@ class MadaraExtractor implements NovelSource {
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
     final cleanQuery = Uri.encodeComponent(query);
+    final postTypeParam = (customSearchPostType != null && customSearchPostType!.isEmpty)
+        ? ''
+        : '&post_type=${customSearchPostType ?? 'wp-manga'}';
     final targetUrl = page == 1
-        ? '$baseUrl/?s=$cleanQuery&post_type=wp-manga'
-        : '$baseUrl/page/$page/?s=$cleanQuery&post_type=wp-manga';
+        ? '$baseUrl/?s=$cleanQuery$postTypeParam'
+        : '$baseUrl/page/$page/?s=$cleanQuery$postTypeParam';
 
     try {
       final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
@@ -174,11 +179,11 @@ class MadaraExtractor implements NovelSource {
     final seenUrls = <String>{};
 
     final items = document.querySelectorAll(
-      '.c-tabs-item__content, .page-item-detail, .badge-pos-1, .row.c-tabs-item__content, .page-listing-item, .post-item, .novel-item, .col-6.col-md-3, .col-6.col-md-2, article.post',
+      '.c-tabs-item__content, .page-item-detail, .badge-pos-1, .row.c-tabs-item__content, .page-listing-item, .post-item, .novel-item, .col-6.col-md-3, .col-6.col-md-2, article.post, article.nhv-library-card, .nhv-library-card',
     );
 
     for (final item in items) {
-      final titleAnchor = item.querySelector('.post-title h3 a, .post-title h4 a, h3.h4 a, .post-title a, h3 a, h2 a');
+      final titleAnchor = item.querySelector('.post-title h3 a, .post-title h4 a, h3.h4 a, .post-title a, h3 a, h2 a, .nhv-library-card__title a');
       if (titleAnchor == null) continue;
 
       final title = titleAnchor.text.trim();
@@ -187,7 +192,7 @@ class MadaraExtractor implements NovelSource {
       if (!TextCleaner.isValidNovelTitle(title, url)) continue;
       seenUrls.add(url);
 
-      var img = item.querySelector('.item-thumb img, .post-thumb img, img[data-src], img[data-lazy-src], img[data-original], img');
+      var img = item.querySelector('.nhv-library-card__cover img, .item-thumb img, .post-thumb img, img[data-src], img[data-lazy-src], img[data-original], img');
       img ??= item.parent?.querySelector('.item-thumb img, .post-thumb img, img[data-src], img');
       img ??= item.previousElementSibling?.querySelector('.item-thumb img, .post-thumb img, img[data-src], img');
 
@@ -297,9 +302,9 @@ class MadaraExtractor implements NovelSource {
 
     final document = html_parser.parse(body);
 
-    final title = document.querySelector('.post-title h1, .post-title h3, .post-title')?.text.trim() ?? 'Untitled';
+    final title = document.querySelector('.post-title h1, .post-title h3, .post-title, .nhv-single-novel__title, h1')?.text.trim() ?? 'Untitled';
 
-    final img = document.querySelector('.summary_image img, .post-thumb img, .featured-image img');
+    final img = document.querySelector('.summary_image img, .nhv-single-novel__cover img, .post-thumb img, .featured-image img, .item-thumb img, .wp-post-image');
     String cover = '';
     if (img != null) {
       cover = img.attributes['data-src'] ??
@@ -314,20 +319,21 @@ class MadaraExtractor implements NovelSource {
       }
     }
 
-    final author = document.querySelector('.author-content a, .mg_author .summary-content a')?.text.trim() ??
+    final author = document.querySelector('.author-content a, .mg_author .summary-content a, a[href*="/cont-author/"], .nhv-novel-author a')?.text.trim() ??
         'Unknown Author';
 
     final genres = document
-        .querySelectorAll('.genres-content a, .genres a')
+        .querySelectorAll('.genres-content a, .genres a, a[href*="/cont-genre/"], .nhv-novel-genres a')
         .map((e) => e.text.trim())
         .where((g) => g.isNotEmpty)
+        .toSet()
         .toList();
 
     final status = document.querySelector('.post-status .post-content_item .summary-content')?.text.trim() ??
         'ONGOING';
 
     final synopsisEls = document.querySelectorAll(
-      '.summary__content p, .description-summary p, .manga-excerpt p, .summary__content',
+      '.nhv-novel-synopsis p, .summary__content p, .description-summary p, .manga-excerpt p, .summary__content, .nhv-novel-synopsis',
     );
     String description = '';
     if (synopsisEls.isNotEmpty) {
@@ -447,7 +453,14 @@ class MadaraExtractor implements NovelSource {
 
       final url = _cleanUrl(a.attributes['href'] ?? '');
       final title = a.text.trim();
-      if (url.isEmpty || title.isEmpty || seenUrls.contains(url)) continue;
+      if (url.isEmpty ||
+          url == '#' ||
+          url.startsWith('javascript:') ||
+          !url.startsWith('http') && !url.startsWith('/') ||
+          title.isEmpty ||
+          seenUrls.contains(url)) {
+        continue;
+      }
       seenUrls.add(url);
 
       final date = el.querySelector('.chapter-release-date')?.text.trim();

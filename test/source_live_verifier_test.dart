@@ -12,7 +12,12 @@ void main() {
     'lightnovelheaven',
     'wuxiaworldsite',
     'hiraethtranslation',
-    'divinedaolibrary',
+    'riwyat',
+    'wondernovels',
+    'novelshort',
+    'etudetranslations',
+    'anslid',
+    'lullobox',
   ];
 
   for (final sourceId in verifiedSources) {

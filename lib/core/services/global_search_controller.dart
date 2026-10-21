@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import '../models/novel.dart';
 import '../../extractors/novel_source.dart';
 import '../../extractors/source_registry.dart';
-import '../utils/text_cleaner.dart';
 
 /// Result emitted by a single source during a global search session.
 class SourceSearchResult {

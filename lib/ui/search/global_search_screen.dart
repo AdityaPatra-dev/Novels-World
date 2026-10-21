@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/models/novel.dart';
 import '../../core/services/global_search_controller.dart';
 import '../../core/services/webview_session_manager.dart';
-import '../../extractors/novel_source.dart';
 import '../novel/novel_detail_screen.dart';
 
 /// Global Multi-Source Search Screen.
@@ -53,12 +52,6 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   ];
 
   List<String> _recentSearches = [];
-
-  List<String> get _matchingSuggestions {
-    final q = _textController.text.trim().toLowerCase();
-    if (q.isEmpty) return _popularSuggestions.take(10).toList();
-    return _popularSuggestions.where((s) => s.toLowerCase().contains(q) && s.toLowerCase() != q).take(6).toList();
-  }
 
   @override
   void initState() {
@@ -629,7 +622,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       itemCount: state.groupedMatches.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final match = state.groupedMatches[index];
         return _buildGroupedCard(match);
@@ -671,7 +664,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                                 'Accept': 'image/*,*/*;q=0.8',
                               },
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Center(
+                              errorBuilder: (context, error, stackTrace) => const Center(
                                 child: Icon(Icons.book_rounded, color: Colors.white24, size: 28),
                               ),
                             )
@@ -876,7 +869,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: novels.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
                 itemBuilder: (context, nIdx) {
                   final novel = novels[nIdx];
                   return SizedBox(
@@ -897,7 +890,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                                   ? Image.network(
                                       novel.coverUrl,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Center(
+                                      errorBuilder: (context, error, stackTrace) => const Center(
                                         child: Icon(Icons.book, color: Colors.white24, size: 30),
                                       ),
                                     )

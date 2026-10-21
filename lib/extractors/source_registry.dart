@@ -243,6 +243,38 @@ class SourceRegistry {
       lang: 'en',
       estimatedNovelCount: 1000,
     ),
+    'wondernovels': MadaraExtractor(
+      id: 'wondernovels',
+      name: 'Wonder Novels',
+      baseUrl: 'https://wondernovels.com',
+      lang: 'en',
+      customPopularPath: '/novels/',
+      estimatedNovelCount: 3000,
+    ),
+    'novelshort': MadaraExtractor(
+      id: 'novelshort',
+      name: 'Novel Short',
+      baseUrl: 'https://novel-short.com',
+      lang: 'en',
+      customPopularPath: '/novel/',
+      estimatedNovelCount: 5000,
+    ),
+    'etudetranslations': MadaraExtractor(
+      id: 'etudetranslations',
+      name: 'Etude Translations',
+      baseUrl: 'https://etudetranslations.com',
+      lang: 'en',
+      customPopularPath: '/novel/',
+      estimatedNovelCount: 2000,
+    ),
+    'lullobox': MadaraExtractor(
+      id: 'lullobox',
+      name: 'Lullobox',
+      baseUrl: 'https://lullobox.com',
+      lang: 'en',
+      customPopularPath: '/manga/',
+      estimatedNovelCount: 4000,
+    ),
 
     // ==========================================
     // 6. International Sources: Arabic (ar)
@@ -260,6 +292,14 @@ class SourceRegistry {
       baseUrl: 'https://ar-no.com',
       lang: 'ar',
       estimatedNovelCount: 5000,
+    ),
+    'riwyat': MadaraExtractor(
+      id: 'riwyat',
+      name: 'Riwyat',
+      baseUrl: 'https://cenele.com',
+      lang: 'ar',
+      customPopularPath: '/cont/',
+      estimatedNovelCount: 6000,
     ),
     'hizomanga': MadaraExtractor(
       id: 'hizomanga',
@@ -325,7 +365,19 @@ class SourceRegistry {
     ),
 
     // ==========================================
-    // 10. International Sources: Japanese (ja)
+    // 10. International Sources: Spanish (es)
+    // ==========================================
+    'anslid': MadaraExtractor(
+      id: 'anslid',
+      name: 'Anslid',
+      baseUrl: 'https://anslid.com',
+      lang: 'es',
+      customPopularPath: '/novela/',
+      estimatedNovelCount: 3000,
+    ),
+
+    // ==========================================
+    // 11. International Sources: Japanese (ja)
     // ==========================================
     'kakuyomu': KakuyomuExtractor(),
   };

@@ -95,8 +95,13 @@ Madara was originally created as a manga WordPress theme by MangaStream/WP-Manga
 | **MysticalSeries** | `https://mysticalmerries.com/` | English / Romance & Fantasy |
 | **Vanovel** | `https://vanovel.com/` | Turkish / Light Novels |
 | **HizoManga** | `https://hizomanga.net/` | Arabic / Novel & Manga |
-| **Riwyat** | `https://cenele.com/` | Arabic / Novels |
-| **Novel4Up** | `https://novel4up.com/` | Arabic / Novels |
+| **Riwyat** | `https://cenele.com/` | Arabic / Novels (Active in App) |
+| **Wonder Novels** | `https://wondernovels.com/` | English / Translations (Active in App) |
+| **Novel Short** | `https://novel-short.com/` | English / Webnovels (Active in App) |
+| **Etude Translations** | `https://etudetranslations.com/` | English / Light & Webnovels (Active in App) |
+| **Anslid** | `https://anslid.com/` | Spanish / Webnovels (Active in App) |
+| **Lullobox** | `https://lullobox.com/` | English / Webnovels (Active in App) |
+| **Novel4Up** | `https://novel4up.com/` | Arabic / Novels (Hijacked Domain) |
 | **TurkceLightNovels** | `https://turkcelightnovels.com/` | Turkish / Light Novels |
 | **Guavaread** | `https://guavaread.com/` | English / Korean & Chinese Novels |
 | **MTL-Novel** | `https://mtl-novel.com/` | English / MTL |

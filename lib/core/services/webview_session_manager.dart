@@ -15,7 +15,7 @@ class WebViewSessionManager {
   bool _initialized = false;
 
   static const String defaultUserAgent =
-      'Mozilla/5.0 (Linux; Android 14; Mobile; rv:124.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
+      'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36';
 
   Future<void> init() async {
     if (_initialized) return;

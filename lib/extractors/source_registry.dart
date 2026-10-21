@@ -4,8 +4,6 @@ import 'lightnovelwp_extractor.dart';
 import 'novelfull_extractor.dart';
 import 'readwn_extractor.dart';
 import 'fictioneer_extractor.dart';
-import 'bespoke/royalroad_extractor.dart';
-import 'bespoke/scribblehub_extractor.dart';
 import 'bespoke/novelcool_extractor.dart';
 import 'bespoke/kakuyomu_extractor.dart';
 
@@ -22,22 +20,11 @@ class SourceRegistry {
     // ==========================================
     // 1. Bespoke Western Web Fiction & Megaportals
     // ==========================================
-    'royalroad': RoyalRoadExtractor(),
-    'scribblehub': ScribbleHubExtractor(),
     'novelcool': NovelCoolExtractor(),
 
     // ==========================================
     // 2. High-Capacity NovelFull Aggregators
     // ==========================================
-    'novelbin': NovelFullExtractor(
-      id: 'novelbin',
-      name: 'NovelBin',
-      baseUrl: 'https://novelbin.com',
-      popularPath: '/sort/top-view-novel',
-      latestPath: '/sort/latest-release-novel',
-      lang: 'en',
-      estimatedNovelCount: 65000,
-    ),
     'readnovelfull': NovelFullExtractor(
       id: 'readnovelfull',
       name: 'ReadNovelFull',
@@ -101,15 +88,6 @@ class SourceRegistry {
       lang: 'en',
       estimatedNovelCount: 30000,
     ),
-    'lightnovelplus': NovelFullExtractor(
-      id: 'lightnovelplus',
-      name: 'LightNovelPlus',
-      baseUrl: 'https://lightnovelplus.com',
-      popularPath: '/novel-list',
-      latestPath: '/latest-release-novel',
-      lang: 'en',
-      estimatedNovelCount: 35000,
-    ),
     'novgo': NovelFullExtractor(
       id: 'novgo',
       name: 'NOVGO',
@@ -162,13 +140,6 @@ class SourceRegistry {
       lang: 'en',
       estimatedNovelCount: 10000,
     ),
-    'divinedaolibrary': FictioneerExtractor(
-      id: 'divinedaolibrary',
-      name: 'Divine Dao Library',
-      baseUrl: 'https://www.divinedaolibrary.com',
-      lang: 'en',
-      estimatedNovelCount: 5000,
-    ),
 
     // ==========================================
     // 5. WordPress Madara Engine (English)
@@ -194,20 +165,6 @@ class SourceRegistry {
       lang: 'en',
       estimatedNovelCount: 10000,
     ),
-    'boxnovel': MadaraExtractor(
-      id: 'boxnovel',
-      name: 'BoxNovel',
-      baseUrl: 'https://boxnovel.com',
-      lang: 'en',
-      estimatedNovelCount: 9000,
-    ),
-    'firstkissnovel': MadaraExtractor(
-      id: 'firstkissnovel',
-      name: '1stKissNovel',
-      baseUrl: 'https://1stkissnovel.org',
-      lang: 'en',
-      estimatedNovelCount: 8000,
-    ),
     'lightnovelheaven': MadaraExtractor(
       id: 'lightnovelheaven',
       name: 'LightNovelHeaven',
@@ -228,20 +185,6 @@ class SourceRegistry {
       baseUrl: 'https://hiraethtranslation.com',
       lang: 'en',
       estimatedNovelCount: 1500,
-    ),
-    'sleepytranslations': MadaraExtractor(
-      id: 'sleepytranslations',
-      name: 'SleepyTranslations',
-      baseUrl: 'https://sleepytranslations.com',
-      lang: 'en',
-      estimatedNovelCount: 1500,
-    ),
-    'translatinotaku': MadaraExtractor(
-      id: 'translatinotaku',
-      name: 'TranslatinOtaku',
-      baseUrl: 'https://translatinotaku.net',
-      lang: 'en',
-      estimatedNovelCount: 1000,
     ),
     'wondernovels': MadaraExtractor(
       id: 'wondernovels',
@@ -310,16 +253,6 @@ class SourceRegistry {
       estimatedNovelCount: 4000,
     ),
 
-    // ==========================================
-    // 7. International Sources: Portuguese (pt)
-    // ==========================================
-    'meionovel': MadaraExtractor(
-      id: 'meionovel',
-      name: 'MeioNovel',
-      baseUrl: 'https://meionovels.com',
-      lang: 'pt',
-      estimatedNovelCount: 5000,
-    ),
 
     // ==========================================
     // 8. International Sources: Turkish (tr)
@@ -382,7 +315,7 @@ class SourceRegistry {
     'kakuyomu': KakuyomuExtractor(),
   };
 
-  static String _defaultSourceId = 'royalroad';
+  static String _defaultSourceId = 'readnovelfull';
 
   /// Returns all registered sources sorted according to:
   /// 1. English novels always at top (lang == 'en').

@@ -173,18 +173,50 @@ class NovelFullExtractor implements NovelSource {
     final seenUrls = <String>{};
 
     final rows = document.querySelectorAll(
-      '.list-novel .row, .col-novel-main .row, .list-truyen .row, .list .row, .li-row, .ul-list1 .li-row, .novel-item, .novel-list li, .col-novel, .ul-list1 li, .item, .col-xs-4',
+      '.list-novel > .row, .col-novel-main > .row, .list-truyen > .row, .list-novel .row, .li-row, .fwn-hot-item, .home-rec-item, .novel-item, .col-novel, .ul-list1 > li, .ul-list1 > .li',
     );
 
     for (final row in rows) {
+      if (row.classes.contains('item-chap-inline') ||
+          row.classes.contains('item-chap-below') ||
+          row.classes.contains('chapter-item')) {
+        continue;
+      }
+
       var titleEl = row.querySelector(
-        'h3.novel-title a, h4.novel-title a, h3.truyen-title a, h3.tit a, h3 a, h4 a, a.tit, .novel-title a',
+        'h3.novel-title a, h4.novel-title a, h3.truyen-title a, h3.tit a, .tit a, h3 a, h4 a, a.tit, .novel-title a, .title a',
       );
-      titleEl ??= row.querySelector('a[href*="/novel/"], a[href*="/book/"], a[title]');
+
+      if (titleEl == null) {
+        for (final a in row.querySelectorAll('a')) {
+          final h = a.attributes['href'] ?? '';
+          if (h.contains('/chapter-') ||
+              h.contains('/chap-') ||
+              h.contains('/ch-') ||
+              a.classes.contains('chapter') ||
+              TextCleaner.isGenreOrCategoryUrl(h)) {
+            continue;
+          }
+          final t = a.text.trim();
+          if (RegExp(r'^\d+\s+chapters?', caseSensitive: false).hasMatch(t)) {
+            continue;
+          }
+          if (h.endsWith('.html') || h.contains('/novel/') || h.contains('/book/') || h.contains('/libread/')) {
+            titleEl = a;
+            break;
+          }
+        }
+      }
       if (titleEl == null) continue;
 
       final href = titleEl.attributes['href'] ?? '';
-      if (href.isEmpty || TextCleaner.isGenreOrCategoryUrl(href)) continue;
+      if (href.isEmpty ||
+          href.contains('/chapter-') ||
+          href.contains('/chap-') ||
+          href.contains('/ch-') ||
+          TextCleaner.isGenreOrCategoryUrl(href)) {
+        continue;
+      }
 
       final cleanHref = _cleanUrl(href);
       if (seenUrls.contains(cleanHref)) continue;
@@ -193,7 +225,9 @@ class NovelFullExtractor implements NovelSource {
               ? titleEl.attributes['title']!
               : titleEl.text)
           .trim();
-      if (title.isEmpty) continue;
+      if (title.isEmpty || RegExp(r'^\d+\s+chapters?', caseSensitive: false).hasMatch(title)) {
+        continue;
+      }
       if (!TextCleaner.isValidNovelTitle(title, cleanHref)) continue;
 
       final imgEl = row.querySelector('.cover, .pic img, figure img, .cover-badge-wrap img, .cover-wrap img, img');
@@ -213,7 +247,7 @@ class NovelFullExtractor implements NovelSource {
         }
       }
 
-      final authorEl = row.querySelector('.author, span.author, .novel-author, a.novel');
+      final authorEl = row.querySelector('.author, span.author, .novel-author, a.novel-author, .s-author');
       final author = authorEl?.text.trim() ?? 'Unknown Author';
 
       final uri = Uri.tryParse(cleanHref);

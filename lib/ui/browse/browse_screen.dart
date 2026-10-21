@@ -300,18 +300,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('Retry'),
                   ),
-                  if (_currentSource.id != 'royalroad')
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        final rr = SourceRegistry.getSource('royalroad');
-                        if (rr != null) {
-                          _onSourceChanged(rr);
-                        }
-                      },
-                      icon: const Icon(Icons.swap_horiz, size: 16),
-                      label: const Text('Switch to Royal Road'),
-                    )
-                  else
+                  if (_currentSource.id != 'readnovelfull')
                     OutlinedButton.icon(
                       onPressed: () {
                         final rnf = SourceRegistry.getSource('readnovelfull');
@@ -321,6 +310,17 @@ class _BrowseScreenState extends State<BrowseScreen> {
                       },
                       icon: const Icon(Icons.swap_horiz, size: 16),
                       label: const Text('Switch to ReadNovelFull'),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final novgo = SourceRegistry.getSource('novgo');
+                        if (novgo != null) {
+                          _onSourceChanged(novgo);
+                        }
+                      },
+                      icon: const Icon(Icons.swap_horiz, size: 16),
+                      label: const Text('Switch to NOVGO'),
                     ),
                 ],
               ),

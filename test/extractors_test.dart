@@ -480,11 +480,12 @@ void main() {
 
       final sourceIds = sources.map((s) => s.id).toSet();
       // Madara
-      expect(sourceIds, contains('sleepytranslations'));
       expect(sourceIds, contains('sonicmtl'));
       expect(sourceIds, contains('vanovel'));
       expect(sourceIds, contains('webnoveloku'));
       expect(sourceIds, contains('novelpdf'));
+      expect(sourceIds, contains('wondernovels'));
+      expect(sourceIds, contains('lullobox'));
       // LightNovelWP
       expect(sourceIds, contains('kolnovel'));
       expect(sourceIds, contains('knoxt'));
@@ -496,10 +497,11 @@ void main() {
       // NovelFull
       expect(sourceIds, contains('readnovelfull'));
       expect(sourceIds, contains('novelfull'));
-      expect(sourceIds, contains('lightnovelplus'));
+      expect(sourceIds, contains('novgo'));
+      expect(sourceIds, contains('libread'));
+      expect(sourceIds, contains('allnovelfull'));
       // Bespoke
-      expect(sourceIds, contains('royalroad'));
-      expect(sourceIds, contains('scribblehub'));
+      expect(sourceIds, contains('novelcool'));
     });
   });
 }

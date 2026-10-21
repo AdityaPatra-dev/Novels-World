@@ -122,7 +122,7 @@ Madara was originally created as a manga WordPress theme by MangaStream/WP-Manga
 | **Nocturne Translations** | `https://nocturnetls.net/` | English / Korean & Chinese Novels |
 | **Yousum** | `https://yousum.me/` | English / Webnovels |
 | **Top Light Novel** | `https://toplightnovel.com/` | English / Novels |
-| **Wonder Novels** | `https://wondernovels.com/` | English / Translations |
+| **BoxNovel** | `https://boxnovel.com/` | English / Webnovels (Active in App) |
 | **WordExcerpt** | `https://wordexcerpt.com/` | English / Korean & Japanese Licensors |
 | **Crush Novel** | `https://crushnovel.com/` | English / Webnovels |
 | **Novel Crusher** | `https://novelcrusher.com/` | English / Webnovels |

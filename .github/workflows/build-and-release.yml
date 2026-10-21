@@ -45,13 +45,13 @@ jobs:
         run: flutter build apk --release
 
       - name: Package Android Artifact
-        run: cp build/app/outputs/flutter-apk/app-release.apk Novels-World-Android-v1.1.0.apk
+        run: cp build/app/outputs/flutter-apk/app-release.apk Novels-World-Android.apk
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: novels-world-android-apk
-          path: Novels-World-Android-v1.1.0.apk
+          path: Novels-World-Android.apk
           retention-days: 14
 
   build-linux:
@@ -189,7 +189,7 @@ jobs:
             Welcome to the ultimate web novel reading & studio AI audiobook platform!
 
             ### 📦 Download Packages
-            * **📱 Android (APK):** `Novels-World-Android-v1.1.0.apk`
+            * **📱 Android (APK):** `Novels-World-Android.apk`
             * **🐧 Linux (x64 Portable):** `Novels-World-Linux-x64.tar.gz`
             * **🪟 Windows (x64):** `Novels-World-Windows-x64.zip`
             * **🍎 macOS (Universal):** `Novels-World-macOS-Universal.zip`

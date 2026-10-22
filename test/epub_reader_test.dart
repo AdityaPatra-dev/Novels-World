@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novels_world/core/services/epub_service.dart';
+import 'package:novels_world/data/storage_service.dart';
 import 'package:novels_world/extractors/bespoke/local_epub_extractor.dart';
 import 'package:novels_world/extractors/source_registry.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('Local EPUB Reader & Service Tests', () {
@@ -45,6 +47,27 @@ void main() {
       expect(await metaFile.exists(), isTrue);
     });
 
+    test('EpubService.getImportedNovels lists imported books', () async {
+      final novels = await EpubService().getImportedNovels(targetDir: tempDir);
+      expect(novels.isNotEmpty, isTrue);
+      expect(novels.first.title, 'A Study in Scarlet');
+    });
+
+    test('StorageService.getNovelStorageInfo returns path, chapter count, and disk size', () async {
+      SharedPreferences.setMockInitialValues({});
+      final novel = await EpubService().importEpub(sampleEpub, targetDir: tempDir);
+      final storageService = StorageService();
+      await storageService.init(appDir: tempDir);
+
+      final info = await storageService.getNovelStorageInfo(novel);
+      expect(info.directoryPath, contains(novel.id));
+      expect(info.storageType, 'Local EPUB Container');
+      expect(info.chapterCount, 2);
+      expect(info.totalSizeBytes, greaterThan(0));
+      expect(info.formattedSize, isNotEmpty);
+      expect(info.fileNames, contains('metadata.json'));
+    });
+
     test('LocalEpubExtractor loads details, chapters, and content', () async {
       final novel = await EpubService().importEpub(sampleEpub, targetDir: tempDir);
 
@@ -72,3 +95,4 @@ void main() {
     });
   });
 }
+

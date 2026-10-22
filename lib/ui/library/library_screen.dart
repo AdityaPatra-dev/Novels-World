@@ -164,13 +164,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _importEpub(BuildContext context) async {
     try {
       final files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['epub'],
+        type: FileType.any,
       );
       if (files.isNotEmpty && files.first.path != null) {
         final path = files.first.path!;
-        if (!mounted) return;
         final scaffold = ScaffoldMessenger.of(this.context);
+        if (!path.toLowerCase().endsWith('.epub')) {
+          scaffold.showSnackBar(
+            const SnackBar(content: Text('Please select an .epub file (e.g. book.epub)')),
+          );
+          return;
+        }
+        if (!mounted) return;
         scaffold.showSnackBar(
           const SnackBar(content: Text('Importing EPUB book...')),
         );

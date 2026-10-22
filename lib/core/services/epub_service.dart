@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:html/parser.dart' as html_parser;
@@ -116,7 +117,11 @@ class EpubService {
     }
 
     if (coverHref != null) {
-      final coverFile = File('$opfDir/$coverHref');
+      final decodedCover = Uri.decodeFull(coverHref);
+      File coverFile = File('$opfDir/$decodedCover');
+      if (!await coverFile.exists()) {
+        coverFile = File('${bookDir.path}/$decodedCover');
+      }
       if (await coverFile.exists()) {
         coverUrl = coverFile.uri.toString();
       }
@@ -136,7 +141,11 @@ class EpubService {
     for (final entry in manifestMap.entries) {
       final href = entry.value['href'] ?? '';
       if (href.endsWith('.ncx') || href.endsWith('nav.xhtml') || href.endsWith('nav.html')) {
-        final tocFile = File('$opfDir/$href');
+        final decodedHref = Uri.decodeFull(href);
+        File tocFile = File('$opfDir/$decodedHref');
+        if (!await tocFile.exists()) {
+          tocFile = File('${bookDir.path}/$decodedHref');
+        }
         if (await tocFile.exists()) {
           try {
             final tocXml = XmlDocument.parse(await tocFile.readAsString());
@@ -144,7 +153,7 @@ class EpubService {
               final label = navPoint.findAllElements('text').firstOrNull?.innerText.trim();
               final src = navPoint.findAllElements('content').firstOrNull?.getAttribute('src');
               if (label != null && src != null) {
-                final cleanSrc = src.split('#').first;
+                final cleanSrc = Uri.decodeFull(src.split('#').first);
                 tocTitles[cleanSrc] = label;
               }
             }
@@ -159,10 +168,14 @@ class EpubService {
     for (final idref in spineItems) {
       final item = manifestMap[idref]!;
       final relHref = item['href']!;
-      final chFile = File('$opfDir/$relHref');
+      final decodedRelHref = Uri.decodeFull(relHref);
+      File chFile = File('$opfDir/$decodedRelHref');
+      if (!await chFile.exists()) {
+        chFile = File('${bookDir.path}/$decodedRelHref');
+      }
       if (!await chFile.exists()) continue;
 
-      String chTitle = tocTitles[relHref] ?? '';
+      String chTitle = tocTitles[decodedRelHref] ?? tocTitles[relHref] ?? '';
       if (chTitle.isEmpty) {
         // Inspect file for <h1>, <h2> or <title>
         try {
@@ -267,6 +280,132 @@ class EpubService {
     );
   }
 
+  /// Returns all previously imported EPUB novels stored locally.
+  Future<List<Novel>> getImportedNovels({Directory? targetDir}) async {
+    final baseDir = targetDir ?? await _getImportDirectory();
+    final novels = <Novel>[];
+    if (await baseDir.exists()) {
+      await for (final entity in baseDir.list()) {
+        if (entity is Directory) {
+          final metaFile = File('${entity.path}/metadata.json');
+          if (await metaFile.exists()) {
+            try {
+              final json = jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+              final novelJson = json['novel'] as Map<String, dynamic>;
+              novels.add(Novel.fromJson(novelJson));
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
+    // Auto-discover and import any EPUBs in the device Downloads directory if none imported yet
+    if (novels.isEmpty && targetDir == null) {
+      final downloadedEpubs = await findDeviceEpubs();
+      for (final epub in downloadedEpubs) {
+        try {
+          final imported = await importEpub(epub);
+          novels.add(imported);
+        } catch (_) {}
+      }
+
+      // If still empty, seed the bundled classic sample so the user never sees an empty library
+      if (novels.isEmpty) {
+        await seedDefaultEpubIfNeeded();
+        return getImportedNovels(targetDir: targetDir);
+      }
+    }
+
+    // Sort descending by ID so newest appears first
+    novels.sort((a, b) => b.id.compareTo(a.id));
+    return novels;
+  }
+
+  /// Seeds the bundled sample classic EPUB on first launch
+  Future<void> seedDefaultEpubIfNeeded({Directory? targetDir}) async {
+    try {
+      final byteData = await rootBundle.load('assets/epubs/sample_classic.epub');
+      final baseDir = targetDir ?? await _getImportDirectory();
+      final tempFile = File('${baseDir.path}/temp_sample.epub');
+      await tempFile.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+      await importEpub(tempFile, targetDir: targetDir);
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    } catch (_) {}
+  }
+
+  /// Downloads an EPUB from a remote URL, unpacks it into app storage,
+  /// and returns a fully initialized [Novel].
+  Future<Novel> importEpubFromUrl(
+    String url, {
+    Map<String, String>? headers,
+    void Function(double progress)? onProgress,
+  }) async {
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 20);
+    try {
+      final request = await client.getUrl(Uri.parse(url));
+      if (headers != null) {
+        headers.forEach((key, value) {
+          request.headers.set(key, value);
+        });
+      }
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        throw HttpException('Failed to download EPUB: HTTP ${response.statusCode}');
+      }
+
+      final contentLength = response.contentLength;
+      final bytes = <int>[];
+      int downloaded = 0;
+
+      await for (final chunk in response) {
+        bytes.addAll(chunk);
+        downloaded += chunk.length;
+        if (contentLength > 0 && onProgress != null) {
+          onProgress(downloaded / contentLength);
+        }
+      }
+
+      final baseDir = await _getImportDirectory();
+      final tempFile = File('${baseDir.path}/temp_dl_${DateTime.now().millisecondsSinceEpoch}.epub');
+      await tempFile.writeAsBytes(bytes);
+
+      try {
+        final novel = await importEpub(tempFile);
+        return novel;
+      } finally {
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Scans common download folders on the device for .epub files
+  Future<List<File>> findDeviceEpubs() async {
+    final epubs = <File>[];
+    final candidateDirs = [
+      Directory('/sdcard/Download'),
+      Directory('/storage/emulated/0/Download'),
+    ];
+    for (final dir in candidateDirs) {
+      if (await dir.exists()) {
+        try {
+          await for (final entity in dir.list()) {
+            if (entity is File && entity.path.toLowerCase().endsWith('.epub')) {
+              epubs.add(entity);
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return epubs;
+  }
+
   Future<Directory> _getImportDirectory() async {
     final appDocDir = await getApplicationDocumentsDirectory();
     final dir = Directory('${appDocDir.path}/imported_novels');
@@ -276,3 +415,4 @@ class EpubService {
     return dir;
   }
 }
+

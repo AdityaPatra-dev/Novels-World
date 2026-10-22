@@ -9,6 +9,7 @@ import '../../providers/library_provider.dart';
 import '../../providers/reader_provider.dart';
 import '../reader/reader_screen.dart';
 import '../widgets/source_webview_screen.dart';
+import '../widgets/novel_storage_modal.dart';
 import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/text_cleaner.dart';
 
@@ -327,6 +328,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               ),
             ),
             actions: [
+              IconButton(
+                icon: const Icon(Icons.folder_special_rounded, color: Color(0xFFA78BFA)),
+                tooltip: 'Storage Folder & Chapters',
+                onPressed: () => NovelStorageModal.show(context, _novel),
+              ),
               IconButton(
                 icon: const Icon(Icons.public),
                 tooltip: 'Open in WebView / Bypass Cloudflare',

@@ -1,7 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
 import '../../core/models/novel.dart';
+import '../../core/services/epub_service.dart';
 import '../../extractors/novel_source.dart';
 import '../../extractors/source_registry.dart';
+import '../../providers/library_provider.dart';
 import '../novel/novel_detail_screen.dart';
 import '../widgets/novel_card.dart';
 import '../widgets/source_webview_screen.dart';
@@ -121,6 +126,88 @@ class _BrowseScreenState extends State<BrowseScreen> {
     }
   }
 
+  Future<void> _importEpubFile() async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.any,
+      );
+      if (files.isNotEmpty && files.first.path != null) {
+        final path = files.first.path!;
+        final scaffold = ScaffoldMessenger.of(context);
+        if (!path.toLowerCase().endsWith('.epub')) {
+          scaffold.showSnackBar(
+            const SnackBar(content: Text('Please select an .epub file (e.g. book.epub)')),
+          );
+          return;
+        }
+        scaffold.showSnackBar(
+          const SnackBar(content: Text('Importing EPUB book...')),
+        );
+        final file = File(path);
+        final novel = await EpubService().importEpub(file);
+        if (mounted) {
+          await context.read<LibraryProvider>().saveToLibrary(novel);
+          scaffold.hideCurrentSnackBar();
+          scaffold.showSnackBar(
+            SnackBar(
+              content: Text('Successfully imported "${novel.title}"!'),
+              backgroundColor: const Color(0xFF10B981),
+            ),
+          );
+          _loadPopular();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import EPUB: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _scanDeviceEpubs() async {
+    final scaffold = ScaffoldMessenger.of(context);
+    scaffold.showSnackBar(
+      const SnackBar(content: Text('Scanning device downloads for EPUBs...')),
+    );
+    try {
+      final epubs = await EpubService().findDeviceEpubs();
+      if (epubs.isEmpty) {
+        scaffold.hideCurrentSnackBar();
+        scaffold.showSnackBar(
+          const SnackBar(content: Text('No .epub files found in Download folder.')),
+        );
+        return;
+      }
+      int count = 0;
+      for (final f in epubs) {
+        try {
+          final novel = await EpubService().importEpub(f);
+          if (mounted) {
+            await context.read<LibraryProvider>().saveToLibrary(novel);
+          }
+          count++;
+        } catch (_) {}
+      }
+      scaffold.hideCurrentSnackBar();
+      scaffold.showSnackBar(
+        SnackBar(
+          content: Text('Found and imported $count EPUB books!'),
+          backgroundColor: const Color(0xFF10B981),
+        ),
+      );
+      if (mounted) {
+        _loadPopular();
+      }
+    } catch (e) {
+      scaffold.hideCurrentSnackBar();
+      scaffold.showSnackBar(
+        SnackBar(content: Text('Error scanning downloads: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final allSources = SourceRegistry.getAllSources();
@@ -129,6 +216,18 @@ class _BrowseScreenState extends State<BrowseScreen> {
       appBar: AppBar(
         title: const Text('Browse Novels', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          if (_currentSource.id == 'local_epub') ...[
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined, color: Color(0xFFA78BFA)),
+              tooltip: 'Import EPUB File',
+              onPressed: _importEpubFile,
+            ),
+            IconButton(
+              icon: const Icon(Icons.folder_open_outlined, color: Color(0xFFA78BFA)),
+              tooltip: 'Scan Downloads Folder',
+              onPressed: _scanDeviceEpubs,
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.travel_explore_rounded, size: 24, color: Color(0xFFA78BFA)),
             tooltip: 'Global Search (All Sources)',
@@ -331,6 +430,62 @@ class _BrowseScreenState extends State<BrowseScreen> {
     }
 
     if (_novels.isEmpty) {
+      if (_currentSource.id == 'local_epub') {
+        return Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.menu_book_rounded, size: 54, color: Color(0xFFA78BFA)),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'No Local EPUBs Imported Yet',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Import EPUB books directly from your phone (e.g. Harry Potter, Dune, Lord of the Rings) to read completely offline with Text-to-Speech support.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: _importEpubFile,
+                  icon: const Icon(Icons.file_upload_outlined, size: 18),
+                  label: const Text('Import EPUB File', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _scanDeviceEpubs,
+                  icon: const Icon(Icons.folder_open_outlined, size: 18),
+                  label: const Text('Scan Downloads Folder'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFA78BFA),
+                    side: const BorderSide(color: Color(0xFF8B5CF6)),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

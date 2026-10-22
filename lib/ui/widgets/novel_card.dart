@@ -5,6 +5,7 @@ import '../../core/services/webview_session_manager.dart';
 
 import 'package:flutter/services.dart';
 import 'source_webview_screen.dart';
+import 'novel_storage_modal.dart';
 
 class NovelCard extends StatelessWidget {
   final Novel novel;
@@ -92,6 +93,42 @@ class NovelCard extends StatelessWidget {
                                 errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
                               ))
                         : _buildPlaceholder(),
+                  ),
+                ),
+                // Top-Left: Novel Storage Folder Inspector
+                Positioned(
+                  top: 6,
+                  left: 6,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.70),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: novel.sourceId == 'local_epub'
+                            ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                            : const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+                        width: 0.6,
+                      ),
+                    ),
+                    child: InkWell(
+                      onTap: () => NovelStorageModal.show(context, novel),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Tooltip(
+                        message: 'View Storage Folder & Chapters',
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            novel.sourceId == 'local_epub'
+                                ? Icons.folder_special_rounded
+                                : Icons.folder_outlined,
+                            size: 14,
+                            color: novel.sourceId == 'local_epub'
+                                ? const Color(0xFF34D399)
+                                : const Color(0xFFA78BFA),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 if (novel.sourceUrl.isNotEmpty)
@@ -215,6 +252,18 @@ class NovelCard extends StatelessWidget {
                           Icons.copy_rounded,
                           size: 10,
                           color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    GestureDetector(
+                      onTap: () => NovelStorageModal.show(context, novel),
+                      child: const Tooltip(
+                        message: 'Storage Folder',
+                        child: Icon(
+                          Icons.folder_open_rounded,
+                          size: 11,
+                          color: Color(0xFFA78BFA),
                         ),
                       ),
                     ),

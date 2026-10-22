@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../../core/services/epub_service.dart';
 import '../../core/services/webview_session_manager.dart';
+import '../../providers/library_provider.dart';
+import '../novel/novel_detail_screen.dart';
 
 /// In-App WebView screen for resolving Cloudflare / bot-protection challenges,
 /// logging into novel sources, or inspecting the live website directly.
@@ -69,9 +73,82 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
           onWebResourceError: (error) {
             // Silently handle non-fatal web resource errors
           },
+          onNavigationRequest: (NavigationRequest request) {
+            final urlLower = request.url.toLowerCase();
+            if (urlLower.endsWith('.epub') ||
+                urlLower.contains('.epub?') ||
+                urlLower.contains('/download/epub')) {
+              _handleEpubDownload(request.url);
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
         ),
       )
       ..loadRequest(Uri.parse(widget.initialUrl));
+  }
+
+  Future<void> _handleEpubDownload(String url) async {
+    final scaffold = ScaffoldMessenger.of(context);
+    scaffold.showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            SizedBox(width: 12),
+            Text('Streaming & importing EPUB book...'),
+          ],
+        ),
+        duration: Duration(seconds: 15),
+      ),
+    );
+
+    try {
+      final headers = <String, String>{
+        'User-Agent': WebViewSessionManager.defaultUserAgent,
+      };
+      final cookies = WebViewSessionManager.instance.getCookieHeader(url);
+      if (cookies != null && cookies.isNotEmpty) {
+        headers['Cookie'] = cookies;
+      }
+
+      final novel = await EpubService().importEpubFromUrl(url, headers: headers);
+      if (mounted) {
+        await context.read<LibraryProvider>().saveToLibrary(novel);
+        scaffold.hideCurrentSnackBar();
+        scaffold.showSnackBar(
+          SnackBar(
+            content: Text('Successfully imported "${novel.title}"!'),
+            backgroundColor: const Color(0xFF10B981),
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: 'Read Now',
+              textColor: Colors.white,
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        scaffold.hideCurrentSnackBar();
+        scaffold.showSnackBar(
+          SnackBar(
+            content: Text('Failed to import EPUB: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _syncCookies(String url) async {

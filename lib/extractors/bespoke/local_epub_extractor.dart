@@ -31,13 +31,28 @@ class LocalEpubExtractor implements NovelSource {
   final EpubService _epubService = EpubService();
 
   @override
-  Future<List<Novel>> getPopular({int page = 1}) async => [];
+  Future<List<Novel>> getPopular({int page = 1}) async {
+    if (page > 1) return [];
+    return _epubService.getImportedNovels();
+  }
 
   @override
-  Future<List<Novel>> getLatest({int page = 1}) async => [];
+  Future<List<Novel>> getLatest({int page = 1}) async {
+    if (page > 1) return [];
+    return _epubService.getImportedNovels();
+  }
 
   @override
-  Future<List<Novel>> search(String query, {int page = 1}) async => [];
+  Future<List<Novel>> search(String query, {int page = 1}) async {
+    final all = await _epubService.getImportedNovels();
+    final q = query.toLowerCase().trim();
+    if (q.isEmpty) return all;
+    return all.where((n) =>
+      n.title.toLowerCase().contains(q) ||
+      n.author.toLowerCase().contains(q) ||
+      n.description.toLowerCase().contains(q)
+    ).toList();
+  }
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
@@ -81,3 +96,4 @@ class LocalEpubExtractor implements NovelSource {
     return _epubService.loadChapterContent(chapterUrl);
   }
 }
+

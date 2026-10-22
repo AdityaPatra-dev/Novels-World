@@ -195,4 +195,152 @@ class StorageService {
   Future<void> saveSettings(ReaderSettings settings) async {
     await _safePrefs.setString(_settingsKey, jsonEncode(settings.toJson()));
   }
+
+  // --- Novel Specific Storage & Folder Inspector ---
+
+  Future<NovelStorageInfo> getNovelStorageInfo(Novel novel) async {
+    await init();
+    if (novel.sourceId == 'local_epub') {
+      String path = '';
+      if (novel.sourceUrl.isNotEmpty) {
+        final uri = Uri.tryParse(novel.sourceUrl);
+        if (uri != null && uri.scheme == 'file') {
+          path = uri.toFilePath();
+        } else {
+          path = novel.sourceUrl;
+        }
+      }
+      if (path.isEmpty || !Directory(path).existsSync()) {
+        path = '${_safeAppDir.path}/imported_novels/${novel.id}';
+      }
+
+      final dir = Directory(path);
+      if (await dir.exists()) {
+        final files = <File>[];
+        int totalBytes = 0;
+        await for (final entity in dir.list(recursive: true)) {
+          if (entity is File) {
+            files.add(entity);
+            totalBytes += await entity.length();
+          }
+        }
+
+        // Count chapters from metadata.json if available
+        int chapterCount = 0;
+        final metaFile = File('${dir.path}/metadata.json');
+        if (await metaFile.exists()) {
+          try {
+            final json = jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+            final chs = json['chapters'] as List?;
+            chapterCount = chs?.length ?? 0;
+          } catch (_) {}
+        }
+        if (chapterCount == 0) {
+          chapterCount = files.where((f) => f.path.endsWith('.xhtml') || f.path.endsWith('.html')).length;
+        }
+
+        return NovelStorageInfo(
+          directoryPath: dir.path,
+          storageType: 'Local EPUB Container',
+          chapterCount: chapterCount,
+          totalSizeBytes: totalBytes,
+          fileNames: files.map((f) => f.uri.pathSegments.last).toList(),
+        );
+      } else {
+        return NovelStorageInfo(
+          directoryPath: path,
+          storageType: 'Local EPUB Container',
+          chapterCount: 0,
+          totalSizeBytes: 0,
+          fileNames: const [],
+        );
+      }
+    } else {
+      // Scraped web novel chapters stored in chapters/ directory
+      final chaptersDir = Directory('${_safeAppDir.path}/chapters');
+      final matchingFiles = <File>[];
+      int totalBytes = 0;
+      if (await chaptersDir.exists()) {
+        await for (final entity in chaptersDir.list()) {
+          if (entity is File && entity.path.endsWith('.json')) {
+            try {
+              final raw = await entity.readAsString();
+              if (raw.contains('"novelId":"${novel.id}"')) {
+                matchingFiles.add(entity);
+                totalBytes += await entity.length();
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      return NovelStorageInfo(
+        directoryPath: chaptersDir.path,
+        storageType: 'Offline Web Chapter Cache',
+        chapterCount: matchingFiles.length,
+        totalSizeBytes: totalBytes,
+        fileNames: matchingFiles.map((f) => f.uri.pathSegments.last).toList(),
+      );
+    }
+  }
+
+  Future<void> deleteNovelStorage(Novel novel) async {
+    await init();
+    if (novel.sourceId == 'local_epub') {
+      String path = '';
+      if (novel.sourceUrl.isNotEmpty) {
+        final uri = Uri.tryParse(novel.sourceUrl);
+        if (uri != null && uri.scheme == 'file') {
+          path = uri.toFilePath();
+        } else {
+          path = novel.sourceUrl;
+        }
+      }
+      if (path.isEmpty || !Directory(path).existsSync()) {
+        path = '${_safeAppDir.path}/imported_novels/${novel.id}';
+      }
+      final dir = Directory(path);
+      if (await dir.exists()) {
+        await dir.delete(recursive: true);
+      }
+    } else {
+      final chaptersDir = Directory('${_safeAppDir.path}/chapters');
+      if (await chaptersDir.exists()) {
+        await for (final entity in chaptersDir.list()) {
+          if (entity is File && entity.path.endsWith('.json')) {
+            try {
+              final raw = await entity.readAsString();
+              if (raw.contains('"novelId":"${novel.id}"')) {
+                await entity.delete();
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    }
+  }
+}
+
+class NovelStorageInfo {
+  final String directoryPath;
+  final String storageType;
+  final int chapterCount;
+  final int totalSizeBytes;
+  final List<String> fileNames;
+
+  const NovelStorageInfo({
+    required this.directoryPath,
+    required this.storageType,
+    required this.chapterCount,
+    required this.totalSizeBytes,
+    required this.fileNames,
+  });
+
+  String get formattedSize {
+    if (totalSizeBytes < 1024) return '$totalSizeBytes B';
+    if (totalSizeBytes < 1024 * 1024) {
+      return '${(totalSizeBytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(totalSizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  }
 }

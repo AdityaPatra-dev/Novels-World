@@ -366,3 +366,4 @@ class GutenbergExtractor implements NovelSource {
     return '$baseUrl/$path';
   }
 }
+

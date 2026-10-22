@@ -1,0 +1,76 @@
+name: Build & Release Novels World
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-test:
+    name: Build & Test Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java Development Kit (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify formatting and static analysis
+        run: flutter analyze
+
+      - name: Run unit & widget test suite
+        run: flutter test
+
+      - name: Build Android Release APK
+        run: flutter build apk --release
+
+      - name: Rename APK for release
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk Novels-World-v1.0.0.apk || cp build/app/outputs/flutter-apk/app-debug.apk Novels-World-v1.0.0.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: novels-world-apk
+          path: Novels-World-v1.0.0.apk
+          retention-days: 14
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Novels World ${{ github.ref_name }}
+          files: Novels-World-v1.0.0.apk
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Novels World ${{ github.ref_name }} 🎉
+
+            ### Highlights:
+            - **31+ Multi-Template Sources**: Full support for WordPress Madara, Themesia LightNovelWP, NovelFull, ReadWN/EmpireCMS, WordPress Fictioneer, and Bespoke platforms (Royal Road, Scribble Hub).
+            - **Cloudflare & Anti-Bot Bypass**: Transparent headless Chromium session fallback with JA3 TLS fingerprinting & automatic Turnstile clearance sync.
+            - **Multi-Engine TTS Engine**: Offline text-to-speech with sentence highlighting, ring buffer audio streaming, and sleep timer.
+            - **Smart Chapter Caching**: Full offline reader mode with background batch chapter downloader and cache cleanup.
+            - **Zero Broken Covers**: Global SSL override and smart origin URL resolution for CDN intermediate certificate support.

@@ -502,6 +502,8 @@ void main() {
       expect(sourceIds, contains('allnovelfull'));
       // Bespoke
       expect(sourceIds, contains('novelcool'));
+      expect(sourceIds, contains('roliascan'));
+      expect(sourceIds, contains('asurascans'));
     });
   });
 }

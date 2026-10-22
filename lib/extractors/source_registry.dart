@@ -6,6 +6,8 @@ import 'readwn_extractor.dart';
 import 'fictioneer_extractor.dart';
 import 'bespoke/novelcool_extractor.dart';
 import 'bespoke/kakuyomu_extractor.dart';
+import 'bespoke/roliascan_extractor.dart';
+import 'bespoke/asurascans_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -21,6 +23,8 @@ class SourceRegistry {
     // 1. Bespoke Western Web Fiction & Megaportals
     // ==========================================
     'novelcool': NovelCoolExtractor(),
+    'roliascan': RoliaScanExtractor(),
+    'asurascans': AsuraScansExtractor(),
 
     // ==========================================
     // 2. High-Capacity NovelFull Aggregators

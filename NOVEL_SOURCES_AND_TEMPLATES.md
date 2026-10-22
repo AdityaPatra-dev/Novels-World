@@ -228,7 +228,11 @@ These platforms cannot be scraped using off-the-shelf template extractors becaus
    - Custom Russian/English platform with nested volume support, EPUB download endpoints, and unique chapter hierarchy.
 2. **NovelCool (`https://www.novelcool.com`)**:
    - Hybrid manga/novel portal with dynamic chapter pagination.
-3. **NovelFire / Novel Phoenix (`https://novelfire.net/`, `https://novelphoenix.com/`)**:
+3. **RoliaScan (`https://roliascan.com`)**:
+   - MangaPeak custom theme engine with REST API catalog and dynamic MD5-token protected chapter archive.
+4. **Asura Scans (`https://asurascans.com`)**:
+   - High-profile webnovel translation group powered by modern Astro SSR and direct REST API (`api.asurascans.com`).
+5. **NovelFire / Novel Phoenix (`https://novelfire.net/`, `https://novelphoenix.com/`)**:
    - Clean, lightweight reader layout with custom book navigation.
 4. **NovelBuddy (`https://novelbuddy.com`)**:
    - Modern manga/novel hybrid engine with AJAX pagination.

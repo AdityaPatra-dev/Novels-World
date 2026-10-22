@@ -1,5 +1,8 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/services/epub_service.dart';
 import '../../providers/library_provider.dart';
 import '../novel/novel_detail_screen.dart';
 import '../widgets/novel_card.dart';
@@ -36,6 +39,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
           'My Library (${allNovels.length})',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_upload_outlined),
+            tooltip: 'Import EPUB Book',
+            onPressed: () => _importEpub(context),
+          ),
+        ],
         bottom: allNovels.isNotEmpty
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(48),
@@ -74,16 +84,34 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.6)),
                     ),
                     const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: widget.onBrowseTap,
-                      icon: const Icon(Icons.explore),
-                      label: const Text('Browse Novels'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: widget.onBrowseTap,
+                          icon: const Icon(Icons.explore),
+                          label: const Text('Browse Novels'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF8B5CF6),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _importEpub(context),
+                          icon: const Icon(Icons.file_upload_outlined),
+                          label: const Text('Import EPUB'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Color(0xFF8B5CF6)),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -131,6 +159,47 @@ class _LibraryScreenState extends State<LibraryScreen> {
               },
             ),
     );
+  }
+
+  Future<void> _importEpub(BuildContext context) async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['epub'],
+      );
+      if (files.isNotEmpty && files.first.path != null) {
+        final path = files.first.path!;
+        if (!mounted) return;
+        final scaffold = ScaffoldMessenger.of(this.context);
+        scaffold.showSnackBar(
+          const SnackBar(content: Text('Importing EPUB book...')),
+        );
+        final novel = await EpubService().importEpub(File(path));
+        if (!mounted) return;
+        await this.context.read<LibraryProvider>().saveToLibrary(novel);
+        scaffold.showSnackBar(
+          SnackBar(
+            content: Text('Imported "${novel.title}" to Library'),
+            action: SnackBarAction(
+              label: 'Open',
+              onPressed: () {
+                if (!mounted) return;
+                Navigator.push(
+                  this.context,
+                  MaterialPageRoute(builder: (context) => NovelDetailScreen(novel: novel)),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(content: Text('Failed to import EPUB: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildFilterChip(int index, String label) {

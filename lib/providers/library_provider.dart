@@ -21,6 +21,11 @@ class LibraryProvider extends ChangeNotifier {
     return _novels.any((n) => n.id == novelId);
   }
 
+  Future<void> saveToLibrary(Novel novel) async {
+    await _storage.saveNovelToLibrary(novel);
+    loadLibrary();
+  }
+
   Future<void> toggleLibrary(Novel novel) async {
     if (isInLibrary(novel.id)) {
       await _storage.removeNovelFromLibrary(novel.id);

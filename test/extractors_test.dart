@@ -504,6 +504,9 @@ void main() {
       expect(sourceIds, contains('novelcool'));
       expect(sourceIds, contains('roliascan'));
       expect(sourceIds, contains('asurascans'));
+      expect(sourceIds, contains('allfreenovel'));
+      expect(sourceIds, contains('gutenberg'));
+      expect(sourceIds, contains('local_epub'));
     });
   });
 }

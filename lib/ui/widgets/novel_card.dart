@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/models/novel.dart';
 import '../../core/services/webview_session_manager.dart';
@@ -78,12 +79,18 @@ class NovelCard extends StatelessWidget {
                     width: double.infinity,
                     height: double.infinity,
                     child: cleanUrl.isNotEmpty
-                        ? Image.network(
-                            cleanUrl,
-                            headers: _imageHeaders,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
-                          )
+                        ? (cleanUrl.startsWith('file://')
+                            ? Image.file(
+                                File(Uri.parse(cleanUrl).toFilePath()),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+                              )
+                            : Image.network(
+                                cleanUrl,
+                                headers: _imageHeaders,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+                              ))
                         : _buildPlaceholder(),
                   ),
                 ),

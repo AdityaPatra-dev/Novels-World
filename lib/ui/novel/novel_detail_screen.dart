@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/novel.dart';
@@ -227,12 +228,18 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 fit: StackFit.expand,
                 children: [
                   if (_sanitizedCoverUrl.isNotEmpty)
-                    Image.network(
-                      _sanitizedCoverUrl,
-                      headers: _imageHeaders,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(color: Colors.black87),
-                    ),
+                    (_sanitizedCoverUrl.startsWith('file://')
+                        ? Image.file(
+                            File(Uri.parse(_sanitizedCoverUrl).toFilePath()),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Container(color: Colors.black87),
+                          )
+                        : Image.network(
+                            _sanitizedCoverUrl,
+                            headers: _imageHeaders,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Container(color: Colors.black87),
+                          )),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -259,12 +266,18 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             width: 100,
                             height: 140,
                             child: _sanitizedCoverUrl.isNotEmpty
-                                ? Image.network(
-                                    _sanitizedCoverUrl,
-                                    headers: _imageHeaders,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey[800]),
-                                  )
+                                ? (_sanitizedCoverUrl.startsWith('file://')
+                                    ? Image.file(
+                                        File(Uri.parse(_sanitizedCoverUrl).toFilePath()),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey[800]),
+                                      )
+                                    : Image.network(
+                                        _sanitizedCoverUrl,
+                                        headers: _imageHeaders,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey[800]),
+                                      ))
                                 : Container(color: Colors.grey[800]),
                           ),
                         ),

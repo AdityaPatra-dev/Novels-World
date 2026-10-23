@@ -24,8 +24,8 @@ class ReaderSettings {
     this.fontFamily = 'Lora',
     this.autoScrollWithTTS = true,
     this.ttsSpeed = 1.0,
-    this.ttsEngine = 'kokoro',
-    this.ttsVoice = 'af_bella',
+    this.ttsEngine = 'edge_neural',
+    this.ttsVoice = 'en-US-ChristopherNeural',
   });
 
   Color get backgroundColor {
@@ -113,8 +113,8 @@ class ReaderSettings {
       fontFamily: json['fontFamily'] as String? ?? 'Lora',
       autoScrollWithTTS: json['autoScrollWithTTS'] as bool? ?? true,
       ttsSpeed: (json['ttsSpeed'] as num?)?.toDouble() ?? 1.0,
-      ttsEngine: json['ttsEngine'] as String? ?? 'kokoro',
-      ttsVoice: json['ttsVoice'] as String? ?? 'af_bella',
+      ttsEngine: json['ttsEngine'] as String? ?? 'edge_neural',
+      ttsVoice: json['ttsVoice'] as String? ?? 'en-US-ChristopherNeural',
     );
   }
 }

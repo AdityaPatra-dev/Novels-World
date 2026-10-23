@@ -113,5 +113,66 @@ class TextCleaner {
 
     return true;
   }
+
+  /// Cleans, normalizes, and smooths a sentence specifically for high-quality TTS prosody.
+  /// Expands abbreviations, eliminates awkward symbols, and ensures natural start/end cadence.
+  static String prepareSentenceForSpeech(String rawSentence) {
+    String s = rawSentence.trim();
+    if (s.isEmpty) return '';
+
+    // Remove markdown formatting
+    s = s.replaceAll(RegExp(r'\*\*|\*|__|_|~~'), '');
+
+    // Remove ASCII dividers: ***, ---, ===, ___
+    s = s.replaceAll(RegExp(r'^[*\-=_]{3,}$', multiLine: true), '');
+
+    // Format bracketed game/novel system messages: [System: Level Up] -> System: Level Up.
+    s = s.replaceAllMapped(RegExp(r'\[(.*?)\]'), (m) {
+      final inner = m[1]?.trim() ?? '';
+      return inner.isNotEmpty ? '$inner. ' : '';
+    });
+
+    // Normalize quotes and dashes to natural pauses
+    s = s
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('’', "'")
+        .replaceAll('‘', "'")
+        .replaceAll('—', ', ')
+        .replaceAll('–', ', ')
+        .replaceAll('…', '...');
+
+    // Expand abbreviations that trip TTS engines into awkward monotonic stops
+    final abbrevs = <RegExp, String>{
+      RegExp(r'\bMr\.'): 'Mister',
+      RegExp(r'\bMrs\.'): 'Missus',
+      RegExp(r'\bMs\.'): 'Miss',
+      RegExp(r'\bDr\.'): 'Doctor',
+      RegExp(r'\bProf\.'): 'Professor',
+      RegExp(r'\bVol\.'): 'Volume',
+      RegExp(r'\bCh\.'): 'Chapter',
+      RegExp(r'\bNo\.'): 'Number',
+      RegExp(r'\bvs\.'): 'versus',
+      RegExp(r'\betc\.'): 'etcetera',
+      RegExp(r'\bSt\.'): 'Saint',
+      RegExp(r'\be\.g\.'): 'for example',
+      RegExp(r'\bi\.e\.'): 'that is',
+    };
+    for (final entry in abbrevs.entries) {
+      s = s.replaceAll(entry.key, entry.value);
+    }
+
+    // Clean stray leading and trailing punctuation that cause audio popping
+    s = s.replaceAll(RegExp(r'^[“"«»\u0027\-—–\s,;:.]+'), '');
+    s = s.replaceAll(RegExp(r'[“"«»\u0027\s]+$'), '');
+
+    // Ensure sentence ends with punctuation for natural descending cadence
+    final trimmed = s.trim();
+    if (trimmed.isNotEmpty && !RegExp(r'[.!?…]$').hasMatch(trimmed)) {
+      s = '$trimmed.';
+    }
+
+    return s.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  }
 }
 

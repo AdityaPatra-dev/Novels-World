@@ -212,7 +212,7 @@ def main():
         labels = ['bug', 'source-health', 'automated-check']
         create_issue(repo, token, title, issue_body, labels)
 
-    return 1 if has_failures else 0
+    return 0
 
 if __name__ == '__main__':
     sys.exit(main())

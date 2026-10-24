@@ -54,7 +54,9 @@ jobs:
           python-version: '3.x'
 
       - name: 📦 Install Flutter Dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          mkdir -p build/reports
 
       - name: 🧐 Static Analysis
         id: analysis
@@ -105,9 +107,11 @@ jobs:
           name: source-health-reports
           path: build/reports/
           retention-days: 30
+          if-no-files-found: ignore
 
       - name: 🚨 Verify Overall Build Result
         if: steps.analysis.outcome == 'failure' || steps.unit_tests.outcome == 'failure' || steps.sources_check.outcome == 'failure'
         run: |
           echo "::error::One or more daily checks failed. Review generated issue and health reports."
           exit 1
+

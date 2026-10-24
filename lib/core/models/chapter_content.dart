@@ -13,37 +13,41 @@ class ChapterContent {
     required this.paragraphs,
   });
 
-  /// Extracts clean sentence segments from the chapter text.
-  /// Used both for Karaoke-style active reading highlighting and real-time TTS synthesis.
+  /// Extracts narrative units for continuous, fluid audiobook playback.
+  /// Preserves paragraphs intact so the TTS engine speaks multi-sentence thoughts
+  /// with natural human prosody, emotional inflection, and zero audio gaps between lines.
   List<String> toSentences() {
-    final List<String> sentences = [];
-    final RegExp sentenceRegex = RegExp(r'[^.!?]+(?:[.!?]+["' r"'\s]*)");
-
+    final List<String> units = [];
     for (final paragraph in paragraphs) {
       final trimmed = paragraph.trim();
       if (trimmed.isEmpty) continue;
 
-      final matches = sentenceRegex.allMatches(trimmed);
-      if (matches.isEmpty) {
-        sentences.add(trimmed);
+      // Keep standard paragraphs (under 600 characters) completely intact for continuous speech
+      if (trimmed.length <= 600) {
+        units.add(trimmed);
       } else {
-        int lastIndex = 0;
-        for (final match in matches) {
-          final sentence = match.group(0)?.trim();
-          if (sentence != null && sentence.isNotEmpty) {
-            sentences.add(sentence);
+        // Only break up unusually massive mega-paragraphs at major sentence boundaries
+        final RegExp sentenceRegex = RegExp(r'[^.!?]+(?:[.!?]+["' r"'\s]*)");
+        final matches = sentenceRegex.allMatches(trimmed);
+        if (matches.isEmpty) {
+          units.add(trimmed);
+        } else {
+          int lastIndex = 0;
+          for (final match in matches) {
+            final s = match.group(0)?.trim();
+            if (s != null && s.isNotEmpty) {
+              units.add(s);
+            }
+            lastIndex = match.end;
           }
-          lastIndex = match.end;
-        }
-        if (lastIndex < trimmed.length) {
-          final remaining = trimmed.substring(lastIndex).trim();
-          if (remaining.isNotEmpty) {
-            sentences.add(remaining);
+          if (lastIndex < trimmed.length) {
+            final rem = trimmed.substring(lastIndex).trim();
+            if (rem.isNotEmpty) units.add(rem);
           }
         }
       }
     }
-    return sentences;
+    return units;
   }
 
   Map<String, dynamic> toJson() {
@@ -60,10 +64,12 @@ class ChapterContent {
     return ChapterContent(
       chapterId: json['chapterId'] as String,
       novelId: json['novelId'] as String,
-      title: json['title'] as String,
-      rawText: json['rawText'] as String,
-      paragraphs: (json['paragraphs'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
+      title: json['title'] as String? ?? '',
+      rawText: json['rawText'] as String? ?? '',
+      paragraphs: (json['paragraphs'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
     );
   }
 }
-

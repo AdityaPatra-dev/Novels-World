@@ -22,6 +22,11 @@ class ReaderProvider extends ChangeNotifier {
   String? _errorMessage;
 
   ReaderProvider(this._storage) {
+    final saved = _storage.getSettings();
+    ttsManager.switchEngine(saved.ttsEngine);
+    ttsManager.setVoice(saved.ttsVoice);
+    ttsManager.setSpeed(saved.ttsSpeed);
+
     ttsManager.addListener(() {
       notifyListeners();
     });
@@ -35,6 +40,16 @@ class ReaderProvider extends ChangeNotifier {
         nextChapter();
       }
     };
+  }
+
+  void syncSettings(dynamic settings) {
+    if (settings == null) return;
+    if (ttsManager.activeEngine.id != settings.ttsEngine) {
+      ttsManager.switchEngine(settings.ttsEngine);
+    }
+    if (ttsManager.activeVoice != settings.ttsVoice) {
+      ttsManager.setVoice(settings.ttsVoice);
+    }
   }
 
   Novel? get novel => _novel;

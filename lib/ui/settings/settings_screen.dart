@@ -83,23 +83,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     dropdownColor: const Color(0xFF1E1E28),
                     items: const [
                       DropdownMenuItem(
+                        value: 'edge_neural',
+                        child: Text('Microsoft Neural HD (Studio AI)'),
+                      ),
+                      DropdownMenuItem(
                         value: 'kokoro',
                         child: Text('Kokoro-82M (Expressive Storyteller)'),
                       ),
                       DropdownMenuItem(
                         value: 'piper',
-                        child: Text('Piper TTS (Ultra-Fast VITS)'),
+                        child: Text('Piper Fast (Ultra-Fast VITS)'),
                       ),
                       DropdownMenuItem(
                         value: 'sherpa',
                         child: Text('Sherpa-Matcha (CJK Specialist)'),
                       ),
+                      DropdownMenuItem(
+                        value: 'system',
+                        child: Text('Device Native (Offline Hardware)'),
+                      ),
                     ],
                     onChanged: (val) {
                       if (val != null) {
-                        String defaultVoice = 'af_bella';
+                        String defaultVoice = 'en-US-ChristopherNeural';
+                        if (val == 'kokoro') defaultVoice = 'af_bella';
                         if (val == 'piper') defaultVoice = 'en_US-lessac-high';
                         if (val == 'sherpa') defaultVoice = 'cjk_storyteller_bilingual';
+                        if (val == 'system') defaultVoice = 'default';
                         settingsProvider.updateTtsVoice(val, defaultVoice);
                       }
                     },

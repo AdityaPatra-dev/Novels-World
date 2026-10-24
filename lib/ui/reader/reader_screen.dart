@@ -41,6 +41,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final content = reader.content;
     final ttsManager = reader.ttsManager;
     final sleepTimer = ttsManager.sleepTimer;
+    reader.syncSettings(settings);
 
     TextStyle baseTextStyle;
     try {
@@ -310,8 +311,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                               children: [
                                 Text(
                                   reader.sentences.isNotEmpty
-                                      ? 'Sentence ${reader.activeSentenceIndex + 1} of ${reader.sentences.length}'
-                                      : 'Preparing sentences...',
+                                      ? 'Paragraph ${reader.activeSentenceIndex + 1} of ${reader.sentences.length}'
+                                      : 'Preparing audio...',
                                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                                 ),
                                 if (ttsManager.isBuffering)
@@ -368,71 +369,42 @@ class _ReaderScreenState extends State<ReaderScreen> {
     dynamic settings,
     TextStyle baseTextStyle,
   ) {
-    final paragraphs = reader.content?.paragraphs ?? [];
+    final units = reader.sentences;
     final List<Widget> widgets = [];
 
-    int sentenceCounter = 0;
-
-    for (final paragraph in paragraphs) {
-      final sentencesInPara = _splitIntoSentences(paragraph);
+    for (int i = 0; i < units.length; i++) {
+      final text = units[i];
+      final isHighlighted = reader.isTtsPlaying && reader.activeSentenceIndex == i;
 
       widgets.add(
         Padding(
-          padding: const EdgeInsets.only(bottom: 18),
-          child: Wrap(
-            children: sentencesInPara.map((s) {
-              final sentenceIndex = sentenceCounter++;
-              final isHighlighted = reader.isTtsPlaying && reader.activeSentenceIndex == sentenceIndex;
-
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _showFloatingTts = true;
-                  });
-                  reader.playFromSentence(sentenceIndex);
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: isHighlighted ? settings.highlightColor : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '$s ',
-                    style: baseTextStyle.copyWith(
-                      fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  ),
+          padding: const EdgeInsets.only(bottom: 16),
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _showFloatingTts = true;
+              });
+              reader.playFromSentence(i);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                color: isHighlighted ? settings.highlightColor : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                text,
+                style: baseTextStyle.copyWith(
+                  fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
                 ),
-              );
-            }).toList(),
+              ),
+            ),
           ),
         ),
       );
     }
 
     return widgets;
-  }
-
-  List<String> _splitIntoSentences(String text) {
-    final RegExp regex = RegExp(r'[^.!?]+(?:[.!?]+["' r"'\s]*)");
-    final matches = regex.allMatches(text.trim());
-    if (matches.isEmpty) return [text.trim()];
-
-    final List<String> list = [];
-    int lastEnd = 0;
-    for (final m in matches) {
-      final s = m.group(0)?.trim();
-      if (s != null && s.isNotEmpty) {
-        list.add(s);
-      }
-      lastEnd = m.end;
-    }
-    if (lastEnd < text.trim().length) {
-      final rem = text.trim().substring(lastEnd).trim();
-      if (rem.isNotEmpty) list.add(rem);
-    }
-    return list;
   }
 }

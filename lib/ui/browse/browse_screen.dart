@@ -133,6 +133,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
       );
       if (files.isNotEmpty && files.first.path != null) {
         final path = files.first.path!;
+        if (!mounted) return;
         final scaffold = ScaffoldMessenger.of(context);
         if (!path.toLowerCase().endsWith('.epub')) {
           scaffold.showSnackBar(
@@ -440,7 +441,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF8B5CF6).withOpacity(0.15),
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.menu_book_rounded, size: 54, color: Color(0xFFA78BFA)),
@@ -454,7 +455,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                 Text(
                   'Import EPUB books directly from your phone (e.g. Harry Potter, Dune, Lord of the Rings) to read completely offline with Text-to-Speech support.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13, height: 1.4),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, height: 1.4),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(

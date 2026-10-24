@@ -43,7 +43,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           IconButton(
             icon: const Icon(Icons.file_upload_outlined),
             tooltip: 'Import EPUB Book',
-            onPressed: () => _importEpub(context),
+            onPressed: _importEpub,
           ),
         ],
         bottom: allNovels.isNotEmpty
@@ -101,7 +101,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           ),
                         ),
                         OutlinedButton.icon(
-                          onPressed: () => _importEpub(context),
+                          onPressed: _importEpub,
                           icon: const Icon(Icons.file_upload_outlined),
                           label: const Text('Import EPUB'),
                           style: OutlinedButton.styleFrom(
@@ -161,27 +161,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Future<void> _importEpub(BuildContext context) async {
+  Future<void> _importEpub() async {
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.any,
       );
       if (files.isNotEmpty && files.first.path != null) {
         final path = files.first.path!;
-        final scaffold = ScaffoldMessenger.of(this.context);
+        if (!mounted) return;
+        final scaffold = ScaffoldMessenger.of(context);
         if (!path.toLowerCase().endsWith('.epub')) {
           scaffold.showSnackBar(
             const SnackBar(content: Text('Please select an .epub file (e.g. book.epub)')),
           );
           return;
         }
-        if (!mounted) return;
         scaffold.showSnackBar(
           const SnackBar(content: Text('Importing EPUB book...')),
         );
         final novel = await EpubService().importEpub(File(path));
         if (!mounted) return;
-        await this.context.read<LibraryProvider>().saveToLibrary(novel);
+        await context.read<LibraryProvider>().saveToLibrary(novel);
         scaffold.showSnackBar(
           SnackBar(
             content: Text('Imported "${novel.title}" to Library'),
@@ -190,7 +190,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               onPressed: () {
                 if (!mounted) return;
                 Navigator.push(
-                  this.context,
+                  context,
                   MaterialPageRoute(builder: (context) => NovelDetailScreen(novel: novel)),
                 );
               },
@@ -200,7 +200,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(this.context).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to import EPUB: $e')),
         );
       }

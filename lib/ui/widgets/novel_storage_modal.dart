@@ -130,7 +130,7 @@ class _NovelStorageModalState extends State<NovelStorageModal> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF8B5CF6).withOpacity(0.18),
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -158,7 +158,7 @@ class _NovelStorageModalState extends State<NovelStorageModal> {
                         'Novel Storage & Chapters Folder',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha: 0.6),
                         ),
                       ),
                     ],
@@ -181,13 +181,13 @@ class _NovelStorageModalState extends State<NovelStorageModal> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: widget.novel.sourceId == 'local_epub'
-                      ? const Color(0xFF10B981).withOpacity(0.15)
-                      : const Color(0xFF8B5CF6).withOpacity(0.15),
+                      ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                      : const Color(0xFF8B5CF6).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: widget.novel.sourceId == 'local_epub'
-                        ? const Color(0xFF10B981).withOpacity(0.4)
-                        : const Color(0xFF8B5CF6).withOpacity(0.4),
+                        ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                        : const Color(0xFF8B5CF6).withValues(alpha: 0.4),
                   ),
                 ),
                 child: Row(
@@ -375,7 +375,7 @@ class _NovelStorageModalState extends State<NovelStorageModal> {
                     child: ListView.separated(
                       shrinkWrap: true,
                       itemCount: _storageInfo!.fileNames.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+                      separatorBuilder: (_, index) => const Divider(height: 1, color: Colors.white10),
                       itemBuilder: (context, index) {
                         final file = _storageInfo!.fileNames[index];
                         return Padding(

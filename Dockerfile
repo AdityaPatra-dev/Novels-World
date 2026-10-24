@@ -21,12 +21,13 @@ RUN flutter build web --release --no-wasm-dry-run
 # ==============================================================================
 FROM nginx:alpine-slim
 
+ARG APP_VERSION=1.3.0
 LABEL maintainer="Aditya Patra <adityapatraraj@gmail.com>"
 LABEL org.opencontainers.image.title="Novels World"
 LABEL org.opencontainers.image.description="Modern, feature-rich web novel reader & AI audiobook progressive web application."
 LABEL org.opencontainers.image.url="https://github.com/AdityaPatra-dev/Novels-World"
 LABEL org.opencontainers.image.source="https://github.com/AdityaPatra-dev/Novels-World"
-LABEL org.opencontainers.image.version="1.1.0"
+LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 # Copy custom NGINX configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
@@ -40,4 +41,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://127.0.0.1/health || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
-

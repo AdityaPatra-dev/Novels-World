@@ -2,7 +2,7 @@
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/adityapatra/novels-world?style=for-the-badge&logo=docker&logoColor=white&color=2496ED)](https://hub.docker.com/r/adityapatra/novels-world)
 [![Docker Image Size](https://img.shields.io/docker/image-size/adityapatra/novels-world/latest?style=for-the-badge&color=00D26A)](https://hub.docker.com/r/adityapatra/novels-world)
-[![Version](https://img.shields.io/badge/version-v1.1.0-blueviolet?style=for-the-badge)](https://github.com/AdityaPatra-dev/Novels-World/releases)
+[![Version](https://img.shields.io/badge/version-v1.3.0-blueviolet?style=for-the-badge)](https://github.com/AdityaPatra-dev/Novels-World/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 **Novels World** is a modern, high-performance web novel reader and continuous neural AI audiobook Progressive Web App (PWA).
@@ -80,7 +80,8 @@ The bundled NGINX configuration includes production-hardened headers:
 ## 🏷️ Available Tags
 
 * `latest` — Latest stable production build
-* `1.1.0`, `v1.1.0` — Specific release tags matching GitHub milestones
+* `1.3.0`, `v1.3.0` — Specific release tags matching GitHub milestones
+* `1.1.0`, `v1.1.0` — Legacy releases
 
 ---
 

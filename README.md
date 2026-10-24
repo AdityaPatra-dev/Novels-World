@@ -189,6 +189,33 @@ flutter build macos --release     # macOS
 
 ---
 
+## 🤖 Daily Automated Source Health & Quality Monitoring
+
+Novels-World includes a scheduled GitHub Actions workflow ([`.github/workflows/daily-health-check.yml`](.github/workflows/daily-health-check.yml)) that runs **every day at 04:00 UTC** to safeguard catalog integrity:
+
+- **Live Source Availability**: Pings and verifies all 39+ online novel sources (popular listing, details, and chapter index retrieval).
+- **Intelligent Error Categorization**: Detects Cloudflare turnstile blocks, HTTP 403/5xx errors, DNS outages, timeouts, and DOM selector changes.
+- **Automated GitHub Issue Alerts**: If any source or unit test fails, the workflow uses a Personal Access Token (`PAT_TOKEN`) to automatically open or update an alert issue in the repository with formatted Markdown summary tables and actionable logs. When all issues recover, it automatically closes the alert.
+- **Manual Trigger**: Can be run anytime on-demand from the Actions tab via `workflow_dispatch`.
+
+### 🔑 Setting up PAT for Automated Issue Creation
+
+1. Go to **GitHub Settings** $\rightarrow$ **Developer settings** $\rightarrow$ **Personal access tokens** $\rightarrow$ **Fine-grained tokens** (or Tokens classic).
+2. Generate a token with `repo` or `issues:write` permissions for the `Novels-World` repository.
+3. In `Novels-World`, navigate to **Settings** $\rightarrow$ **Secrets and variables** $\rightarrow$ **Actions**.
+4. Click **New repository secret**, name it `PAT_TOKEN`, paste your token, and save.
+
+To test source availability locally:
+```bash
+# Test all sources and generate build/reports/
+flutter test test/sources_health_check_test.dart
+
+# Test a single source
+flutter test test/sources_health_check_test.dart --plain-name "[readnovelfull]"
+```
+
+---
+
 ## 📄 License & Acknowledgments
 
 * Distributed under the **MIT License**. See `LICENSE` for details.

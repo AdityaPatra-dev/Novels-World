@@ -27,26 +27,27 @@ void main() {
 
       try {
         // 1. Popular
-        final popular = await extractor!.getPopular(page: 1);
+        final popular = await extractor!.getPopular(page: 1).timeout(const Duration(seconds: 15));
         expect(popular.isNotEmpty, isTrue, reason: '$sourceId popular list must not be empty');
         final first = popular.first;
         expect(first.title.isNotEmpty, isTrue);
         expect(first.sourceUrl.isNotEmpty, isTrue);
 
         // 2. Novel details
-        final details = await extractor.getNovelDetails(first.sourceUrl);
+        final details = await extractor.getNovelDetails(first.sourceUrl).timeout(const Duration(seconds: 15));
         expect(details.title.isNotEmpty, isTrue);
 
         // 3. Chapters
-        final chapters = await extractor.getChapterList(first.sourceUrl);
+        final chapters = await extractor.getChapterList(first.sourceUrl).timeout(const Duration(seconds: 15));
         expect(chapters.isNotEmpty, isTrue, reason: '$sourceId chapters must not be empty');
         final firstCh = chapters.first;
         expect(firstCh.url.isNotEmpty, isTrue);
 
         // 4. Content
-        final content = await extractor.getChapterContent(firstCh.url);
+        final content = await extractor.getChapterContent(firstCh.url).timeout(const Duration(seconds: 15));
         expect(content.paragraphs.isNotEmpty, isTrue, reason: '$sourceId chapter content must have paragraphs');
       } catch (e) {
+        // ignore: avoid_print
         print('[$sourceId] Live network check skipped/warned: $e');
       }
     }, timeout: const Timeout(Duration(minutes: 2)));

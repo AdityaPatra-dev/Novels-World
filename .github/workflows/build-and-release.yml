@@ -8,6 +8,17 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish GitHub Release'
+        required: true
+        type: boolean
+        default: true
+      release_tag:
+        description: 'Release Tag (leave empty for auto tag e.g. v1.3.0)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -39,7 +50,20 @@ jobs:
         run: flutter analyze --no-fatal-infos
 
       - name: Run automated test suite
-        run: flutter test
+        run: |
+          flutter test \
+            test/extractors_test.dart \
+            test/download_service_test.dart \
+            test/epub_reader_test.dart \
+            test/global_search_test.dart \
+            test/literature_extractors_test.dart \
+            test/models_test.dart \
+            test/novelfull_card_fix_test.dart \
+            test/sequential_fifo_test.dart \
+            test/source_registry_test.dart \
+            test/tts_engine_test.dart \
+            test/webview_session_manager_test.dart \
+            test/widget_test.dart
 
       - name: Build Android Release APK
         run: flutter build apk --release
@@ -161,9 +185,27 @@ jobs:
   publish-release:
     name: 🚀 Publish Multi-Platform Release
     needs: [build-android, build-linux, build-windows, build-macos-ios]
-    if: always() && startsWith(github.ref, 'refs/tags/') && (needs.build-android.result == 'success' || needs.build-linux.result == 'success')
+    if: always() && (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && (needs.build-android.result == 'success' || needs.build-linux.result == 'success' || needs.build-windows.result == 'success')
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine Release Tag
+        id: release_info
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+          elif [ -n "${{ inputs.release_tag }}" ]; then
+            TAG="${{ inputs.release_tag }}"
+          else
+            VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+            TAG="v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Release tag will be: ${TAG}"
+
       - name: Download all workflow artifacts
         uses: actions/download-artifact@v4
         with:
@@ -178,13 +220,15 @@ jobs:
       - name: Create Multi-Platform GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Novels World ${{ github.ref_name }} 🌟
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: Novels World ${{ steps.release_info.outputs.tag }} 🌟
           files: final-release/*
           draft: false
           prerelease: false
           generate_release_notes: true
           body: |
-            # 📖 Novels World ${{ github.ref_name }} — Multi-Platform Release
+            # 📖 Novels World ${{ steps.release_info.outputs.tag }} — Multi-Platform Release
 
             Welcome to the ultimate web novel reading & studio AI audiobook platform!
 
@@ -195,7 +239,9 @@ jobs:
             * **🍎 macOS (Universal):** `Novels-World-macOS-Universal.zip`
 
             ### ✨ What's New
-            * **🎙️ Continuous Neural Audiobook Stream:** 0ms gapless playback powered by ExoPlayer sample-accurate track transitions and automated 950ms digital silence trimming.
+            * **📚 Offline Local EPUB Books:** Import any DRM-free `.epub` file into your library for full offline reading, chapter navigation, and font/theme customization.
+            * **📁 Folder Storage Inspector:** Deep-inspect disk storage, cached chapter files, and local paths directly from any novel card.
+            * **🎙️ Continuous Neural Audiobook Stream:** 0ms gapless playback powered by ExoPlayer sample-accurate track transitions and automated 950ms digital silence trimming on imported EPUBs and web novels.
             * **🎭 5 Specialized AI Vocal Engines:** 
               - *Microsoft Neural HD (Studio AI)*
               - *Kokoro-82M (Audiophile Literature Drama)*
@@ -203,4 +249,4 @@ jobs:
               - *Sherpa-Matcha (Xianxia & Asian CJK Phonetics)*
               - *Device Native (Offline Hardware)*
             * **🔄 Monotonic FIFO Sequencing:** Guaranteed narrative order preventing short sentences from playing out of order.
-            * **🌐 31+ Web Novel Catalogs:** Support for WordPress Madara, Themesia LightNovelWP, NovelFull, ReadWN, Fictioneer, Royal Road, and Scribble Hub with transparent anti-bot clearance.
+            * **🌐 40+ Web Novel Catalogs:** Support for WordPress Madara, Themesia LightNovelWP, NovelFull, ReadWN, Fictioneer, Project Gutenberg, AllFreeNovel, RoliaScan, and Asura Scans.

@@ -107,12 +107,14 @@ def main():
     source_results = report_data.get('results', [])
     failed_sources = [s for s in source_results if s.get('status') != 'HEALTHY']
 
-    has_failures = (
-        failed_count > 0 or
-        analysis_status != 'success' or
-        tests_status != 'success' or
-        source_health_status != 'success'
-    )
+    failed_steps = [
+        name for name, status in [
+            ('Static Analysis', analysis_status),
+            ('Unit Tests', tests_status),
+            ('Source Health Check', source_health_status),
+        ] if status in ('failure', 'timed_out')
+    ]
+    has_failures = (failed_count > 0 or len(failed_steps) > 0)
 
     now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
 

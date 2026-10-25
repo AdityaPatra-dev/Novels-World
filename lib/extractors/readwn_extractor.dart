@@ -295,9 +295,11 @@ class ReadWnExtractor implements NovelSource {
     var chapters = parseChapterList(novelUrl, body);
     final seenUrls = chapters.map((c) => c.url).toSet();
 
-    // Check for pagination on ReadWn (e.g. .pagination a, ul.pagination li a, .pages-container a)
+    // Check for pagination on ReadWn (e.g. .pagination a, #chpagedlist a, fy.php pages)
     final doc = html_parser.parse(body);
-    final pageLinks = doc.querySelectorAll('.pagination a, ul.pagination li a, .pages-container a, .page-item a');
+    final pageLinks = doc.querySelectorAll(
+      '.pagination a, ul.pagination li a, .pages-container a, .page-item a, #chpagedlist a, .paging a, a[href*="fy.php"], a[href*="page="]',
+    );
     final pageUrls = <String>[];
 
     for (final a in pageLinks) {
@@ -310,13 +312,13 @@ class ReadWnExtractor implements NovelSource {
       }
     }
 
-    // Follow discovered page URLs up to 50 pages
-    for (final pUrl in pageUrls.take(50)) {
+    // Follow discovered page URLs up to 60 pages
+    for (final pUrl in pageUrls.take(60)) {
       try {
         final resp = await _client.get(Uri.parse(pUrl), headers: _headers);
         if (resp.statusCode == 200) {
           final pageChs = parseChapterList(novelUrl, resp.body);
-          if (pageChs.isEmpty) break;
+          if (pageChs.isEmpty) continue;
           for (final ch in pageChs) {
             if (!seenUrls.contains(ch.url)) {
               seenUrls.add(ch.url);
@@ -326,6 +328,12 @@ class ReadWnExtractor implements NovelSource {
         }
       } catch (_) {
         break;
+      }
+    }
+
+    for (int i = 0; i < chapters.length; i++) {
+      if ((chapters[i].chapterNumber ?? 0) <= 0) {
+        chapters[i] = chapters[i].copyWith(chapterNumber: (i + 1).toDouble());
       }
     }
 
@@ -341,27 +349,45 @@ class ReadWnExtractor implements NovelSource {
     final novelSlug = segments.isNotEmpty ? segments.last.replaceAll('.html', '') : novelUrl.hashCode.toString();
     final novelId = '${id}_$novelSlug';
 
-    final links = doc.querySelectorAll('.chapter-list a, .chapters a, ul.list a, a.chapter');
+    final links = doc.querySelectorAll(
+      '.chapter-list a, .chapters a, ul.list a, a.chapter, ul.chapter-list li a, .novel-chapters a, ul li a[href*="/novel/"]',
+    );
     int order = 0;
     for (final l in links) {
       final href = l.attributes['href'] ?? '';
       if (href.isEmpty) continue;
+      // Skip pagination links
+      if (href.contains('fy.php') || href.contains('page=') || href == novelUrl || href.endsWith('/novel/')) {
+        continue;
+      }
 
       String title = l.text.trim();
+      // Remove trailing relative timestamps like "1985 days ago", "12 hours ago"
+      title = title.replaceAll(
+        RegExp(r'\s*\d+\s*(?:days?|hours?|mins?|minutes?|months?|years?|secs?|seconds?)\s*ago.*$', caseSensitive: false),
+        '',
+      );
       if (title.contains('\n')) {
-        title = title.split('\n').where((s) => s.trim().isNotEmpty).join(' - ');
+        title = title.split('\n').map((s) => s.trim()).where((s) => s.isNotEmpty && !s.contains('ago')).join(' - ');
       }
+      title = title.trim();
       if (title.isEmpty) continue;
 
       final chSlug = Uri.tryParse(href)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull?.replaceAll('.html', '') ??
           '${chapters.length + 1}';
+
+      double? chapterNum;
+      final numMatch = RegExp(r'chapter\s*(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(title);
+      if (numMatch != null) {
+        chapterNum = double.tryParse(numMatch.group(1)!);
+      }
 
       chapters.add(Chapter(
         id: '${novelId}_$chSlug',
         novelId: novelId,
         title: title,
         url: _cleanUrl(href),
-        chapterNumber: order + 1.0,
+        chapterNumber: chapterNum ?? (order + 1.0),
       ));
       order++;
     }

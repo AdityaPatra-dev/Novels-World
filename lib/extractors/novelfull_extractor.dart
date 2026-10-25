@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
@@ -368,6 +369,7 @@ class NovelFullExtractor implements NovelSource {
     final ajaxNovelId = ratingEl?.attributes['data-novel-id'] ?? ratingEl?.attributes['value'];
 
     var chapters = parseChapterList(novelUrl, body);
+    final seenUrls = chapters.map((c) => c.url).toSet();
 
     // 1. If ajaxNovelId is present, ALWAYS query /ajax/chapter-archive?novelId=$ajaxNovelId
     // Because static page only has 50 chapters, while ajax contains ALL chapters!
@@ -379,27 +381,116 @@ class NovelFullExtractor implements NovelSource {
           final ajaxChapters = parseChapterList(novelUrl, ajaxResp.body);
           if (ajaxChapters.length > chapters.length) {
             chapters = ajaxChapters;
+            seenUrls.addAll(chapters.map((c) => c.url));
           }
         }
       } catch (_) {}
     }
 
     // 2. Support /book/<slug>/chapters dedicated chapter list page (e.g. NovelFire)
-    if (chapters.length <= 100) {
-      final chaptersUrl = novelUrl.endsWith('/') ? '${novelUrl}chapters' : '$novelUrl/chapters';
-      try {
-        final resp = await _client.get(Uri.parse(chaptersUrl), headers: _headers);
-        if (resp.statusCode == 200) {
-          final extraChapters = parseChapterList(novelUrl, resp.body);
-          if (extraChapters.length > chapters.length) {
-            chapters = extraChapters;
+    // AND multi-page chapter pagination across NovelFire (?page=2, ?page=3, etc.)!
+    final chaptersUrl = novelUrl.endsWith('/chapters')
+        ? novelUrl
+        : (novelUrl.endsWith('/') ? '${novelUrl}chapters' : '$novelUrl/chapters');
+    try {
+      final resp = await _client.get(Uri.parse(chaptersUrl), headers: _headers);
+      if (resp.statusCode == 200) {
+        final page1Chs = parseChapterList(novelUrl, resp.body);
+        if (page1Chs.isNotEmpty) {
+          for (final c in page1Chs) {
+            if (!seenUrls.contains(c.url)) {
+              seenUrls.add(c.url);
+              chapters.add(c);
+            }
+          }
+
+          // Check pagination on the dedicated chapters page
+          final chaptersDoc = html_parser.parse(resp.body);
+          int maxChapterPage = 1;
+          final pagLinks = chaptersDoc.querySelectorAll(
+            '.pagenav a, .pagination-container a, .pagination a, ul.pagination li a, a[href*="page="]',
+          );
+          for (final a in pagLinks) {
+            final href = a.attributes['href'] ?? '';
+            final m = RegExp(r'page=(\d+)').firstMatch(href);
+            if (m != null) {
+              final p = int.tryParse(m.group(1)!);
+              if (p != null && p > maxChapterPage) maxChapterPage = p;
+            }
+            final text = a.text.trim();
+            final pText = int.tryParse(text);
+            if (pText != null && pText > maxChapterPage) maxChapterPage = pText;
+          }
+
+          // Fetch subsequent pages up to maxChapterPage (or up to 60 pages / 6,000 chapters)
+          for (int p = 2; p <= maxChapterPage && p <= 60; p++) {
+            final pageUrl = '$chaptersUrl?page=$p';
+            try {
+              final pResp = await _client.get(Uri.parse(pageUrl), headers: _headers);
+              if (pResp.statusCode == 200) {
+                final pChs = parseChapterList(novelUrl, pResp.body);
+                if (pChs.isEmpty) break;
+                for (final c in pChs) {
+                  if (!seenUrls.contains(c.url)) {
+                    seenUrls.add(c.url);
+                    chapters.add(c);
+                  }
+                }
+              } else {
+                break;
+              }
+            } catch (_) {
+              break;
+            }
           }
         }
-      } catch (_) {}
+      }
+    } catch (_) {}
+
+    // 3. Support FreeWebNovel & LibRead AJAX pagination (?ajax=chapters&page=N&pageSize=100)
+    final indexListPage = document.querySelector('#indexListPage, [data-total-page]');
+    final totalPages = int.tryParse(indexListPage?.attributes['data-total-page'] ?? '');
+    if (totalPages != null && totalPages > 1) {
+      for (int p = 2; p <= totalPages && p <= 60; p++) {
+        final ajaxUrl = novelUrl.contains('?')
+            ? '$novelUrl&ajax=chapters&page=$p&pageSize=100'
+            : '$novelUrl?ajax=chapters&page=$p&pageSize=100';
+        try {
+          final ajaxResp = await _client.get(Uri.parse(ajaxUrl), headers: _headers);
+          if (ajaxResp.statusCode == 200) {
+            try {
+              final data = json.decode(ajaxResp.body);
+              if (data is Map && data['html'] != null) {
+                final pChs = parseChapterList(novelUrl, data['html'].toString());
+                for (final c in pChs) {
+                  if (!seenUrls.contains(c.url)) {
+                    seenUrls.add(c.url);
+                    chapters.add(c);
+                  }
+                }
+              }
+            } catch (_) {
+              final pChs = parseChapterList(novelUrl, ajaxResp.body);
+              for (final c in pChs) {
+                if (!seenUrls.contains(c.url)) {
+                  seenUrls.add(c.url);
+                  chapters.add(c);
+                }
+              }
+            }
+          } else {
+            break;
+          }
+        } catch (_) {
+          break;
+        }
+      }
     }
 
-    // 3. Follow pagination if present on NovelFull / NovelBin clones
-    final paginationLinks = document.querySelectorAll('.pagination a, ul.pagination li a, #pagination a');
+    // 4. Follow pagination if present on NovelFull / NovelBin clones
+    final paginationLinks = document.querySelectorAll(
+      '.pagination a, ul.pagination li a, #pagination a, .pagenav a, .page-item a',
+    );
     if (paginationLinks.isNotEmpty) {
       int maxPage = 1;
       for (final a in paginationLinks) {
@@ -415,9 +506,8 @@ class NovelFullExtractor implements NovelSource {
       }
 
       if (maxPage > 1) {
-        final seenUrls = chapters.map((c) => c.url).toSet();
-        // Fetch remaining pages (up to 50 pages / 5,000 chapters)
-        for (int p = 2; p <= maxPage && p <= 50; p++) {
+        // Fetch remaining pages (up to 60 pages / 6,000 chapters)
+        for (int p = 2; p <= maxPage && p <= 60; p++) {
           final sep = novelUrl.contains('?') ? '&' : '?';
           final pUrl = '$novelUrl${sep}page=$p';
           try {
@@ -436,6 +526,13 @@ class NovelFullExtractor implements NovelSource {
             break;
           }
         }
+      }
+    }
+
+    // Ensure chapter numbering is contiguous if missing or defaulting
+    for (int i = 0; i < chapters.length; i++) {
+      if ((chapters[i].chapterNumber ?? 0) <= 0) {
+        chapters[i] = chapters[i].copyWith(chapterNumber: (i + 1).toDouble());
       }
     }
 

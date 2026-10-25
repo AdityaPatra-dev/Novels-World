@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../core/models/novel.dart';
 import '../../core/services/webview_session_manager.dart';
 
+import 'package:flutter/services.dart';
+import 'source_webview_screen.dart';
+
 class NovelCard extends StatelessWidget {
   final Novel novel;
   final VoidCallback onTap;
@@ -66,43 +69,153 @@ class NovelCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                color: const Color(0xFF1E1E28),
-                width: double.infinity,
-                child: cleanUrl.isNotEmpty
-                    ? Image.network(
-                        cleanUrl,
-                        headers: _imageHeaders,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
-                      )
-                    : _buildPlaceholder(),
-              ),
+            child: Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    color: const Color(0xFF1E1E28),
+                    width: double.infinity,
+                    height: double.infinity,
+                    child: cleanUrl.isNotEmpty
+                        ? Image.network(
+                            cleanUrl,
+                            headers: _imageHeaders,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+                          )
+                        : _buildPlaceholder(),
+                  ),
+                ),
+                if (novel.sourceUrl.isNotEmpty)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.white24, width: 0.5),
+                      ),
+                      child: InkWell(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: novel.sourceUrl));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Copied novel link: ${novel.sourceUrl}'),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.link_rounded,
+                            size: 14,
+                            color: Color(0xFFA78BFA),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             novel.title,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: FontWeight.bold,
-              height: 1.2,
+              height: 1.15,
             ),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 2),
           Text(
             novel.author,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10.5,
               color: Colors.white.withValues(alpha: 0.6),
             ),
           ),
+          if (novel.sourceUrl.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SourceWebViewScreen(
+                      initialUrl: novel.sourceUrl,
+                      sourceName: novel.title,
+                    ),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF262638),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.link_rounded,
+                      size: 11,
+                      color: Color(0xFFA78BFA),
+                    ),
+                    const SizedBox(width: 3),
+                    Expanded(
+                      child: Text(
+                        novel.sourceUrl,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          color: Color(0xFFA78BFA),
+                          decoration: TextDecoration.underline,
+                          decorationColor: Color(0xFFA78BFA),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: novel.sourceUrl));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Copied link: ${novel.sourceUrl}'),
+                            duration: const Duration(seconds: 2),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      child: const Tooltip(
+                        message: 'Copy Link',
+                        child: Icon(
+                          Icons.copy_rounded,
+                          size: 10,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

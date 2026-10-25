@@ -3,8 +3,6 @@ import 'package:novels_world/extractors/lightnovelwp_extractor.dart';
 import 'package:novels_world/extractors/novelfull_extractor.dart';
 import 'package:novels_world/extractors/bespoke/royalroad_extractor.dart';
 import 'package:novels_world/extractors/bespoke/scribblehub_extractor.dart';
-import 'package:novels_world/extractors/bespoke/oceanofpdf_extractor.dart';
-import 'package:novels_world/extractors/bespoke/vdocpub_extractor.dart';
 import 'package:novels_world/extractors/readwn_extractor.dart';
 import 'package:novels_world/extractors/fictioneer_extractor.dart';
 import 'package:novels_world/extractors/source_registry.dart';
@@ -475,38 +473,6 @@ void main() {
     });
   });
 
-  group('OceanofPdfExtractor Tests', () {
-    late OceanofPdfExtractor extractor;
-
-    setUp(() {
-      extractor = OceanofPdfExtractor();
-    });
-
-    test('Initializes with proper metadata', () {
-      expect(extractor.id, 'oceanofpdf');
-      expect(extractor.name, 'OceanofPDF');
-      expect(extractor.baseUrl, 'https://oceanofpdf.com');
-      expect(extractor.lang, 'en');
-      expect(extractor.estimatedNovelCount, greaterThanOrEqualTo(50000));
-    });
-  });
-
-  group('VdocPubExtractor Tests', () {
-    late VdocPubExtractor extractor;
-
-    setUp(() {
-      extractor = VdocPubExtractor();
-    });
-
-    test('Initializes with proper metadata', () {
-      expect(extractor.id, 'vdocpub');
-      expect(extractor.name, 'VDoc.pub');
-      expect(extractor.baseUrl, 'https://vdoc.pub');
-      expect(extractor.lang, 'en');
-      expect(extractor.estimatedNovelCount, greaterThanOrEqualTo(50000));
-    });
-  });
-
   group('SourceRegistry Verification', () {
     test('contains expected multi-template sources', () {
       final sources = SourceRegistry.getAllSources();
@@ -534,8 +500,6 @@ void main() {
       // Bespoke
       expect(sourceIds, contains('royalroad'));
       expect(sourceIds, contains('scribblehub'));
-      expect(sourceIds, contains('oceanofpdf'));
-      expect(sourceIds, contains('vdocpub'));
     });
   });
 }

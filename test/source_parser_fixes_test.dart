@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -87,6 +88,111 @@ void main() {
       expect(chapters.length, 150);
       expect(chapters.first.title, 'Chapter 1');
       expect(chapters.last.title, 'Chapter 150');
+    });
+
+    test('NovelFire: Fetches all chapters across multiple pages via /book/{slug}/chapters?page=N', () async {
+      final mockClient = MockClient((request) async {
+        final path = request.url.path;
+        final query = request.url.query;
+
+        if (path == '/book/shadow-slave') {
+          // Novel detail page with 10 preview chapters
+          final buf = StringBuffer('<html><body><h1 class="novel-title">Shadow Slave</h1><ul class="list-chapter">');
+          for (int i = 1; i <= 10; i++) {
+            buf.write('<li><a href="https://novelfire.net/book/shadow-slave/chapter-$i">Chapter $i</a></li>');
+          }
+          buf.write('</ul></body></html>');
+          return http.Response(buf.toString(), 200);
+        } else if (path == '/book/shadow-slave/chapters') {
+          if (query == 'page=2') {
+            final buf = StringBuffer('<html><body><ul class="list-chapter">');
+            for (int i = 101; i <= 200; i++) {
+              buf.write('<li><a href="https://novelfire.net/book/shadow-slave/chapter-$i">Chapter $i</a></li>');
+            }
+            buf.write('</ul></body></html>');
+            return http.Response(buf.toString(), 200);
+          } else if (query == 'page=3') {
+            final buf = StringBuffer('<html><body><ul class="list-chapter">');
+            for (int i = 201; i <= 245; i++) {
+              buf.write('<li><a href="https://novelfire.net/book/shadow-slave/chapter-$i">Chapter $i</a></li>');
+            }
+            buf.write('</ul></body></html>');
+            return http.Response(buf.toString(), 200);
+          } else {
+            // Page 1 of dedicated chapters page (returns 100 chapters and pagination to 3 pages)
+            final buf = StringBuffer('<html><body><ul class="list-chapter">');
+            for (int i = 1; i <= 100; i++) {
+              buf.write('<li><a href="https://novelfire.net/book/shadow-slave/chapter-$i">Chapter $i</a></li>');
+            }
+            buf.write('</ul><ul class="pagination">');
+            buf.write('<li><a href="/book/shadow-slave/chapters?page=1">1</a></li>');
+            buf.write('<li><a href="/book/shadow-slave/chapters?page=2">2</a></li>');
+            buf.write('<li><a href="/book/shadow-slave/chapters?page=3">3</a></li>');
+            buf.write('</ul></body></html>');
+            return http.Response(buf.toString(), 200);
+          }
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final extractor = NovelFullExtractor(
+        id: 'novelfire',
+        name: 'NovelFire',
+        baseUrl: 'https://novelfire.net',
+        client: mockClient,
+      );
+
+      final chapters = await extractor.getChapterList('https://novelfire.net/book/shadow-slave');
+      expect(chapters.length, 245);
+      expect(chapters.first.title, 'Chapter 1');
+      expect(chapters.last.title, 'Chapter 245');
+    });
+
+    test('FreeWebNovel: Fetches chapters via AJAX pagination endpoint ?ajax=chapters&page=N', () async {
+      final mockClient = MockClient((request) async {
+        final path = request.url.path;
+        final params = request.url.queryParameters;
+
+        if (path == '/novel/omniscient-reader') {
+          if (params['ajax'] == 'chapters') {
+            final page = int.parse(params['page'] ?? '1');
+            final start = (page - 1) * 100 + 1;
+            final end = page == 2 ? 180 : start + 99;
+            final buf = StringBuffer('<ul class="ul-list5">');
+            for (int i = start; i <= end; i++) {
+              buf.write('<li><a href="https://freewebnovel.com/novel/omniscient-reader/chapter-$i.html">Chapter $i</a></li>');
+            }
+            buf.write('</ul>');
+            return http.Response(json.encode({'code': 200, 'html': buf.toString()}), 200);
+          } else {
+            // Main novel page with indexListPage having total 2 pages
+            final buf = StringBuffer('''
+              <html><body>
+                <h1 class="tit">Omniscient Reader</h1>
+                <div id="indexListPage" data-total-page="2" data-total-chapters="180"></div>
+                <ul class="ul-list5">
+            ''');
+            for (int i = 1; i <= 100; i++) {
+              buf.write('<li><a href="https://freewebnovel.com/novel/omniscient-reader/chapter-$i.html">Chapter $i</a></li>');
+            }
+            buf.write('</ul></body></html>');
+            return http.Response(buf.toString(), 200);
+          }
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final extractor = NovelFullExtractor(
+        id: 'freewebnovel',
+        name: 'FreeWebNovel',
+        baseUrl: 'https://freewebnovel.com',
+        client: mockClient,
+      );
+
+      final chapters = await extractor.getChapterList('https://freewebnovel.com/novel/omniscient-reader');
+      expect(chapters.length, 180);
+      expect(chapters.first.title, 'Chapter 1');
+      expect(chapters.last.title, 'Chapter 180');
     });
 
     test('Throws on genre/category URL in getChapterList and getNovelDetails', () async {
@@ -208,6 +314,62 @@ void main() {
       expect(chapters.length, 130);
       expect(chapters.first.title, 'Chapter 1');
       expect(chapters.last.title, 'Chapter 130');
+    });
+
+    test('EmpireCMS: Follows /e/extend/fy.php multi-page pagination and cleans timestamps', () async {
+      final mockClient = MockClient((request) async {
+        final path = request.url.path;
+        final query = request.url.query;
+
+        if (path == '/novel/reverend-insanity.html') {
+          return http.Response('''
+            <html>
+              <body>
+                <h1>Reverend Insanity</h1>
+                <div id="chpagedlist">
+                  <a href="/e/extend/fy.php?page=1&wjm=reverend-insanity">101-200</a>
+                  <a href="/e/extend/fy.php?page=2&wjm=reverend-insanity">201-300</a>
+                </div>
+                <ul class="chapter-list">
+                  <li><a href="/novel/reverend-insanity_1.html">Chapter 1 <span>1985 days ago</span></a></li>
+                  <li><a href="/novel/reverend-insanity_2.html">Chapter 2 <span>1985 days ago</span></a></li>
+                </ul>
+              </body>
+            </html>
+          ''', 200);
+        } else if (path == '/e/extend/fy.php') {
+          if (query.contains('page=1')) {
+            return http.Response('''
+              <ul>
+                <li><a href="/novel/reverend-insanity_101.html">Chapter 101 <span>1900 days ago</span></a></li>
+                <li><a href="/novel/reverend-insanity_102.html">Chapter 102 <span>1900 days ago</span></a></li>
+              </ul>
+            ''', 200);
+          } else if (query.contains('page=2')) {
+            return http.Response('''
+              <ul>
+                <li><a href="/novel/reverend-insanity_201.html">Chapter 201 <span>1800 days ago</span></a></li>
+                <li><a href="/novel/reverend-insanity_202.html">Chapter 202 <span>1800 days ago</span></a></li>
+              </ul>
+            ''', 200);
+          }
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final extractor = ReadWnExtractor(
+        id: 'readwn',
+        name: 'ReadWN',
+        baseUrl: 'https://www.readwn.com',
+        client: mockClient,
+      );
+
+      final chapters = await extractor.getChapterList('https://www.readwn.com/novel/reverend-insanity.html');
+      expect(chapters.length, 6);
+      expect(chapters[0].title, 'Chapter 1');
+      expect(chapters[0].title.contains('days ago'), isFalse);
+      expect(chapters[2].title, 'Chapter 101');
+      expect(chapters[4].title, 'Chapter 201');
     });
   });
 

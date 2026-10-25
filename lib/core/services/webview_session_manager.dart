@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -119,19 +120,28 @@ class WebViewSessionManager {
         }
       }
 
+      String decodeHtml(dynamic htmlObj) {
+        var str = htmlObj.toString();
+        if (str.startsWith('"') && str.endsWith('"')) {
+          try {
+            return jsonDecode(str).toString();
+          } catch (_) {
+            return str
+                .substring(1, str.length - 1)
+                .replaceAll(r'\"', '"')
+                .replaceAll(r'\n', '\n')
+                .replaceAll(r'\t', '\t')
+                .replaceAll(r'\/', '/');
+          }
+        }
+        return str;
+      }
+
       timer = Timer(timeout, () async {
         if (!completed) {
           try {
             final htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
-            var htmlStr = htmlObj.toString();
-            if (htmlStr.startsWith('"') && htmlStr.endsWith('"')) {
-              htmlStr = htmlStr.substring(1, htmlStr.length - 1)
-                  .replaceAll(r'\"', '"')
-                  .replaceAll(r'\n', '\n')
-                  .replaceAll(r'\t', '\t')
-                  .replaceAll(r'\/', '/');
-            }
-            finish(htmlStr);
+            finish(decodeHtml(htmlObj));
           } catch (_) {
             finish(null);
           }
@@ -146,14 +156,14 @@ class WebViewSessionManager {
             if (!completed) {
               try {
                 await syncCookiesFromWebView(finishedUrl);
-                final htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
-                var htmlStr = htmlObj.toString();
-                if (htmlStr.startsWith('"') && htmlStr.endsWith('"')) {
-                  htmlStr = htmlStr.substring(1, htmlStr.length - 1)
-                      .replaceAll(r'\"', '"')
-                      .replaceAll(r'\n', '\n')
-                      .replaceAll(r'\t', '\t')
-                      .replaceAll(r'\/', '/');
+                var htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
+                var htmlStr = decodeHtml(htmlObj);
+                // If Turnstile challenge is still active, wait for resolution
+                if (htmlStr.contains('Just a moment...') || htmlStr.contains('challenge-running')) {
+                  await Future.delayed(const Duration(milliseconds: 2500));
+                  await syncCookiesFromWebView(finishedUrl);
+                  htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
+                  htmlStr = decodeHtml(htmlObj);
                 }
                 finish(htmlStr);
               } catch (_) {

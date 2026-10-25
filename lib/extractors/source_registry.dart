@@ -6,8 +6,6 @@ import 'readwn_extractor.dart';
 import 'fictioneer_extractor.dart';
 import 'bespoke/royalroad_extractor.dart';
 import 'bespoke/scribblehub_extractor.dart';
-import 'bespoke/oceanofpdf_extractor.dart';
-import 'bespoke/vdocpub_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -20,12 +18,10 @@ import 'bespoke/vdocpub_extractor.dart';
 class SourceRegistry {
   static final Map<String, NovelSource> _sources = {
     // ==========================================
-    // 1. Bespoke Western Web Fiction & Digital Libraries
+    // 1. Bespoke Western Web Fiction
     // ==========================================
     'royalroad': RoyalRoadExtractor(),
     'scribblehub': ScribbleHubExtractor(),
-    'oceanofpdf': OceanofPdfExtractor(),
-    'vdocpub': VdocPubExtractor(),
 
     // ==========================================
     // 2. High-Capacity NovelFull Aggregators

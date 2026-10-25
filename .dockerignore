@@ -1,0 +1,16 @@
+.git
+.github
+.idea
+.dart_tool
+build
+android
+ios
+linux
+macos
+windows
+*.apk
+*.tar.gz
+*.zip
+*.log
+.last_build_id
+

@@ -9,7 +9,8 @@
   <a href="https://github.com/AdityaPatra-dev/Novels-World/releases/latest"><img src="https://img.shields.io/github/v/release/AdityaPatra-dev/Novels-World?color=8B5CF6&label=Latest%20Release&style=for-the-badge&logo=github" alt="Release" /></a>
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.x%20%7C%20Dart%203.x-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter" /></a>
   <a href="https://github.com/AdityaPatra-dev/Novels-World/actions"><img src="https://img.shields.io/badge/Tests-44%2F44%20Passing-10B981?style=for-the-badge&logo=githubactions&logoColor=white" alt="Tests" /></a>
-  <a href="#-platforms"><img src="https://img.shields.io/badge/Platforms-Android%20%7C%20Linux%20%7C%20Windows%20%7C%20macOS-EC4899?style=for-the-badge" alt="Platforms" /></a>
+  <a href="https://hub.docker.com/r/adityapatra/novels-world"><img src="https://img.shields.io/docker/pulls/adityapatra/novels-world?style=for-the-badge&logo=docker&logoColor=white&color=2496ED" alt="Docker Pulls" /></a>
+  <a href="#-platforms"><img src="https://img.shields.io/badge/Platforms-Android%20%7C%20Linux%20%7C%20Windows%20%7C%20macOS%20%7C%20Docker-EC4899?style=for-the-badge" alt="Platforms" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge" alt="License" /></a>
 </p>
 
@@ -117,6 +118,35 @@ sudo dnf install -y gtk3 alsa-lib
 1. Download **`Novels-World-macOS-Universal.zip`** from [GitHub Releases](https://github.com/AdityaPatra-dev/Novels-World/releases/latest).
 2. Extract the archive and drag **`Novels World.app`** into your **Applications** folder.
 3. Open via Launchpad.
+
+</details>
+
+<details>
+<summary><b>🐳 Docker & Web Container (Docker Hub)</b></summary>
+
+<br />
+
+Novels World is officially published on [Docker Hub](https://hub.docker.com/r/adityapatra/novels-world) as a lightweight, production-ready NGINX container.
+
+**Run with Docker CLI:**
+```bash
+docker run -d --name novels-world -p 8080:80 adityapatra/novels-world:latest
+```
+Visit **`http://localhost:8080`** in your web browser.
+
+**Run with Docker Compose:**
+```yaml
+services:
+  novels-world:
+    image: adityapatra/novels-world:latest
+    container_name: novels-world
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+```
+```bash
+docker compose up -d
+```
 
 </details>
 

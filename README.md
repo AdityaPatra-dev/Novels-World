@@ -29,8 +29,8 @@
 Built with Flutter and high-performance native audio pipelines, Novels World aggregates **31+ major web novel platforms** into a distraction-free, customizable reading environment. Experience books with **sample-accurate, zero-gap continuous AI narration** featuring authentic breathing, emotional sentence prosody, and genre-specific voices (Xianxia, LitRPG, Grimdark, Romance, and High Fantasy).
 
 > [!TIP]
-> **Looking for systems architecture, scraper algorithms, or audio queue mechanics?**
-> See the complete [TECHNICAL.md](TECHNICAL.md) for deep-dive diagrams, frame trimmers, and engineering specs.
+> **Looking for systems architecture, scraper algorithms, audio queue mechanics, or development history?**
+> See the complete **[Technical Knowledge Archive (detailed_info/)](detailed_info/00_MASTER_INDEX.md)** and **[Deep Dive Masterfile](detailed_info/NOVELS_WORLD_DEEP_DIVE.md)** for exhaustive diagrams, silence trimming math, real-world case studies, and engineering chronology.
 
 ---
 

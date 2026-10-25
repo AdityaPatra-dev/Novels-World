@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../../core/utils/text_cleaner.dart';
 import '../tts_engine_interface.dart';
@@ -167,14 +168,14 @@ class SystemFallbackEngine implements TtsEngineInterface {
         _appliedPitch = effectivePitch;
       }
 
-      print('[TTS_DEBUG] SystemFallbackEngine: calling flutterTts.speak for "$cleanText"');
+      debugPrint('[TTS_DEBUG] SystemFallbackEngine: calling flutterTts.speak for "$cleanText"');
       _currentCompletion = () {
-        print('[TTS_DEBUG] SystemFallbackEngine: flutterTts finished "$cleanText"');
+        debugPrint('[TTS_DEBUG] SystemFallbackEngine: flutterTts finished "$cleanText"');
         onDone();
       };
       await _flutterTts.speak(cleanText);
     } catch (e, st) {
-      print('[TTS_DEBUG] SystemFallbackEngine error: $e\n$st');
+      debugPrint('[TTS_DEBUG] SystemFallbackEngine error: $e\n$st');
       onDone();
     }
   }

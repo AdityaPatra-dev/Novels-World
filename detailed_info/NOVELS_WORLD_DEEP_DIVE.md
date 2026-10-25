@@ -384,3 +384,4 @@ Located in [`lib/ui/screens/reader_screen.dart`](file:///home/adityapatra/Docume
 
 ### Q5: What are the trade-offs of using `ConcatenatingAudioSource` versus discrete `AudioPlayer` instances?
 > **Answer**: Using two alternating `AudioPlayer` instances (cross-fading) requires dual audio pipeline initialization and manual volume ramp calculation, which introduces platform-specific race conditions and potential audio clipping. `just_audio`'s native `ConcatenatingAudioSource` delegates track transition directly to Android's ExoPlayer and Apple's AVPlayer. The native layer pre-buffers the next track into audio hardware DMA buffers, delivering true 0ms sample-accurate transition without application-level timing heuristics. The trade-off is that playlist modifications must occur on the main isolate, which we safeguard through synchronous queue draining.
+

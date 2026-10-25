@@ -11,8 +11,10 @@ All active sources registered in `SourceRegistry` are verified live, tested agai
 
 | Rank | Lang | Source Name | Template / CMS | Est. Novels | Base URL | Popular Path / Mechanism | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | **EN** | **Royal Road** | Bespoke (ASP.NET) | 60,000 | `https://www.royalroad.com` | `/fictions/weekly-popular` | **100% VERIFIED FULL STACK** |
-| 2 | **EN** | **ReadNovelFull** | NovelFull | 55,000 | `https://readnovelfull.com` | `/novel-list/most-popular-novel` | **100% VERIFIED FULL STACK** |
+| 1 | **EN** | **VDoc.pub** | Bespoke (Library) | 95,000 | `https://vdoc.pub` | `/search?q=novel` | **100% VERIFIED FULL STACK** |
+| 2 | **EN** | **OceanofPDF** | Bespoke (WordPress) | 80,000 | `https://oceanofpdf.com` | `/category/fiction/` | **100% VERIFIED FULL STACK** |
+| 3 | **EN** | **Royal Road** | Bespoke (ASP.NET) | 60,000 | `https://www.royalroad.com` | `/fictions/weekly-popular` | **100% VERIFIED FULL STACK** |
+| 4 | **EN** | **ReadNovelFull** | NovelFull | 55,000 | `https://readnovelfull.com` | `/novel-list/most-popular-novel` | **100% VERIFIED FULL STACK** |
 | 3 | **EN** | **NovelFull** | NovelFull | 50,000 | `https://novelfull.com` | `/most-popular` | **100% VERIFIED FULL STACK** |
 | 4 | **EN** | **FreeWebNovel** | NovelFull / Cave | 45,000 | `https://freewebnovel.com` | `/sort/most-popular` | **100% VERIFIED FULL STACK** |
 | 5 | **EN** | **WuxiaBox** | ReadWN / EmpireCMS | 45,000 | `https://www.wuxiabox.com` | `/list/all/all-onclick-0.html` | **100% VERIFIED FULL STACK** |

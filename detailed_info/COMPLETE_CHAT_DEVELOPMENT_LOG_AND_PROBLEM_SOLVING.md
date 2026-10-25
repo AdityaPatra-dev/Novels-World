@@ -287,3 +287,4 @@ Explained the fundamental difference between **Build-Time Compilers** and **Run-
 * Once compiled, web applications do not require Flutter or Dart—they require an HTTP server.
 * If Flutter were bundled into the runtime, the image size would balloon from **22 MB to ~4 GB**.
 * The published Docker Hub image is 100% self-contained and ready to execute with zero prerequisites.
+

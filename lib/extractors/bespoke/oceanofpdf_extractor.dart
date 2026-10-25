@@ -176,6 +176,10 @@ class OceanofPdfExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw Exception('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
     if (response.statusCode != 200) {
       throw Exception('Failed to load OceanofPDF details from $novelUrl (status ${response.statusCode})');
@@ -246,6 +250,10 @@ class OceanofPdfExtractor implements NovelSource {
 
   @override
   Future<List<Chapter>> getChapterList(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      return [];
+    }
+
     final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
     if (response.statusCode != 200) {
       return [];

@@ -210,6 +210,10 @@ class FictioneerExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     String body = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -285,6 +289,10 @@ class FictioneerExtractor implements NovelSource {
 
   @override
   Future<List<Chapter>> getChapterList(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     String body = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);

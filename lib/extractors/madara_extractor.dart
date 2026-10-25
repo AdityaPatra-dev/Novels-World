@@ -42,11 +42,16 @@ class MadaraExtractor implements NovelSource {
     this.customChapterAjaxUrl,
     this.customContentSelector,
     this.customPopularPath,
+    http.Client? client,
   }) {
-    final nativeHttpClient = HttpClient();
-    nativeHttpClient.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-    nativeHttpClient.connectionTimeout = const Duration(seconds: 15);
-    _client = IOClient(nativeHttpClient);
+    if (client != null) {
+      _client = client;
+    } else {
+      final nativeHttpClient = HttpClient();
+      nativeHttpClient.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+      nativeHttpClient.connectionTimeout = const Duration(seconds: 15);
+      _client = IOClient(nativeHttpClient);
+    }
   }
 
   Map<String, String> get _headers {
@@ -269,6 +274,10 @@ class MadaraExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     String body = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -321,7 +330,9 @@ class MadaraExtractor implements NovelSource {
       description = synopsisEls.map((e) => e.text.trim()).where((s) => s.isNotEmpty).join('\n\n');
     }
 
-    final novelId = '${id}_${Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).last}';
+    final segments = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).toList();
+    final slug = segments.isNotEmpty ? segments.last : novelUrl.hashCode.toString();
+    final novelId = '${id}_$slug';
 
     return Novel(
       id: novelId,
@@ -338,6 +349,10 @@ class MadaraExtractor implements NovelSource {
 
   @override
   Future<List<Chapter>> getChapterList(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     String body = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -356,13 +371,12 @@ class MadaraExtractor implements NovelSource {
     }
 
     final document = html_parser.parse(body);
-    final novelId = '${id}_${Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).last}';
+    final segments = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).toList();
+    final slug = segments.isNotEmpty ? segments.last : novelUrl.hashCode.toString();
+    final novelId = '${id}_$slug';
 
     // 1. Try static chapter parsing
     List<Chapter> chapters = _parseChaptersFromDoc(document, novelId);
-    if (chapters.isNotEmpty) {
-      return chapters;
-    }
 
     // 2. Try newer Madara AJAX chapter endpoint ($novelUrl/ajax/chapters/)
     final cleanUrl = novelUrl.endsWith('/') ? novelUrl : '$novelUrl/';
@@ -374,17 +388,17 @@ class MadaraExtractor implements NovelSource {
           'X-Requested-With': 'XMLHttpRequest',
         },
       );
-      if (ajaxResp.statusCode == 200) {
+      if (ajaxResp.statusCode == 200 && ajaxResp.body.isNotEmpty) {
         final ajaxDoc = html_parser.parse(ajaxResp.body);
-        chapters = _parseChaptersFromDoc(ajaxDoc, novelId);
-        if (chapters.isNotEmpty) {
-          return chapters;
+        final ajaxChapters = _parseChaptersFromDoc(ajaxDoc, novelId);
+        if (ajaxChapters.length > chapters.length) {
+          chapters = ajaxChapters;
         }
       }
     } catch (_) {}
 
     // 3. Try legacy Madara admin-ajax.php endpoint
-    final mangaIdInput = document.querySelector('#wp-manga-post-id, input.rating-post-id, [data-id]');
+    final mangaIdInput = document.querySelector('#wp-manga-post-id, input.rating-post-id, [data-id], input[name="manga_id"]');
     final mangaId = mangaIdInput?.attributes['value'] ?? mangaIdInput?.attributes['data-id'];
 
     if (mangaId != null && mangaId.isNotEmpty) {
@@ -403,11 +417,11 @@ class MadaraExtractor implements NovelSource {
           },
         );
 
-        if (ajaxResp.statusCode == 200) {
+        if (ajaxResp.statusCode == 200 && ajaxResp.body.isNotEmpty) {
           final ajaxDoc = html_parser.parse(ajaxResp.body);
-          chapters = _parseChaptersFromDoc(ajaxDoc, novelId);
-          if (chapters.isNotEmpty) {
-            return chapters;
+          final ajaxChapters = _parseChaptersFromDoc(ajaxDoc, novelId);
+          if (ajaxChapters.length > chapters.length) {
+            chapters = ajaxChapters;
           }
         }
       } catch (_) {}
@@ -420,7 +434,8 @@ class MadaraExtractor implements NovelSource {
     var chapterEls = doc.querySelectorAll(
       'ul.main.version-chap li.wp-manga-chapter, li.wp-manga-chapter, .wp-manga-chapter, .listing-chapters_wrap li, .chapter-list li, .sub-chap-list li',
     );
-    final List<Chapter> list = [];
+    List<Chapter> list = [];
+    final seenUrls = <String>{};
 
     for (final el in chapterEls) {
       final a = el.querySelector('a');
@@ -428,10 +443,13 @@ class MadaraExtractor implements NovelSource {
 
       final url = _cleanUrl(a.attributes['href'] ?? '');
       final title = a.text.trim();
-      if (url.isEmpty || title.isEmpty) continue;
+      if (url.isEmpty || title.isEmpty || seenUrls.contains(url)) continue;
+      seenUrls.add(url);
 
       final date = el.querySelector('.chapter-release-date')?.text.trim();
-      final chapterId = '${novelId}_${Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).last}';
+      final pathSegs = Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).toList();
+      final chapterSlug = pathSegs.isNotEmpty ? pathSegs.last : '${list.length + 1}';
+      final chapterId = '${novelId}_$chapterSlug';
 
       // Parse chapter number if available in title
       final match = RegExp(r'chapter\s+(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(title);
@@ -449,8 +467,25 @@ class MadaraExtractor implements NovelSource {
       );
     }
 
-    // Chapters in Madara are often listed newest first; reverse so Chapter 1 is first
-    return list.reversed.toList();
+    // Madara themes can list chapters newest-first or oldest-first.
+    // Ensure the chapters are in sequential reading order (oldest / Chapter 1 first).
+    if (list.length > 1) {
+      final firstNum = list.first.chapterNumber;
+      final lastNum = list.last.chapterNumber;
+      if (firstNum != null && lastNum != null) {
+        if (firstNum > lastNum) {
+          list = list.reversed.toList();
+        }
+      } else {
+        // Fallback: check if the last item is Chapter 1
+        final lastTitle = list.last.title.toLowerCase();
+        if (lastTitle.contains('chapter 1') || lastTitle.contains('ch. 1') || lastTitle.contains('ch.1')) {
+          list = list.reversed.toList();
+        }
+      }
+    }
+
+    return list;
   }
 
   @override

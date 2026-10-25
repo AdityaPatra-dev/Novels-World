@@ -205,6 +205,10 @@ class ReadWnExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     String body = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -267,6 +271,10 @@ class ReadWnExtractor implements NovelSource {
 
   @override
   Future<List<Chapter>> getChapterList(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     String body = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -283,7 +291,45 @@ class ReadWnExtractor implements NovelSource {
     if (body.isEmpty) {
       throw HttpException('Failed to load chapter list on $name');
     }
-    return parseChapterList(novelUrl, body);
+
+    var chapters = parseChapterList(novelUrl, body);
+    final seenUrls = chapters.map((c) => c.url).toSet();
+
+    // Check for pagination on ReadWn (e.g. .pagination a, ul.pagination li a, .pages-container a)
+    final doc = html_parser.parse(body);
+    final pageLinks = doc.querySelectorAll('.pagination a, ul.pagination li a, .pages-container a, .page-item a');
+    final pageUrls = <String>[];
+
+    for (final a in pageLinks) {
+      final href = a.attributes['href'] ?? '';
+      if (href.isNotEmpty) {
+        final clean = _cleanUrl(href);
+        if (clean != novelUrl && !pageUrls.contains(clean)) {
+          pageUrls.add(clean);
+        }
+      }
+    }
+
+    // Follow discovered page URLs up to 50 pages
+    for (final pUrl in pageUrls.take(50)) {
+      try {
+        final resp = await _client.get(Uri.parse(pUrl), headers: _headers);
+        if (resp.statusCode == 200) {
+          final pageChs = parseChapterList(novelUrl, resp.body);
+          if (pageChs.isEmpty) break;
+          for (final ch in pageChs) {
+            if (!seenUrls.contains(ch.url)) {
+              seenUrls.add(ch.url);
+              chapters.add(ch);
+            }
+          }
+        }
+      } catch (_) {
+        break;
+      }
+    }
+
+    return chapters;
   }
 
   List<Chapter> parseChapterList(String novelUrl, String html) {

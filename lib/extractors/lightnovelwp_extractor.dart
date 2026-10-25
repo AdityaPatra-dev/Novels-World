@@ -167,7 +167,7 @@ class LightNovelWpExtractor implements NovelSource {
       if (linkEl == null) continue;
 
       final href = linkEl.attributes['href'] ?? '';
-      if (href.isEmpty) continue;
+      if (href.isEmpty || TextCleaner.isGenreOrCategoryUrl(href)) continue;
 
       String title = el.querySelector('.tt, .bigor .tt, h2, h3, h4, .title')?.text.trim() ?? '';
       final imgEl = el.querySelector('.mdthumb img, img');
@@ -212,6 +212,10 @@ class LightNovelWpExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     String body = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -315,6 +319,10 @@ class LightNovelWpExtractor implements NovelSource {
 
   @override
   Future<List<Chapter>> getChapterList(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     String body = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -331,7 +339,35 @@ class LightNovelWpExtractor implements NovelSource {
     if (body.isEmpty) {
       throw Exception('Failed to load chapter list: $novelUrl');
     }
-    return parseChapterList(novelUrl, body);
+
+    var chapters = parseChapterList(novelUrl, body);
+    final seenUrls = chapters.map((c) => c.url).toSet();
+
+    // Check for pagination links on LightNovelWP
+    final doc = html_parser.parse(body);
+    final pageLinks = doc.querySelectorAll('.pagination a, .page-numbers a, ul.pagination li a');
+    for (final a in pageLinks) {
+      final href = a.attributes['href'] ?? '';
+      if (href.isNotEmpty) {
+        final clean = _cleanUrl(href);
+        if (clean != novelUrl) {
+          try {
+            final pResp = await _client.get(Uri.parse(clean), headers: _headers);
+            if (pResp.statusCode == 200) {
+              final pageChs = parseChapterList(novelUrl, pResp.body);
+              for (final ch in pageChs) {
+                if (!seenUrls.contains(ch.url)) {
+                  seenUrls.add(ch.url);
+                  chapters.add(ch);
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
+    return chapters;
   }
 
   List<Chapter> parseChapterList(String novelUrl, String htmlContent) {

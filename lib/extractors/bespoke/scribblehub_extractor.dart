@@ -159,6 +159,10 @@ class ScribbleHubExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw Exception('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
     if (response.statusCode != 200) {
       throw Exception('Failed to load Scribble Hub novel details: HTTP ${response.statusCode}');
@@ -217,6 +221,10 @@ class ScribbleHubExtractor implements NovelSource {
 
   @override
   Future<List<Chapter>> getChapterList(String novelUrl) async {
+    if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
+      throw Exception('Invalid novel URL: $novelUrl is a genre or category link.');
+    }
+
     final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
     if (response.statusCode != 200) {
       throw Exception('Failed to load Scribble Hub chapter list: HTTP ${response.statusCode}');
@@ -225,10 +233,13 @@ class ScribbleHubExtractor implements NovelSource {
     final document = html_parser.parse(response.body);
     var chapters = parseChapterList(novelUrl, response.body);
 
-    if (chapters.isEmpty) {
-      final mypostIdEl = document.querySelector('#mypostid');
-      final postId = mypostIdEl?.attributes['value'];
-      if (postId != null && postId.isNotEmpty) {
+    final mypostIdEl = document.querySelector('#mypostid');
+    final postId = mypostIdEl?.attributes['value'];
+    if (postId != null && postId.isNotEmpty) {
+      final seenUrls = <String>{};
+      final allAjaxChapters = <Chapter>[];
+      int pageNum = 1;
+      while (pageNum <= 50) {
         try {
           final ajaxResp = await _client.post(
             Uri.parse('$baseUrl/wp-admin/admin-ajax.php'),
@@ -239,14 +250,48 @@ class ScribbleHubExtractor implements NovelSource {
             },
             body: {
               'action': 'wi_getreleases_pagination',
-              'pagenum': '1',
+              'pagenum': '$pageNum',
               'mypid': postId,
             },
           );
           if (ajaxResp.statusCode == 200 && ajaxResp.body.isNotEmpty) {
-            chapters = parseChapterList(novelUrl, ajaxResp.body);
+            final pageChs = parseChapterList(novelUrl, ajaxResp.body);
+            if (pageChs.isEmpty) break;
+            bool addedNew = false;
+            for (final ch in pageChs) {
+              if (!seenUrls.contains(ch.url)) {
+                seenUrls.add(ch.url);
+                allAjaxChapters.add(ch);
+                addedNew = true;
+              }
+            }
+            if (!addedNew) break;
+            pageNum++;
+          } else {
+            break;
           }
-        } catch (_) {}
+        } catch (_) {
+          break;
+        }
+      }
+      if (allAjaxChapters.length > chapters.length) {
+        chapters = allAjaxChapters;
+      }
+    }
+
+    // Ensure sequential reading order (Chapter 1 first)
+    if (chapters.length > 1) {
+      final firstNum = chapters.first.chapterNumber;
+      final lastNum = chapters.last.chapterNumber;
+      if (firstNum != null && lastNum != null) {
+        if (firstNum > lastNum) {
+          chapters = chapters.reversed.toList();
+        }
+      } else {
+        final lastTitle = chapters.last.title.toLowerCase();
+        if (lastTitle.contains('chapter 1') || lastTitle.contains('ch. 1') || lastTitle.contains('ch.1')) {
+          chapters = chapters.reversed.toList();
+        }
       }
     }
 

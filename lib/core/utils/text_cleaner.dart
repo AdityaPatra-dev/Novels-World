@@ -51,45 +51,108 @@ class TextCleaner {
     return paragraphs.join('\n\n');
   }
 
+  static final Set<String> _genreAndCategoryTitles = {
+    // Standard Genres & Sub-genres
+    'action', 'adventure', 'comedy', 'drama', 'fantasy', 'romance', 'harem',
+    'xianxia', 'wuxia', 'xuanhuan', 'sci-fi', 'science fiction', 'mystery',
+    'supernatural', 'thriller', 'horror', 'historical', 'martial arts', 'mecha',
+    'psychological', 'slice of life', 'tragedy', 'ecchi', 'shoujo', 'shounen',
+    'seinen', 'josei', 'isekai', 'urban', 'game', 'games', 'magic',
+    'virtual reality', 'reincarnation', 'system', 'cultivation', 'litrpg',
+    'smut', 'yaoi', 'yuri', 'bl', 'gl', 'gender bender', 'mature', 'adult',
+    'school life', 'sports', 'web novel', 'light novel', 'chinese', 'korean',
+    'japanese', 'western', 'eastern', 'danmei', 'transmigration', 'modern',
+    'fantasy & sci-fi', 'action & adventure', 'mystery & thriller',
+    'shounen ai', 'shoujo ai', 'super power', 'vampire', 'military',
+
+    // Category / Navigation Panels
+    'genres', 'genre', 'categories', 'category', 'tags', 'tag', 'all genres',
+    'all categories', 'novel list', 'series list', 'manga list', 'top rated',
+    'most viewed', 'popular novels', 'latest novels', 'completed novels',
+    'ongoing novels', 'hot novels', 'new novels', 'updates', 'latest updates',
+    'latest release', 'new release', 'most popular', 'all novels', 'ranking',
+    'rankings', 'leaderboard', 'directory', 'filter', 'advanced search',
+    'random novel', 'random', 'featured', 'bookmarks', 'library', 'history',
+    'sign in', 'login', 'log in', 'register', 'logout', 'sign up', 'my account',
+    'cart', 'checkout', 'privacy policy', 'terms of service', 'terms of use',
+    'dmca', 'contact us', 'about us', 'disclaimer', 'faq', 'help', 'donate',
+    'patreon', 'paypal', 'discord', 'telegram', 'facebook', 'twitter',
+    'subscribe', 'rss', 'feed', 'home', 'main page', 'front page',
+  };
+
+  static final List<String> _forbiddenUrlPatterns = [
+    '/genre/',
+    '/genres/',
+    '/genres-',
+    '/the-loai/',
+    '/theloai/',
+    '/kategori/',
+    '/kategoriler/',
+    '/categoria/',
+    '/categorias/',
+    '/category/',
+    '/categories/',
+    '/tag/',
+    '/tags/',
+    '/novel-tag/',
+    '/tag-novel/',
+    '/manga-tag/',
+    '/etiket/',
+    '/author/',
+    '/authors/',
+    '/tac-gia/',
+    '/yazar/',
+    '/autor/',
+    '/autores/',
+    '/sort/',
+    '/filter/',
+    '/order/',
+    '/browse/',
+    '/search/',
+    '/type/',
+    '/status/',
+    'wp-login',
+    '/login',
+    '/register',
+    '/cart',
+    '/checkout',
+    '/my-account',
+    '/admin',
+    '/user/',
+    '/profile/',
+    '/contact',
+    '/about',
+    '/dmca',
+    '/privacy',
+    '/terms',
+    '/disclaimer',
+    '/faq',
+    '/feed',
+    '/rss',
+  ];
+
+  static bool isGenreOrCategoryUrl(String url) {
+    final u = url.toLowerCase().trim();
+    if (u == '#' || u == '/' || u.isEmpty) return true;
+    for (final pattern in _forbiddenUrlPatterns) {
+      if (u.contains(pattern)) return true;
+    }
+    // Also check if path ends with pure page pagination e.g. /page/2/
+    if (RegExp(r'/page/\d+/?$').hasMatch(u)) return true;
+    return false;
+  }
+
   static bool isValidNovelTitle(String title, String url) {
     final t = title.trim().toLowerCase();
     if (t.length < 2) return false;
 
-    // Filter common navigation / login / utility links
-    const junkTitles = [
-      'sign in',
-      'login',
-      'log in',
-      'register',
-      'logout',
-      'sign up',
-      'my account',
-      'cart',
-      'checkout',
-      'privacy policy',
-      'terms of service',
-      'terms of use',
-      'dmca',
-      'contact us',
-      'about us',
-      'disclaimer',
-      'ongoing novels',
-      'latest novels',
-      'popular novels',
-      'browse novels',
-      'search novels',
-      'home',
-      'all novels',
-      'bookmarked',
-      'bookmark',
-      'discord',
-      'telegram',
-      'facebook',
-      'twitter',
-      'subscribe',
-    ];
+    // Filter genre/category/panel titles
+    if (_genreAndCategoryTitles.contains(t)) return false;
 
-    if (junkTitles.contains(t)) return false;
+    // Filter title prefixed with "genre: " or "category: "
+    if (t.startsWith('genre:') || t.startsWith('category:') || t.startsWith('tag:')) {
+      return false;
+    }
 
     // Filter known parked domain / spam blog titles
     if (t.contains('denver broncos') ||
@@ -100,14 +163,8 @@ class TextCleaner {
       return false;
     }
 
-    // Filter invalid URLs
-    final u = url.toLowerCase();
-    if (u == '#' ||
-        u.contains('wp-login') ||
-        u.contains('/login') ||
-        u.contains('/register') ||
-        u.contains('/cart') ||
-        u.contains('/my-account')) {
+    // Filter invalid, genre, category, author or navigation URLs
+    if (isGenreOrCategoryUrl(url)) {
       return false;
     }
 

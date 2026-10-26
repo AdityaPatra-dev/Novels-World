@@ -5,7 +5,6 @@ import 'package:novels_world/tts/sleep_timer_service.dart';
 import 'package:novels_world/tts/ring_buffer_manager.dart';
 import 'package:novels_world/tts/voice_calibration.dart';
 import 'package:novels_world/tts/services/edge_drm.dart';
-import 'package:novels_world/tts/services/edge_tts_client.dart';
 import 'package:novels_world/core/utils/text_cleaner.dart';
 
 void main() {

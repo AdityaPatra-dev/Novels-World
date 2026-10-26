@@ -68,7 +68,7 @@ class ReaderProvider extends ChangeNotifier {
     };
 
     ttsManager.onChapterFinished = () {
-      if (hasNextChapter) {
+      if (hasNextChapter && !ttsManager.isPlaying) {
         nextChapter();
       }
     };

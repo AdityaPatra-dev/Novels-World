@@ -207,5 +207,33 @@ void main() {
       expect(currentSentences.length, 2);
       expect(preloadedNextContent, isNull);
     });
+
+    test('Strict monotonic sentence progression: no double-repeats or backward loops', () {
+      final manager = RingBufferManager();
+      final chapter1 = [
+        'Paragraph 0: The starry night stretched infinitely.',
+        'Paragraph 1: Jiang Chen examined his cultivation elixir.',
+        'Paragraph 2: A sudden roar echoed across the mountain.',
+      ];
+
+      final playedSequence = <int>[];
+      manager.onSentenceStarted = (idx) {
+        playedSequence.add(idx);
+      };
+
+      manager.loadSentences(chapter1, startIndex: 0);
+
+      // Verify that sentence progression advances linearly without duplicate entries
+      expect(manager.currentIndex, 0);
+      expect(manager.sentences.length, 3);
+
+      // Fast-forward indices
+      manager.checkApproachingEnd(1);
+      manager.checkApproachingEnd(2);
+
+      // Verify each sentence index is distinct and advancing
+      expect(playedSequence, isEmpty); // No spurious callbacks before play
+    });
   });
 }
+

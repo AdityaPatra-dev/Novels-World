@@ -11,28 +11,17 @@ import 'engines/sherpa_engine.dart';
 import 'engines/system_fallback_engine.dart';
 import 'sleep_timer_service.dart';
 
+/// Rock-solid sequential audio playback manager with aggressive background pre-fetching,
+/// zero DSP pitch artifacts, and seamless cross-chapter continuity.
 class RingBufferManager extends ChangeNotifier {
-  final Map<String, TtsEngineInterface> _engines = {
-    TtsModelRegistry.edgeNeuralId: EdgeNeuralEngine(),
-    TtsModelRegistry.kokoroId: KokoroEngine(),
-    TtsModelRegistry.piperId: PiperEngine(),
-    TtsModelRegistry.sherpaId: SherpaEngine(),
-    TtsModelRegistry.systemId: SystemFallbackEngine(),
-  };
-
+  final Map<String, TtsEngineInterface> _engines;
   late TtsEngineInterface _activeEngine;
-  final SleepTimerService sleepTimer = SleepTimerService();
-  final AudioPlayer _player = AudioPlayer();
-  StreamSubscription<int?>? _indexSub;
+  final SleepTimerService sleepTimer;
+  final AudioPlayer _player;
+
   StreamSubscription<PlayerState>? _stateSub;
   int _sessionEpoch = 0;
-
-  // Strict Sequential Ordering FIFO queue for gapless playback
-  final Map<int, String> _resolvedAudios = {};
-  final Set<int> _failedIndices = {};
-  final Set<int> _requestedIndices = {};
-  int _nextQueuedIndex = 0;
-  bool _isDraining = false;
+  bool _isTransitioning = false;
 
   List<String> _sentences = [];
   int _currentIndex = 0;
@@ -42,7 +31,7 @@ class RingBufferManager extends ChangeNotifier {
   double _speed = 1.0;
   double _pitch = 1.0;
   String _activeVoice = 'en-US-ChristopherNeural';
-  int _sentencePauseMs = 0; // 0ms for instant gapless human audiobook playback
+  int _sentencePauseMs = 0; // 0ms for continuous human audiobook playback
 
   Function(int sentenceIndex)? onSentenceStarted;
   VoidCallback? onChapterFinished;
@@ -52,49 +41,33 @@ class RingBufferManager extends ChangeNotifier {
   List<String> _nextChapterSentences = [];
   bool _hasTriggeredApproachingEnd = false;
 
-  RingBufferManager() {
+  RingBufferManager({
+    AudioPlayer? player,
+    SleepTimerService? sleepTimer,
+    Map<String, TtsEngineInterface>? customEngines,
+  })  : _player = player ?? AudioPlayer(),
+        sleepTimer = sleepTimer ?? SleepTimerService(),
+        _engines = {
+          TtsModelRegistry.edgeNeuralId: EdgeNeuralEngine(),
+          TtsModelRegistry.kokoroId: KokoroEngine(),
+          TtsModelRegistry.piperId: PiperEngine(),
+          TtsModelRegistry.sherpaId: SherpaEngine(),
+          TtsModelRegistry.systemId: SystemFallbackEngine(),
+        } {
+    if (customEngines != null) {
+      _engines.addAll(customEngines);
+    }
     _activeEngine = _engines[TtsModelRegistry.edgeNeuralId]!;
-    sleepTimer.onTimerExpired = () {
+    this.sleepTimer.onTimerExpired = () {
       pause();
     };
     _initPlayerListeners();
   }
 
   void _initPlayerListeners() {
-    _indexSub = _player.currentIndexStream.listen((tagIndex) {
-      if (!_isPlaying || tagIndex == null) return;
-      final sources = _player.audioSources;
-      if (tagIndex < sources.length) {
-        final source = sources[tagIndex];
-        if (source is UriAudioSource) {
-          final tag = source.tag;
-          if (tag is String && tag.startsWith('next_')) {
-            handleCrossChapterTag(tag);
-          } else if (tag is int) {
-            final newIdx = tag;
-            if (newIdx != _currentIndex) {
-              _currentIndex = newIdx;
-              onSentenceStarted?.call(_currentIndex);
-              notifyListeners();
-
-              // Trigger background chapter prefetch 2-3 lines before the chapter ends
-              checkApproachingEnd(_currentIndex);
-
-              _schedulePrefetchAndAppend();
-            }
-          }
-        }
-      }
-    });
-
     _stateSub = _player.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
-        if (_currentIndex >= _sentences.length - 1 && _nextChapterSentences.isEmpty) {
-          _isPlaying = false;
-          notifyListeners();
-          sleepTimer.triggerEndOfChapter();
-          onChapterFinished?.call();
-        }
+        _handleSentenceCompleted();
       }
     });
   }
@@ -145,8 +118,8 @@ class RingBufferManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setSentencePause(int ms) {
-    _sentencePauseMs = ms.clamp(0, 1000);
+  void setSentencePause(int pauseMs) {
+    _sentencePauseMs = pauseMs.clamp(0, 1000);
     notifyListeners();
   }
 
@@ -177,21 +150,16 @@ class RingBufferManager extends ChangeNotifier {
       _nextChapterSentences.clear();
     }
     _currentIndex = nextIdx;
-    _nextQueuedIndex = nextIdx + 1;
     _hasTriggeredApproachingEnd = false;
-    _resolvedAudios.clear();
-    _requestedIndices.clear();
-    _failedIndices.clear();
     onCrossChapterTransition?.call();
     onSentenceStarted?.call(_currentIndex);
     notifyListeners();
-    _schedulePrefetchAndAppend();
   }
 
   void queueNextChapterSentences(List<String> sentences) {
     _nextChapterSentences = List<String>.from(sentences);
     if (_isPlaying) {
-      _schedulePrefetchAndAppend();
+      _prefetchUpcoming();
     }
   }
 
@@ -208,7 +176,7 @@ class RingBufferManager extends ChangeNotifier {
   /// Aggressively prefetches upcoming sentences in the background
   /// to ensure 0ms network latency and instant line-to-line transitions.
   void _prefetchUpcoming() {
-    for (int offset = 0; offset <= 4; offset++) {
+    for (int offset = 1; offset <= 5; offset++) {
       final targetIdx = _currentIndex + offset;
       if (targetIdx < _sentences.length) {
         final text = _sentences[targetIdx].trim();
@@ -220,6 +188,19 @@ class RingBufferManager extends ChangeNotifier {
             pitch: _pitch,
           ).catchError((_) => null);
         }
+      } else if (_nextChapterSentences.isNotEmpty) {
+        final nextIdx = targetIdx - _sentences.length;
+        if (nextIdx < _nextChapterSentences.length && nextIdx < 3) {
+          final text = _nextChapterSentences[nextIdx].trim();
+          if (text.isNotEmpty) {
+            _activeEngine.synthesizeSentenceToFile(
+              text,
+              voice: _activeVoice,
+              speed: 1.0,
+              pitch: _pitch,
+            ).catchError((_) => null);
+          }
+        }
       }
     }
   }
@@ -230,62 +211,40 @@ class RingBufferManager extends ChangeNotifier {
     _sessionEpoch++;
     final epoch = _sessionEpoch;
 
-    _resolvedAudios.clear();
-    _failedIndices.clear();
-    _requestedIndices.clear();
     _nextChapterSentences.clear();
     _hasTriggeredApproachingEnd = false;
 
     _currentIndex = index.clamp(0, _sentences.length - 1);
-    _nextQueuedIndex = _currentIndex + 1;
     _isPlaying = true;
     _isBuffering = true;
     notifyListeners();
     onSentenceStarted?.call(_currentIndex);
 
     checkApproachingEnd(_currentIndex);
+    await _playCurrentSentence(epoch);
+  }
 
-    final currentText = _sentences[_currentIndex].trim();
-    if (currentText.isEmpty) {
+  Future<void> _playCurrentSentence(int epoch) async {
+    if (!_isPlaying || epoch != _sessionEpoch || _sentences.isEmpty) return;
+    final text = _sentences[_currentIndex].trim();
+    if (text.isEmpty) {
       if (_currentIndex < _sentences.length - 1) {
-        await playFrom(_currentIndex + 1);
+        _currentIndex++;
+        onSentenceStarted?.call(_currentIndex);
+        notifyListeners();
+        await _playCurrentSentence(epoch);
       }
       return;
     }
 
-    // Immediately kick off parallel prefetch for upcoming sentences to eliminate network gaps
-    for (int offset = 1; offset <= 4; offset++) {
-      final targetIdx = _currentIndex + offset;
-      if (targetIdx < _sentences.length) {
-        final text = _sentences[targetIdx].trim();
-        if (text.isNotEmpty) {
-          _requestedIndices.add(targetIdx);
-          _activeEngine.synthesizeSentenceToFile(
-            text,
-            voice: _activeVoice,
-            speed: 1.0,
-            pitch: _pitch,
-          ).then((audioPath) async {
-            if (epoch == _sessionEpoch && _isPlaying) {
-              if (audioPath != null && await File(audioPath).exists()) {
-                _resolvedAudios[targetIdx] = audioPath;
-              } else {
-                _failedIndices.add(targetIdx);
-              }
-              _drainResolvedAudios(epoch);
-            }
-          }).catchError((_) {
-            if (epoch == _sessionEpoch && _isPlaying) {
-              _failedIndices.add(targetIdx);
-              _drainResolvedAudios(epoch);
-            }
-          });
-        }
-      }
-    }
+    // Prefetch next 5 sentences in parallel into disk cache
+    _prefetchUpcoming();
 
-    final firstAudio = await _activeEngine.synthesizeSentenceToFile(
-      currentText,
+    _isBuffering = true;
+    notifyListeners();
+
+    final audioPath = await _activeEngine.synthesizeSentenceToFile(
+      text,
       voice: _activeVoice,
       speed: 1.0,
       pitch: _pitch,
@@ -293,18 +252,18 @@ class RingBufferManager extends ChangeNotifier {
 
     if (epoch != _sessionEpoch || !_isPlaying) return;
 
-    if (firstAudio != null && await File(firstAudio).exists()) {
+    if (audioPath != null && await File(audioPath).exists()) {
       _isBuffering = false;
       notifyListeners();
-
-      await _player.setAudioSources([
-        AudioSource.file(firstAudio, tag: _currentIndex),
-      ]);
-      await _player.setSpeed(_speed);
-      await _player.setPitch(1.0); // Clean native playback without DSP artifacts
-      await _player.play();
-
-      _schedulePrefetchAndAppend();
+      try {
+        await _player.setFilePath(audioPath);
+        await _player.setSpeed(_speed);
+        await _player.setPitch(1.0); // Clean native playback without DSP artifacts
+        await _player.play();
+      } catch (e) {
+        debugPrint('[RingBufferManager] Playback error: $e');
+        _playWithDirectFallback();
+      }
     } else {
       _isBuffering = false;
       notifyListeners();
@@ -312,138 +271,63 @@ class RingBufferManager extends ChangeNotifier {
     }
   }
 
-  /// Prefetches upcoming sentences and strictly enqueues them in narrative order.
-  /// Even if short sentences synthesize faster over the network than preceding
-  /// long paragraphs, the FIFO buffer guarantees the audio sources are appended
-  /// in exact numerical index sequence (0, 1, 2, 3...).
-  void _schedulePrefetchAndAppend() {
-    if (!_isPlaying) return;
+  Future<void> _handleSentenceCompleted() async {
+    if (!_isPlaying || _isTransitioning) return;
+    _isTransitioning = true;
     final epoch = _sessionEpoch;
 
-    for (int offset = 1; offset <= 5; offset++) {
-      final targetIdx = _currentIndex + offset;
-      if (targetIdx < _sentences.length) {
-        final alreadyInPlaylist = _player.audioSources.any((s) => s is UriAudioSource && s.tag == targetIdx);
-        if (alreadyInPlaylist || _resolvedAudios.containsKey(targetIdx) || _requestedIndices.contains(targetIdx)) {
-          continue;
-        }
-
-        final text = _sentences[targetIdx].trim();
-        if (text.isEmpty) {
-          _failedIndices.add(targetIdx);
-          _drainResolvedAudios(epoch);
-          continue;
-        }
-
-        _requestedIndices.add(targetIdx);
-        _activeEngine.synthesizeSentenceToFile(
-          text,
-          voice: _activeVoice,
-          speed: 1.0,
-          pitch: _pitch,
-        ).then((audioPath) async {
-          if (epoch == _sessionEpoch && _isPlaying) {
-            if (audioPath != null && await File(audioPath).exists()) {
-              _resolvedAudios[targetIdx] = audioPath;
-            } else {
-              _failedIndices.add(targetIdx);
-            }
-            _drainResolvedAudios(epoch);
-          }
-        }).catchError((_) {
-          if (epoch == _sessionEpoch && _isPlaying) {
-            _failedIndices.add(targetIdx);
-            _drainResolvedAudios(epoch);
-          }
-        });
-      } else if (_nextChapterSentences.isNotEmpty) {
-        // Pre-synthesize initial lines of the upcoming chapter!
-        final nextIdx = targetIdx - _sentences.length;
-        if (nextIdx < _nextChapterSentences.length && nextIdx < 3) {
-          final nextTag = 'next_$nextIdx';
-          final alreadyInPlaylist = _player.audioSources.any((s) => s is UriAudioSource && s.tag == nextTag);
-          if (alreadyInPlaylist || _resolvedAudios.containsKey(targetIdx) || _requestedIndices.contains(targetIdx)) {
-            continue;
-          }
-
-          final text = _nextChapterSentences[nextIdx].trim();
-          if (text.isEmpty) {
-            _failedIndices.add(targetIdx);
-            _drainResolvedAudios(epoch);
-            continue;
-          }
-
-          _requestedIndices.add(targetIdx);
-          _activeEngine.synthesizeSentenceToFile(
-            text,
-            voice: _activeVoice,
-            speed: 1.0,
-            pitch: _pitch,
-          ).then((audioPath) async {
-            if (epoch == _sessionEpoch && _isPlaying) {
-              if (audioPath != null && await File(audioPath).exists()) {
-                _resolvedAudios[targetIdx] = audioPath;
-              } else {
-                _failedIndices.add(targetIdx);
-              }
-              _drainResolvedAudios(epoch);
-            }
-          }).catchError((_) {
-            if (epoch == _sessionEpoch && _isPlaying) {
-              _failedIndices.add(targetIdx);
-              _drainResolvedAudios(epoch);
-            }
-          });
-        }
+    if (_sentencePauseMs > 0) {
+      await Future.delayed(Duration(milliseconds: _sentencePauseMs));
+      if (!_isPlaying || epoch != _sessionEpoch) {
+        _isTransitioning = false;
+        return;
       }
     }
-  }
 
-  /// Drains resolved audio files in strict monotonically increasing sequence.
-  Future<void> _drainResolvedAudios(int epoch) async {
-    if (_isDraining) return;
-    _isDraining = true;
-    try {
-      while (_resolvedAudios.containsKey(_nextQueuedIndex) || _failedIndices.contains(_nextQueuedIndex)) {
-        if (epoch != _sessionEpoch || !_isPlaying) break;
-        final targetIdx = _nextQueuedIndex;
-        if (_failedIndices.contains(targetIdx)) {
-          _failedIndices.remove(targetIdx);
-          _nextQueuedIndex++;
-          continue;
-        }
-
-        final isNext = targetIdx >= _sentences.length;
-        final tag = isNext ? 'next_${targetIdx - _sentences.length}' : targetIdx;
-        final audioPath = _resolvedAudios.remove(targetIdx)!;
-        if (await File(audioPath).exists()) {
-          final alreadyIn = _player.audioSources.any((s) => s is UriAudioSource && s.tag == tag);
-          if (!alreadyIn) {
-            await _player.addAudioSource(AudioSource.file(audioPath, tag: tag));
-            // Recover automatically if the player hit completed before this file arrived
-            if (_isPlaying && _player.processingState == ProcessingState.completed) {
-              final newIndex = _player.audioSources.length - 1;
-              if (newIndex >= 0) {
-                await _player.seek(Duration.zero, index: newIndex);
-                await _player.play();
-              }
-            }
-          }
-        }
-        _nextQueuedIndex++;
+    if (_currentIndex < _sentences.length - 1) {
+      // Normal sentence progression within the current chapter
+      _currentIndex++;
+      onSentenceStarted?.call(_currentIndex);
+      notifyListeners();
+      checkApproachingEnd(_currentIndex);
+      await _playCurrentSentence(epoch);
+    } else {
+      // Reached the end of current chapter's sentences
+      if (sleepTimer.mode == SleepTimerMode.endOfChapter) {
+        _isPlaying = false;
+        notifyListeners();
+        sleepTimer.triggerEndOfChapter();
+        _isTransitioning = false;
+        return;
       }
-    } finally {
-      _isDraining = false;
+
+      if (_nextChapterSentences.isNotEmpty) {
+        // Seamless cross-chapter continuous playback
+        _sentences = List<String>.from(_nextChapterSentences);
+        _nextChapterSentences.clear();
+        _currentIndex = 0;
+        _hasTriggeredApproachingEnd = false;
+        onCrossChapterTransition?.call();
+        onSentenceStarted?.call(_currentIndex);
+        notifyListeners();
+        await _playCurrentSentence(epoch);
+      } else {
+        // Entire novel completed or no next chapter available
+        _isPlaying = false;
+        notifyListeners();
+        sleepTimer.triggerEndOfChapter();
+        onChapterFinished?.call();
+      }
     }
+    _isTransitioning = false;
   }
 
   Future<void> resume() async {
     if (_sentences.isEmpty || _isPlaying) return;
-    if (_player.audioSources.isNotEmpty) {
-      _isPlaying = true;
-      notifyListeners();
+    _isPlaying = true;
+    notifyListeners();
+    if (_player.processingState == ProcessingState.ready) {
       await _player.play();
-      _schedulePrefetchAndAppend();
     } else {
       await playFrom(_currentIndex);
     }
@@ -462,14 +346,10 @@ class RingBufferManager extends ChangeNotifier {
     _sessionEpoch++;
     _isPlaying = false;
     _isBuffering = false;
-    _resolvedAudios.clear();
-    _failedIndices.clear();
-    _requestedIndices.clear();
     _nextChapterSentences.clear();
     _hasTriggeredApproachingEnd = false;
     try {
       await _player.stop();
-      await _player.clearAudioSources();
     } catch (_) {}
     await _activeEngine.stop();
     notifyListeners();
@@ -477,11 +357,12 @@ class RingBufferManager extends ChangeNotifier {
 
   Future<void> skipNext() async {
     if (_currentIndex < _sentences.length - 1) {
-      if (_player.hasNext) {
-        await _player.seekToNext();
-      } else {
-        await playFrom(_currentIndex + 1);
-      }
+      await playFrom(_currentIndex + 1);
+    } else if (_nextChapterSentences.isNotEmpty) {
+      _sentences = List<String>.from(_nextChapterSentences);
+      _nextChapterSentences.clear();
+      onCrossChapterTransition?.call();
+      await playFrom(0);
     } else {
       await stop();
       sleepTimer.triggerEndOfChapter();
@@ -491,11 +372,7 @@ class RingBufferManager extends ChangeNotifier {
 
   Future<void> skipPrevious() async {
     if (_currentIndex > 0) {
-      if (_player.hasPrevious) {
-        await _player.seekToPrevious();
-      } else {
-        await playFrom(_currentIndex - 1);
-      }
+      await playFrom(_currentIndex - 1);
     }
   }
 
@@ -565,14 +442,12 @@ class RingBufferManager extends ChangeNotifier {
 
   @override
   void dispose() {
-    stop();
-    _indexSub?.cancel();
     _stateSub?.cancel();
     _player.dispose();
-    sleepTimer.dispose();
     for (final engine in _engines.values) {
       engine.dispose();
     }
+    sleepTimer.dispose();
     super.dispose();
   }
 }

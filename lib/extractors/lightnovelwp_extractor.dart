@@ -97,41 +97,53 @@ class LightNovelWpExtractor implements NovelSource {
 
   @override
   Future<List<Novel>> getPopular({int page = 1}) async {
-    final candidates = [
-      page == 1 ? '$baseUrl/series/?order=popular' : '$baseUrl/series/page/$page/?order=popular',
-      page == 1 ? '$baseUrl/novels/?order=popular' : '$baseUrl/novels/page/$page/?order=popular',
-      page == 1 ? '$baseUrl/novel/?order=popular' : '$baseUrl/novel/page/$page/?order=popular',
-      page == 1 ? '$baseUrl/series/' : '$baseUrl/series/page/$page/',
-      page == 1 ? '$baseUrl/novels/' : '$baseUrl/novels/page/$page/',
-      page == 1 ? '$baseUrl/' : '$baseUrl/page/$page/',
-    ];
-
-    for (final url in candidates) {
-      try {
-        final resp = await _client.get(Uri.parse(url), headers: _headers);
-        if (resp.statusCode == 200 && !resp.body.contains('Just a moment...')) {
-          final list = parseNovelList(resp.body);
-          if (list.isNotEmpty) return list;
-        }
-      } catch (_) {}
-    }
-
     final primaryUrl = page == 1 ? '$baseUrl/series/?order=popular' : '$baseUrl/series/page/$page/?order=popular';
-    final fallbackCandidates = [
-      primaryUrl,
-      if (page == 1) '$baseUrl/' else '$baseUrl/page/$page/',
-      if (page == 1) '$baseUrl/series/' else '$baseUrl/series/page/$page/',
-    ];
 
-    for (final url in fallbackCandidates) {
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
+    // 1. Try primary URL via standard client
+    try {
+      final resp = await _client.get(Uri.parse(primaryUrl), headers: _headers);
+      if (resp.statusCode == 200 && !resp.body.contains('Just a moment...')) {
+        final list = parseNovelList(resp.body);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    // 2. Try primary URL via curl
+    try {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(primaryUrl);
       if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
         final list = parseNovelList(wvHtml);
         if (list.isNotEmpty) return list;
       }
-    }
+    } catch (_) {}
 
-    // 1. WP REST API fallback (Universally accessible and bypasses Cloudflare Bot Fight Mode on CI)
+    // 3. Try RSS Feed (universally accessible and bypasses Cloudflare challenge pages)
+    try {
+      String xml = '';
+      try {
+        final feedResp = await _client.get(Uri.parse('$baseUrl/feed/'), headers: {
+          'Accept': 'application/rss+xml, application/xml, text/xml',
+          ..._headers,
+        });
+        if (feedResp.statusCode == 200 && feedResp.body.contains('<rss')) {
+          xml = feedResp.body;
+        }
+      } catch (_) {}
+
+      if (xml.isEmpty || !xml.contains('<rss')) {
+        final wvXml = await WebViewSessionManager.instance.fetchHtmlViaWebView('$baseUrl/feed/');
+        if (wvXml != null && wvXml.contains('<rss')) {
+          xml = wvXml;
+        }
+      }
+
+      if (xml.contains('<rss')) {
+        final list = _parseRssFeed(xml);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    // 4. Try WP REST API fallback
     try {
       final wpApiStr = '$baseUrl/wp-json/wp/v2/categories?per_page=20&page=$page&orderby=count&order=desc';
       String jsonStr = '';
@@ -158,7 +170,51 @@ class LightNovelWpExtractor implements NovelSource {
       }
     } catch (_) {}
 
-    // 2. RSS Feed fallback (RSS feeds are universally accessible and bypass Cloudflare challenges on CI)
+    // 5. Try alternative candidate URLs
+    final otherCandidates = [
+      page == 1 ? '$baseUrl/novels/?order=popular' : '$baseUrl/novels/page/$page/?order=popular',
+      page == 1 ? '$baseUrl/novel/?order=popular' : '$baseUrl/novel/page/$page/?order=popular',
+      page == 1 ? '$baseUrl/series/' : '$baseUrl/series/page/$page/',
+      page == 1 ? '$baseUrl/novels/' : '$baseUrl/novels/page/$page/',
+      page == 1 ? '$baseUrl/' : '$baseUrl/page/$page/',
+    ];
+
+    for (final url in otherCandidates) {
+      try {
+        final resp = await _client.get(Uri.parse(url), headers: _headers);
+        if (resp.statusCode == 200 && !resp.body.contains('Just a moment...')) {
+          final list = parseNovelList(resp.body);
+          if (list.isNotEmpty) return list;
+        }
+      } catch (_) {}
+    }
+
+    throw HttpException('Could not load popular novels from $name. Please try another source or tap Open in WebView.');
+  }
+
+  @override
+  Future<List<Novel>> getLatest({int page = 1}) async {
+    final primaryUrl = page == 1 ? '$baseUrl/series/?order=latest' : '$baseUrl/series/page/$page/?order=latest';
+
+    // 1. Try primary URL via standard client
+    try {
+      final resp = await _client.get(Uri.parse(primaryUrl), headers: _headers);
+      if (resp.statusCode == 200 && !resp.body.contains('Just a moment...')) {
+        final list = parseNovelList(resp.body);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    // 2. Try primary URL via curl
+    try {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(primaryUrl);
+      if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
+        final list = parseNovelList(wvHtml);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    // 3. Try RSS Feed (universally accessible and bypasses Cloudflare challenge pages)
     try {
       String xml = '';
       try {
@@ -184,44 +240,7 @@ class LightNovelWpExtractor implements NovelSource {
       }
     } catch (_) {}
 
-    throw HttpException('Could not load popular novels from $name. Please try another source or tap Open in WebView.');
-  }
-
-  @override
-  Future<List<Novel>> getLatest({int page = 1}) async {
-    final candidates = [
-      page == 1 ? '$baseUrl/series/?order=latest' : '$baseUrl/series/page/$page/?order=latest',
-      page == 1 ? '$baseUrl/novels/?order=latest' : '$baseUrl/novels/page/$page/?order=latest',
-      page == 1 ? '$baseUrl/series/' : '$baseUrl/series/page/$page/',
-      page == 1 ? '$baseUrl/' : '$baseUrl/page/$page/',
-    ];
-
-    for (final url in candidates) {
-      try {
-        final resp = await _client.get(Uri.parse(url), headers: _headers);
-        if (resp.statusCode == 200 && !resp.body.contains('Just a moment...')) {
-          final list = parseNovelList(resp.body);
-          if (list.isNotEmpty) return list;
-        }
-      } catch (_) {}
-    }
-
-    final primaryUrl = page == 1 ? '$baseUrl/series/?order=latest' : '$baseUrl/series/page/$page/?order=latest';
-    final fallbackCandidates = [
-      primaryUrl,
-      if (page == 1) '$baseUrl/' else '$baseUrl/page/$page/',
-      if (page == 1) '$baseUrl/series/' else '$baseUrl/series/page/$page/',
-    ];
-
-    for (final url in fallbackCandidates) {
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
-      if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
-        final list = parseNovelList(wvHtml);
-        if (list.isNotEmpty) return list;
-      }
-    }
-
-    // 1. WP REST API fallback (Universally accessible and bypasses Cloudflare Bot Fight Mode on CI)
+    // 4. Try WP REST API fallback
     try {
       final wpPostsStr = '$baseUrl/wp-json/wp/v2/posts?per_page=20&page=$page&_embed=true';
       String jsonStr = '';
@@ -274,31 +293,22 @@ class LightNovelWpExtractor implements NovelSource {
       }
     } catch (_) {}
 
-    // 2. RSS Feed fallback (RSS feeds are universally accessible and bypass Cloudflare challenges on CI)
-    try {
-      String xml = '';
+    // 5. Try alternative candidate URLs
+    final otherCandidates = [
+      page == 1 ? '$baseUrl/novels/?order=latest' : '$baseUrl/novels/page/$page/?order=latest',
+      page == 1 ? '$baseUrl/series/' : '$baseUrl/series/page/$page/',
+      page == 1 ? '$baseUrl/' : '$baseUrl/page/$page/',
+    ];
+
+    for (final url in otherCandidates) {
       try {
-        final feedResp = await _client.get(Uri.parse('$baseUrl/feed/'), headers: {
-          'Accept': 'application/rss+xml, application/xml, text/xml',
-          ..._headers,
-        });
-        if (feedResp.statusCode == 200 && feedResp.body.contains('<rss')) {
-          xml = feedResp.body;
+        final resp = await _client.get(Uri.parse(url), headers: _headers);
+        if (resp.statusCode == 200 && !resp.body.contains('Just a moment...')) {
+          final list = parseNovelList(resp.body);
+          if (list.isNotEmpty) return list;
         }
       } catch (_) {}
-
-      if (xml.isEmpty || !xml.contains('<rss')) {
-        final wvXml = await WebViewSessionManager.instance.fetchHtmlViaWebView('$baseUrl/feed/');
-        if (wvXml != null && wvXml.contains('<rss')) {
-          xml = wvXml;
-        }
-      }
-
-      if (xml.contains('<rss')) {
-        final list = _parseRssFeed(xml);
-        if (list.isNotEmpty) return list;
-      }
-    } catch (_) {}
+    }
 
     throw HttpException('Could not load latest novels from $name. Please try another source or tap Open in WebView.');
   }

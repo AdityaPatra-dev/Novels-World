@@ -4,6 +4,8 @@ import 'package:novels_world/tts/tts_model_registry.dart';
 import 'package:novels_world/tts/sleep_timer_service.dart';
 import 'package:novels_world/tts/ring_buffer_manager.dart';
 import 'package:novels_world/tts/voice_calibration.dart';
+import 'package:novels_world/tts/services/edge_drm.dart';
+import 'package:novels_world/tts/services/edge_tts_client.dart';
 import 'package:novels_world/core/utils/text_cleaner.dart';
 
 void main() {
@@ -115,6 +117,18 @@ void main() {
       expect(cleanQuote, isNot(startsWith('"')));
       expect(cleanQuote, isNot(startsWith('“')));
       expect(cleanQuote, endsWith('realm...'));
+    });
+
+    test('EdgeDrm generates compliant v2 DRM tokens (<16 hex CS64>-<64 hex SHA256>)', () {
+      final token = EdgeDrm.generateSecMsGecV2(1700000000);
+      expect(token, '2CD23A2CA0B2595A-F3C846C370E05F9CC83ACC5F995C5F5D87A4D0F14CE8936A0F902E64099E38A2');
+
+      final token2 = EdgeDrm.generateSecMsGecV2(1720000000);
+      expect(token2, '576EF243D9E6C36D-B73D5ADB984074BAE7860791FCA9CE1D28D1F6678CE5644A7981ACCA7E3C0EF2');
+
+      final liveToken = EdgeDrm.generateSecMsGecV2();
+      expect(liveToken, matches(RegExp(r'^[0-9A-F]{16}-[0-9A-F]{64}$')));
+      expect(EdgeDrm.secMsGecVersion, startsWith('2-'));
     });
   });
 }

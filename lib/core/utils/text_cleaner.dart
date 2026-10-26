@@ -189,7 +189,7 @@ class TextCleaner {
       return inner.isNotEmpty ? '$inner. ' : '';
     });
 
-    // Normalize quotes and dashes to natural pauses
+    // Normalize quotes, dashes, and novel formatting to natural pauses
     s = s
         .replaceAll('“', '"')
         .replaceAll('”', '"')
@@ -197,7 +197,12 @@ class TextCleaner {
         .replaceAll('‘', "'")
         .replaceAll('—', ', ')
         .replaceAll('–', ', ')
-        .replaceAll('…', '...');
+        .replaceAll(RegExp(r'-{2,}'), ', ')
+        .replaceAll('…', '...')
+        .replaceAll(RegExp(r'\.{4,}'), '...')
+        .replaceAll('~', '')
+        .replaceAll(RegExp(r'\?{2,}'), '?')
+        .replaceAll(RegExp(r'!{2,}'), '!');
 
     // Expand abbreviations that trip TTS engines into awkward monotonic stops
     final abbrevs = <RegExp, String>{
@@ -214,6 +219,9 @@ class TextCleaner {
       RegExp(r'\bSt\.'): 'Saint',
       RegExp(r'\be\.g\.'): 'for example',
       RegExp(r'\bi\.e\.'): 'that is',
+      RegExp(r'\b1st\b'): 'first',
+      RegExp(r'\b2nd\b'): 'second',
+      RegExp(r'\b3rd\b'): 'third',
     };
     for (final entry in abbrevs.entries) {
       s = s.replaceAll(entry.key, entry.value);

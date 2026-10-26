@@ -126,7 +126,8 @@ class RingBufferManager extends ChangeNotifier {
 
   void setPitch(double pitch) {
     _pitch = pitch.clamp(0.5, 2.0);
-    _player.setPitch(_pitch);
+    // Note: Do NOT call _player.setPitch(_pitch) — ExoPlayer DSP pitch-shifting
+    // introduces metallic, robotic noise. Neural voices handle pitch natively in SSML.
     notifyListeners();
   }
 
@@ -154,7 +155,7 @@ class RingBufferManager extends ChangeNotifier {
           _activeEngine.synthesizeSentenceToFile(
             text,
             voice: _activeVoice,
-            speed: _speed,
+            speed: 1.0,
             pitch: _pitch,
           ).catchError((_) => null);
         }
@@ -187,10 +188,41 @@ class RingBufferManager extends ChangeNotifier {
       return;
     }
 
+    // Immediately kick off parallel prefetch for upcoming sentences to eliminate network gaps
+    for (int offset = 1; offset <= 4; offset++) {
+      final targetIdx = _currentIndex + offset;
+      if (targetIdx < _sentences.length) {
+        final text = _sentences[targetIdx].trim();
+        if (text.isNotEmpty) {
+          _requestedIndices.add(targetIdx);
+          _activeEngine.synthesizeSentenceToFile(
+            text,
+            voice: _activeVoice,
+            speed: 1.0,
+            pitch: _pitch,
+          ).then((audioPath) async {
+            if (epoch == _sessionEpoch && _isPlaying) {
+              if (audioPath != null && await File(audioPath).exists()) {
+                _resolvedAudios[targetIdx] = audioPath;
+              } else {
+                _failedIndices.add(targetIdx);
+              }
+              _drainResolvedAudios(epoch);
+            }
+          }).catchError((_) {
+            if (epoch == _sessionEpoch && _isPlaying) {
+              _failedIndices.add(targetIdx);
+              _drainResolvedAudios(epoch);
+            }
+          });
+        }
+      }
+    }
+
     final firstAudio = await _activeEngine.synthesizeSentenceToFile(
       currentText,
       voice: _activeVoice,
-      speed: _speed,
+      speed: 1.0,
       pitch: _pitch,
     );
 
@@ -204,7 +236,7 @@ class RingBufferManager extends ChangeNotifier {
         AudioSource.file(firstAudio, tag: _currentIndex),
       ]);
       await _player.setSpeed(_speed);
-      await _player.setPitch(_pitch);
+      await _player.setPitch(1.0); // Clean native playback without DSP artifacts
       await _player.play();
 
       _schedulePrefetchAndAppend();
@@ -223,7 +255,7 @@ class RingBufferManager extends ChangeNotifier {
     if (!_isPlaying) return;
     final epoch = _sessionEpoch;
 
-    for (int offset = 1; offset <= 4; offset++) {
+    for (int offset = 1; offset <= 5; offset++) {
       final targetIdx = _currentIndex + offset;
       if (targetIdx >= _sentences.length) break;
 
@@ -243,7 +275,7 @@ class RingBufferManager extends ChangeNotifier {
       _activeEngine.synthesizeSentenceToFile(
         text,
         voice: _activeVoice,
-        speed: _speed,
+        speed: 1.0,
         pitch: _pitch,
       ).then((audioPath) async {
         if (epoch == _sessionEpoch && _isPlaying) {
@@ -282,6 +314,14 @@ class RingBufferManager extends ChangeNotifier {
           final alreadyIn = _player.audioSources.any((s) => s is UriAudioSource && s.tag == targetIdx);
           if (!alreadyIn) {
             await _player.addAudioSource(AudioSource.file(audioPath, tag: targetIdx));
+            // Recover automatically if the player hit completed before this file arrived
+            if (_isPlaying && _player.processingState == ProcessingState.completed) {
+              final newIndex = _player.audioSources.length - 1;
+              if (newIndex >= 0) {
+                await _player.seek(Duration.zero, index: newIndex);
+                await _player.play();
+              }
+            }
           }
         }
         _nextQueuedIndex++;

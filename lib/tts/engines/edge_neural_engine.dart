@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:edge_tts/edge_tts.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/utils/text_cleaner.dart';
+import '../services/edge_tts_client.dart';
 import '../tts_engine_interface.dart';
 import '../tts_model_registry.dart';
 import 'system_fallback_engine.dart';
@@ -58,6 +58,7 @@ class EdgeNeuralEngine implements TtsEngineInterface {
       }
     } catch (_) {}
     _isInitialized = true;
+    EdgeTtsClient.calibrateClock().catchError((_) => null);
   }
 
   String _cleanVoiceId(String voice) {
@@ -121,7 +122,9 @@ class EdgeNeuralEngine implements TtsEngineInterface {
     if (cleanText.isEmpty) return null;
 
     final edgeVoice = _cleanVoiceId(voice);
-    final cacheKey = '${edgeVoice}_${cleanText.hashCode}';
+    final rateCode = (speed * 100).round();
+    final pitchCode = (pitch * 100).round();
+    final cacheKey = '${edgeVoice}_r${rateCode}_p${pitchCode}_${cleanText.hashCode.abs()}';
 
     // 1. Instant RAM Cache hit
     if (_cache.containsKey(cacheKey)) {
@@ -173,18 +176,16 @@ class EdgeNeuralEngine implements TtsEngineInterface {
       final rateStr = _formatRate(speed);
       final pitchStr = _formatPitch(pitch);
 
-      final communicate = Communicate(
-        text: cleanText,
+      final rawBytes = await EdgeTtsClient.synthesizeToBytes(
+        cleanText,
         voice: edgeVoice,
         rate: rateStr,
         pitch: pitchStr,
       );
 
-      final rawBytes = await communicate.toBytes().timeout(const Duration(seconds: 10));
-      if (rawBytes.isNotEmpty) {
-        // Strip trailing Microsoft silent padding frames for 0ms gapless transition
-        final trimmedBytes = _trimTrailingSilence(rawBytes);
-        await file.writeAsBytes(trimmedBytes);
+      if (rawBytes != null && rawBytes.isNotEmpty) {
+        // Write pristine, uncorrupted MP3 bytes directly without arbitrary truncation
+        await file.writeAsBytes(rawBytes);
         _cache[cacheKey] = targetPath;
         return targetPath;
       }
@@ -193,26 +194,6 @@ class EdgeNeuralEngine implements TtsEngineInterface {
       return null;
     }
     return null;
-  }
-
-  /// Removes trailing silent MP3 padding frames (0x55) injected by Microsoft Edge TTS.
-  /// Eliminates the 800ms-1000ms dead silence at the end of every synthesized line,
-  /// giving human-level seamless audio transitions.
-  static Uint8List _trimTrailingSilence(Uint8List bytes) {
-    int end = bytes.length;
-    const int frameSize = 144;
-    while (end >= frameSize) {
-      int count55 = 0;
-      for (int i = end - frameSize; i < end; i++) {
-        if (bytes[i] == 0x55) count55++;
-      }
-      if (count55 > 70) {
-        end -= frameSize;
-      } else {
-        break;
-      }
-    }
-    return end < bytes.length ? Uint8List.sublistView(bytes, 0, end) : bytes;
   }
 
   @override

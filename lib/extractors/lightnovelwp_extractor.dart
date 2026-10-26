@@ -133,13 +133,27 @@ class LightNovelWpExtractor implements NovelSource {
 
     // 1. WP REST API fallback (Universally accessible and bypasses Cloudflare Bot Fight Mode on CI)
     try {
-      final wpApiUrl = Uri.parse('$baseUrl/wp-json/wp/v2/categories?per_page=20&page=$page&orderby=count&order=desc');
-      final resp = await _client.get(wpApiUrl, headers: {
-        'Accept': 'application/json',
-        ..._headers,
-      });
-      if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
-        final list = _parseWpCategories(resp.body);
+      final wpApiStr = '$baseUrl/wp-json/wp/v2/categories?per_page=20&page=$page&orderby=count&order=desc';
+      String jsonStr = '';
+      try {
+        final resp = await _client.get(Uri.parse(wpApiStr), headers: {
+          'Accept': 'application/json',
+          ..._headers,
+        });
+        if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
+          jsonStr = resp.body;
+        }
+      } catch (_) {}
+
+      if (jsonStr.isEmpty) {
+        final wvJson = await WebViewSessionManager.instance.fetchHtmlViaWebView(wpApiStr);
+        if (wvJson != null && !wvJson.contains('<!DOCTYPE html>')) {
+          jsonStr = wvJson;
+        }
+      }
+
+      if (jsonStr.isNotEmpty) {
+        final list = _parseWpCategories(jsonStr);
         if (list.isNotEmpty) return list;
       }
     } catch (_) {}
@@ -209,25 +223,53 @@ class LightNovelWpExtractor implements NovelSource {
 
     // 1. WP REST API fallback (Universally accessible and bypasses Cloudflare Bot Fight Mode on CI)
     try {
-      final wpPostsUrl = Uri.parse('$baseUrl/wp-json/wp/v2/posts?per_page=20&page=$page&_embed=true');
-      final resp = await _client.get(wpPostsUrl, headers: {
-        'Accept': 'application/json',
-        ..._headers,
-      });
-      if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
-        final list = _parseWpPosts(resp.body);
+      final wpPostsStr = '$baseUrl/wp-json/wp/v2/posts?per_page=20&page=$page&_embed=true';
+      String jsonStr = '';
+      try {
+        final resp = await _client.get(Uri.parse(wpPostsStr), headers: {
+          'Accept': 'application/json',
+          ..._headers,
+        });
+        if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
+          jsonStr = resp.body;
+        }
+      } catch (_) {}
+
+      if (jsonStr.isEmpty) {
+        final wvJson = await WebViewSessionManager.instance.fetchHtmlViaWebView(wpPostsStr);
+        if (wvJson != null && !wvJson.contains('<!DOCTYPE html>')) {
+          jsonStr = wvJson;
+        }
+      }
+
+      if (jsonStr.isNotEmpty) {
+        final list = _parseWpPosts(jsonStr);
         if (list.isNotEmpty) return list;
       }
     } catch (_) {}
 
     try {
-      final wpCatUrl = Uri.parse('$baseUrl/wp-json/wp/v2/categories?per_page=20&page=$page&orderby=id&order=desc');
-      final resp = await _client.get(wpCatUrl, headers: {
-        'Accept': 'application/json',
-        ..._headers,
-      });
-      if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
-        final list = _parseWpCategories(resp.body);
+      final wpCatStr = '$baseUrl/wp-json/wp/v2/categories?per_page=20&page=$page&orderby=id&order=desc';
+      String jsonStr = '';
+      try {
+        final resp = await _client.get(Uri.parse(wpCatStr), headers: {
+          'Accept': 'application/json',
+          ..._headers,
+        });
+        if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
+          jsonStr = resp.body;
+        }
+      } catch (_) {}
+
+      if (jsonStr.isEmpty) {
+        final wvJson = await WebViewSessionManager.instance.fetchHtmlViaWebView(wpCatStr);
+        if (wvJson != null && !wvJson.contains('<!DOCTYPE html>')) {
+          jsonStr = wvJson;
+        }
+      }
+
+      if (jsonStr.isNotEmpty) {
+        final list = _parseWpCategories(jsonStr);
         if (list.isNotEmpty) return list;
       }
     } catch (_) {}
@@ -462,12 +504,23 @@ class LightNovelWpExtractor implements NovelSource {
       final slug = Uri.tryParse(novelUrl)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
       if (slug.isNotEmpty) {
         try {
-          final catResp = await _client.get(Uri.parse('$baseUrl/wp-json/wp/v2/categories?slug=$slug'), headers: {
-            'Accept': 'application/json',
-            ..._headers,
-          });
-          if (catResp.statusCode == 200) {
-            final decoded = jsonDecode(catResp.body);
+          final catApiStr = '$baseUrl/wp-json/wp/v2/categories?slug=$slug';
+          String catJson = '';
+          try {
+            final catResp = await _client.get(Uri.parse(catApiStr), headers: {
+              'Accept': 'application/json',
+              ..._headers,
+            });
+            if (catResp.statusCode == 200) catJson = catResp.body;
+          } catch (_) {}
+
+          if (catJson.isEmpty) {
+            final wvCat = await WebViewSessionManager.instance.fetchHtmlViaWebView(catApiStr);
+            if (wvCat != null) catJson = wvCat;
+          }
+
+          if (catJson.isNotEmpty) {
+            final decoded = jsonDecode(catJson);
             if (decoded is List && decoded.isNotEmpty) {
               final cat = decoded.first as Map;
               final rawTitle = cat['name']?.toString() ?? '';
@@ -627,20 +680,42 @@ class LightNovelWpExtractor implements NovelSource {
       final slug = Uri.tryParse(novelUrl)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
       if (slug.isNotEmpty) {
         try {
-          final catResp = await _client.get(Uri.parse('$baseUrl/wp-json/wp/v2/categories?slug=$slug'), headers: {
-            'Accept': 'application/json',
-            ..._headers,
-          });
-          if (catResp.statusCode == 200) {
-            final decoded = jsonDecode(catResp.body);
+          final catApiStr = '$baseUrl/wp-json/wp/v2/categories?slug=$slug';
+          String catJson = '';
+          try {
+            final catResp = await _client.get(Uri.parse(catApiStr), headers: {
+              'Accept': 'application/json',
+              ..._headers,
+            });
+            if (catResp.statusCode == 200) catJson = catResp.body;
+          } catch (_) {}
+
+          if (catJson.isEmpty) {
+            final wvCat = await WebViewSessionManager.instance.fetchHtmlViaWebView(catApiStr);
+            if (wvCat != null) catJson = wvCat;
+          }
+
+          if (catJson.isNotEmpty) {
+            final decoded = jsonDecode(catJson);
             if (decoded is List && decoded.isNotEmpty) {
               final catId = decoded.first['id'];
-              final postsResp = await _client.get(Uri.parse('$baseUrl/wp-json/wp/v2/posts?categories=$catId&per_page=100'), headers: {
-                'Accept': 'application/json',
-                ..._headers,
-              });
-              if (postsResp.statusCode == 200) {
-                final postsDecoded = jsonDecode(postsResp.body);
+              final postsApiStr = '$baseUrl/wp-json/wp/v2/posts?categories=$catId&per_page=100';
+              String postsJson = '';
+              try {
+                final postsResp = await _client.get(Uri.parse(postsApiStr), headers: {
+                  'Accept': 'application/json',
+                  ..._headers,
+                });
+                if (postsResp.statusCode == 200) postsJson = postsResp.body;
+              } catch (_) {}
+
+              if (postsJson.isEmpty) {
+                final wvPosts = await WebViewSessionManager.instance.fetchHtmlViaWebView(postsApiStr);
+                if (wvPosts != null) postsJson = wvPosts;
+              }
+
+              if (postsJson.isNotEmpty) {
+                final postsDecoded = jsonDecode(postsJson);
                 if (postsDecoded is List) {
                   final novelSlug = slug;
                   final novelId = '${id}_$novelSlug';

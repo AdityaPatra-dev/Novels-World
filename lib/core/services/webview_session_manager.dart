@@ -200,6 +200,7 @@ class WebViewSessionManager {
       final curlArgs = [
         '-s',
         '-L',
+        '--http1.1',
         '--compressed',
         '--max-time',
         timeout.inSeconds.toString(),

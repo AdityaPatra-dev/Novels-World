@@ -238,17 +238,20 @@ jobs:
             * **🪟 Windows (x64):** `Novels-World-Windows-x64.zip`
             * **🍎 macOS (Universal):** `Novels-World-macOS-Universal.zip`
 
-            ### ✨ What's New
+            ### ✨ What's New in v1.4.0
+            * **🚀 In-App GitHub Auto-Updater:** Easily check for updates directly inside the app with real-time download progress and native one-tap Android APK installation.
+            * **🎙️ Pure Dart Microsoft Edge Neural Engine (v2 DRM):** Direct WebSocket client with mathematical SHA-256 v2 DRM token generation, completely eliminating 403 Forbidden errors and robotic audio buzzing.
+            * **📖 Seamless Gapless Cross-Chapter Playback:** Continuous reading across chapter boundaries with smart 2-3 line prefetching and strict UI isolation.
+            * **⚡ Linear Deterministic Audio Pipeline:** Robust sequential audio pipeline eliminating Media3 shuffle order errors and duplicate paragraph replays.
+            * **🩺 Daily Automated Health Checks & GitHub Alerts:** Continuous monitoring workflow with automated GitHub issue reporting for web novel sources and TTS services.
             * **📚 Offline Local EPUB Books:** Import any DRM-free `.epub` file into your library for full offline reading, chapter navigation, and font/theme customization.
             * **📁 Folder Storage Inspector:** Deep-inspect disk storage, cached chapter files, and local paths directly from any novel card.
-            * **🎙️ Continuous Neural Audiobook Stream:** 0ms gapless playback powered by ExoPlayer sample-accurate track transitions and automated 950ms digital silence trimming on imported EPUBs and web novels.
             * **🎭 5 Specialized AI Vocal Engines:** 
               - *Microsoft Neural HD (Studio AI)*
               - *Kokoro-82M (Audiophile Literature Drama)*
               - *Piper Fast Neural (Speed Reading 1.25x–2.5x)*
               - *Sherpa-Matcha (Xianxia & Asian CJK Phonetics)*
               - *Device Native (Offline Hardware)*
-            * **🔄 Monotonic FIFO Sequencing:** Guaranteed narrative order preventing short sentences from playing out of order.
             * **🌐 40+ Web Novel Catalogs:** Support for WordPress Madara, Themesia LightNovelWP, NovelFull, ReadWN, Fictioneer, Project Gutenberg, AllFreeNovel, RoliaScan, and Asura Scans.
 
   publish-docker:

@@ -66,7 +66,7 @@ class AppReleaseInfo {
 /// Service to query GitHub releases, detect updates, stream APK downloads,
 /// and trigger the native Android in-app installer.
 class AppUpdateService {
-  static const String currentVersion = '1.3.0';
+  static const String currentVersion = '1.4.0';
   static const String repoOwner = 'AdityaPatra-dev';
   static const String repoName = 'Novels-World';
   static const String _latestReleaseApiUrl =

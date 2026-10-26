@@ -11,6 +11,11 @@ on:
         required: true
         type: boolean
         default: true
+      run_tts_check:
+        description: 'Run live Microsoft Edge TTS handshake, DRM token & neural synthesis checks'
+        required: true
+        type: boolean
+        default: true
       run_unit_tests:
         description: 'Run core unit and parser test suites'
         required: true
@@ -89,6 +94,12 @@ jobs:
         continue-on-error: true
         run: flutter test test/sources_health_check_test.dart
 
+      - name: 🎙️ Run Daily Neural TTS Health & Handshake Suite
+        id: tts_check
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tts_check }}
+        continue-on-error: true
+        run: flutter test test/tts_live_health_test.dart test/tts_cross_chapter_test.dart
+
       - name: 📢 Report Status & Manage GitHub Issue
         if: always()
         env:
@@ -97,6 +108,7 @@ jobs:
           STATIC_ANALYSIS_STATUS: ${{ steps.analysis.outcome }}
           TEST_SUITE_STATUS: ${{ steps.unit_tests.outcome }}
           SOURCE_HEALTH_STATUS: ${{ steps.sources_check.outcome }}
+          TTS_HEALTH_STATUS: ${{ steps.tts_check.outcome }}
         run: |
           python3 tool/report_github_issue.py
 
@@ -110,7 +122,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: 🚨 Verify Overall Build Result
-        if: steps.analysis.outcome == 'failure' || steps.unit_tests.outcome == 'failure' || steps.sources_check.outcome == 'failure'
+        if: steps.analysis.outcome == 'failure' || steps.unit_tests.outcome == 'failure' || steps.sources_check.outcome == 'failure' || steps.tts_check.outcome == 'failure'
         run: |
           echo "::error::One or more daily checks failed. Review generated issue and health reports."
           exit 1

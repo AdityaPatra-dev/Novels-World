@@ -21,6 +21,10 @@ class ReaderProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
+  ChapterContent? _preloadedNextContent;
+  List<String> _preloadedNextSentences = [];
+  bool _isPreloadingNextChapter = false;
+
   ReaderProvider(this._storage) {
     final saved = _storage.getSettings();
     ttsManager.switchEngine(saved.ttsEngine);
@@ -33,6 +37,34 @@ class ReaderProvider extends ChangeNotifier {
 
     ttsManager.onSentenceStarted = (idx) {
       setActiveSentence(idx);
+    };
+
+    ttsManager.onApproachingEndOfChapter = () {
+      if (hasNextChapter) {
+        _preloadNextChapter();
+      }
+    };
+
+    ttsManager.onCrossChapterTransition = () {
+      if (hasNextChapter && _preloadedNextContent != null) {
+        _currentChapterIndex++;
+        _content = _preloadedNextContent;
+        _sentences = List<String>.from(_preloadedNextSentences);
+        _activeSentenceIndex = 0;
+        _preloadedNextContent = null;
+        _preloadedNextSentences = [];
+        if (_novel != null && currentChapter != null) {
+          _storage.saveProgress(
+            ReadingProgress(
+              novelId: _novel!.id,
+              chapterId: currentChapter!.id,
+              activeSentenceIndex: 0,
+              lastReadAt: DateTime.now(),
+            ),
+          );
+        }
+        notifyListeners();
+      }
     };
 
     ttsManager.onChapterFinished = () {
@@ -92,6 +124,9 @@ class ReaderProvider extends ChangeNotifier {
     _content = null;
     _sentences = [];
     _activeSentenceIndex = 0;
+    _preloadedNextContent = null;
+    _preloadedNextSentences = [];
+    _isPreloadingNextChapter = false;
     notifyListeners();
 
     try {
@@ -143,8 +178,60 @@ class ReaderProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _preloadNextChapter() async {
+    if (_isPreloadingNextChapter || !hasNextChapter || _novel == null) return;
+    _isPreloadingNextChapter = true;
+    try {
+      final nextChapterObj = _chapters[_currentChapterIndex + 1];
+      ChapterContent? loadedContent = await _storage.getCachedChapterContent(nextChapterObj.id);
+
+      if (loadedContent == null) {
+        final source = SourceRegistry.getSource(_novel!.sourceId) ?? SourceRegistry.getDefaultSource();
+        final fetched = await source.getChapterContent(nextChapterObj.url);
+        final populated = ChapterContent(
+          chapterId: nextChapterObj.id,
+          novelId: _novel!.id,
+          title: fetched.title.isNotEmpty ? fetched.title : nextChapterObj.title,
+          rawText: fetched.rawText,
+          paragraphs: fetched.paragraphs,
+        );
+        loadedContent = populated;
+        await _storage.cacheChapterContent(populated);
+      }
+
+      _preloadedNextContent = loadedContent;
+      _preloadedNextSentences = loadedContent.toSentences();
+      ttsManager.queueNextChapterSentences(_preloadedNextSentences);
+    } catch (_) {
+      // Best-effort background prefetch
+    } finally {
+      _isPreloadingNextChapter = false;
+    }
+  }
+
   Future<void> nextChapter() async {
     if (hasNextChapter) {
+      if (_preloadedNextContent != null) {
+        _currentChapterIndex++;
+        _content = _preloadedNextContent;
+        _sentences = List<String>.from(_preloadedNextSentences);
+        _activeSentenceIndex = 0;
+        _preloadedNextContent = null;
+        _preloadedNextSentences = [];
+        ttsManager.loadSentences(_sentences, startIndex: 0);
+        if (_novel != null && currentChapter != null) {
+          await _storage.saveProgress(
+            ReadingProgress(
+              novelId: _novel!.id,
+              chapterId: currentChapter!.id,
+              activeSentenceIndex: 0,
+              lastReadAt: DateTime.now(),
+            ),
+          );
+        }
+        notifyListeners();
+        return;
+      }
       _currentChapterIndex++;
       await loadCurrentChapter();
     }
@@ -170,6 +257,10 @@ class ReaderProvider extends ChangeNotifier {
             lastReadAt: DateTime.now(),
           ),
         );
+      }
+      // If user reaches within 2-3 sentences of chapter end, trigger background preload
+      if (index >= _sentences.length - 3 && hasNextChapter) {
+        _preloadNextChapter();
       }
     }
   }

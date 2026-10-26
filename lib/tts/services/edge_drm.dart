@@ -505,3 +505,4 @@ class EdgeDrm {
     return '$wd $mo $d ${now.year} $h:$mi:$s GMT+0000 (Coordinated Universal Time)';
   }
 }
+

@@ -192,7 +192,12 @@ class WebViewSessionManager {
     // 2. Desktop/CLI/CI runner fallback using curl
     // This allows automated health checks and desktop environments to bypass Cloudflare TLS fingerprint blocks.
     try {
-      final res = await Process.run('curl', [
+      final isFeedOrApi = url.contains('/feed') || url.contains('/wp-json') || url.contains('.xml') || url.contains('.rss');
+      final acceptHeader = isFeedOrApi
+          ? 'Accept: application/rss+xml,application/xml,application/json,text/xml,*/*;q=0.8'
+          : 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
+
+      final curlArgs = [
         '-s',
         '-L',
         '--compressed',
@@ -201,7 +206,7 @@ class WebViewSessionManager {
         '-A',
         defaultUserAgent,
         '-H',
-        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        acceptHeader,
         '-H',
         'Accept-Language: en-US,en;q=0.9',
         '-H',
@@ -210,18 +215,35 @@ class WebViewSessionManager {
         'Sec-Ch-Ua-Mobile: ?1',
         '-H',
         'Sec-Ch-Ua-Platform: "Android"',
-        '-H',
-        'Sec-Fetch-Dest: document',
-        '-H',
-        'Sec-Fetch-Mode: navigate',
-        '-H',
-        'Sec-Fetch-Site: none',
-        '-H',
-        'Sec-Fetch-User: ?1',
-        '-H',
-        'Upgrade-Insecure-Requests: 1',
-        url,
-      ]);
+      ];
+
+      if (!isFeedOrApi) {
+        curlArgs.addAll([
+          '-H',
+          'Sec-Fetch-Dest: document',
+          '-H',
+          'Sec-Fetch-Mode: navigate',
+          '-H',
+          'Sec-Fetch-Site: none',
+          '-H',
+          'Sec-Fetch-User: ?1',
+          '-H',
+          'Upgrade-Insecure-Requests: 1',
+        ]);
+      } else {
+        curlArgs.addAll([
+          '-H',
+          'Sec-Fetch-Dest: empty',
+          '-H',
+          'Sec-Fetch-Mode: cors',
+          '-H',
+          'Sec-Fetch-Site: same-origin',
+        ]);
+      }
+
+      curlArgs.add(url);
+
+      final res = await Process.run('curl', curlArgs);
       if (res.exitCode == 0 && res.stdout is String) {
         final html = res.stdout as String;
         if (html.isNotEmpty &&

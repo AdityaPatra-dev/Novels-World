@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
@@ -130,12 +131,28 @@ class LightNovelWpExtractor implements NovelSource {
       }
     }
 
-    // RSS Feed fallback (RSS feeds are universally accessible and bypass Cloudflare challenges on CI)
+    // 1. WP REST API fallback (Universally accessible and bypasses Cloudflare Bot Fight Mode on CI)
+    try {
+      final wpApiUrl = Uri.parse('$baseUrl/wp-json/wp/v2/categories?per_page=20&page=$page&orderby=count&order=desc');
+      final resp = await _client.get(wpApiUrl, headers: {
+        'Accept': 'application/json',
+        ..._headers,
+      });
+      if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
+        final list = _parseWpCategories(resp.body);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    // 2. RSS Feed fallback (RSS feeds are universally accessible and bypass Cloudflare challenges on CI)
     try {
       String xml = '';
       try {
-        final feedResp = await _client.get(Uri.parse('$baseUrl/feed/'), headers: _headers);
-        if (feedResp.statusCode == 200) {
+        final feedResp = await _client.get(Uri.parse('$baseUrl/feed/'), headers: {
+          'Accept': 'application/rss+xml, application/xml, text/xml',
+          ..._headers,
+        });
+        if (feedResp.statusCode == 200 && feedResp.body.contains('<rss')) {
           xml = feedResp.body;
         }
       } catch (_) {}
@@ -190,12 +207,40 @@ class LightNovelWpExtractor implements NovelSource {
       }
     }
 
-    // RSS Feed fallback (RSS feeds are universally accessible and bypass Cloudflare challenges on CI)
+    // 1. WP REST API fallback (Universally accessible and bypasses Cloudflare Bot Fight Mode on CI)
+    try {
+      final wpPostsUrl = Uri.parse('$baseUrl/wp-json/wp/v2/posts?per_page=20&page=$page&_embed=true');
+      final resp = await _client.get(wpPostsUrl, headers: {
+        'Accept': 'application/json',
+        ..._headers,
+      });
+      if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
+        final list = _parseWpPosts(resp.body);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    try {
+      final wpCatUrl = Uri.parse('$baseUrl/wp-json/wp/v2/categories?per_page=20&page=$page&orderby=id&order=desc');
+      final resp = await _client.get(wpCatUrl, headers: {
+        'Accept': 'application/json',
+        ..._headers,
+      });
+      if (resp.statusCode == 200 && !resp.body.contains('<!DOCTYPE html>')) {
+        final list = _parseWpCategories(resp.body);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
+    // 2. RSS Feed fallback (RSS feeds are universally accessible and bypass Cloudflare challenges on CI)
     try {
       String xml = '';
       try {
-        final feedResp = await _client.get(Uri.parse('$baseUrl/feed/'), headers: _headers);
-        if (feedResp.statusCode == 200) {
+        final feedResp = await _client.get(Uri.parse('$baseUrl/feed/'), headers: {
+          'Accept': 'application/rss+xml, application/xml, text/xml',
+          ..._headers,
+        });
+        if (feedResp.statusCode == 200 && feedResp.body.contains('<rss')) {
           xml = feedResp.body;
         }
       } catch (_) {}
@@ -272,6 +317,94 @@ class LightNovelWpExtractor implements NovelSource {
     return list;
   }
 
+  List<Novel> _parseWpCategories(String jsonStr) {
+    try {
+      final list = <Novel>[];
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is List) {
+        for (final item in decoded) {
+          if (item is Map) {
+            final rawName = item['name']?.toString() ?? '';
+            final count = int.tryParse(item['count']?.toString() ?? '0') ?? 0;
+            if (rawName.trim().isEmpty || count == 0) continue;
+
+            final title = html_parser.parseFragment(rawName).text?.trim() ?? rawName.trim();
+            final slug = item['slug']?.toString() ?? '';
+            final link = item['link']?.toString() ?? '';
+
+            // Clean series URL: e.g. https://knoxt.space/category/hero-saves-beauty/ -> https://knoxt.space/hero-saves-beauty/
+            String sourceUrl = link.replaceAll('/category/', '/');
+            if (!sourceUrl.endsWith('/')) sourceUrl = '$sourceUrl/';
+
+            final novelSlug = slug.isNotEmpty
+                ? slug
+                : Uri.tryParse(sourceUrl)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? title.hashCode.toString();
+
+            list.add(Novel(
+              id: '${id}_$novelSlug',
+              sourceId: id,
+              title: title,
+              sourceUrl: sourceUrl,
+            ));
+          }
+        }
+      }
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  List<Novel> _parseWpPosts(String jsonStr) {
+    try {
+      final list = <Novel>[];
+      final seen = <String>{};
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is List) {
+        for (final item in decoded) {
+          if (item is Map) {
+            final embedded = item['_embedded'];
+            if (embedded is Map) {
+              final terms = embedded['wp:term'];
+              if (terms is List) {
+                for (final termList in terms) {
+                  if (termList is List) {
+                    for (final term in termList) {
+                      if (term is Map && term['taxonomy'] == 'category') {
+                        final rawName = term['name']?.toString() ?? '';
+                        final link = term['link']?.toString() ?? '';
+                        if (rawName.trim().isEmpty || link.isEmpty) continue;
+
+                        final title = html_parser.parseFragment(rawName).text?.trim() ?? rawName.trim();
+                        if (seen.contains(title)) continue;
+                        seen.add(title);
+
+                        String sourceUrl = link.replaceAll('/category/', '/');
+                        if (!sourceUrl.endsWith('/')) sourceUrl = '$sourceUrl/';
+                        final novelSlug = Uri.tryParse(sourceUrl)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ??
+                            title.hashCode.toString();
+
+                        list.add(Novel(
+                          id: '${id}_$novelSlug',
+                          sourceId: id,
+                          title: title,
+                          sourceUrl: sourceUrl,
+                        ));
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
   List<Novel> _parseRssFeed(String xmlContent) {
     final items = RegExp(r'<item>([\s\S]*?)</item>').allMatches(xmlContent);
     final list = <Novel>[];
@@ -290,12 +423,17 @@ class LightNovelWpExtractor implements NovelSource {
       if (seen.contains(title)) continue;
       seen.add(title);
 
-      final slug = Uri.tryParse(link)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? link.hashCode.toString();
+      // If the link points to a chapter (e.g. ...-chapter-34/), normalize to series root
+      String seriesLink = _cleanUrl(link);
+      seriesLink = seriesLink.replaceAll(RegExp(r'-chapter-\d+.*', caseSensitive: false), '/');
+      if (!seriesLink.endsWith('/')) seriesLink = '$seriesLink/';
+
+      final slug = Uri.tryParse(seriesLink)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? seriesLink.hashCode.toString();
       list.add(Novel(
         id: '${id}_$slug',
         sourceId: id,
         title: title,
-        sourceUrl: _cleanUrl(link),
+        sourceUrl: seriesLink,
       ));
     }
     return list;
@@ -321,6 +459,33 @@ class LightNovelWpExtractor implements NovelSource {
     }
 
     if (body.isEmpty) {
+      final slug = Uri.tryParse(novelUrl)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
+      if (slug.isNotEmpty) {
+        try {
+          final catResp = await _client.get(Uri.parse('$baseUrl/wp-json/wp/v2/categories?slug=$slug'), headers: {
+            'Accept': 'application/json',
+            ..._headers,
+          });
+          if (catResp.statusCode == 200) {
+            final decoded = jsonDecode(catResp.body);
+            if (decoded is List && decoded.isNotEmpty) {
+              final cat = decoded.first as Map;
+              final rawTitle = cat['name']?.toString() ?? '';
+              final title = html_parser.parseFragment(rawTitle).text?.trim() ?? rawTitle.trim();
+              final desc = html_parser.parseFragment(cat['description']?.toString() ?? '').text?.trim() ?? '';
+              return Novel(
+                id: '${id}_$slug',
+                sourceId: id,
+                sourceUrl: novelUrl,
+                title: title.isNotEmpty ? title : 'Unknown Novel',
+                description: desc,
+                genres: [],
+                status: 'UNKNOWN',
+              );
+            }
+          }
+        } catch (_) {}
+      }
       throw Exception('Failed to load novel details for $novelUrl');
     }
     return parseNovelDetails(novelUrl, body);
@@ -427,35 +592,86 @@ class LightNovelWpExtractor implements NovelSource {
       if (wvHtml != null) body = wvHtml;
     }
 
-    if (body.isEmpty) {
-      throw Exception('Failed to load chapter list: $novelUrl');
+    var chapters = <Chapter>[];
+    if (body.isNotEmpty) {
+      chapters = parseChapterList(novelUrl, body);
+      final seenUrls = chapters.map((c) => c.url).toSet();
+
+      // Check for pagination links on LightNovelWP
+      final doc = html_parser.parse(body);
+      final pageLinks = doc.querySelectorAll('.pagination a, .page-numbers a, ul.pagination li a');
+      for (final a in pageLinks) {
+        final href = a.attributes['href'] ?? '';
+        if (href.isNotEmpty) {
+          final clean = _cleanUrl(href);
+          if (clean != novelUrl) {
+            try {
+              final pResp = await _client.get(Uri.parse(clean), headers: _headers);
+              if (pResp.statusCode == 200) {
+                final pageChs = parseChapterList(novelUrl, pResp.body);
+                for (final ch in pageChs) {
+                  if (!seenUrls.contains(ch.url)) {
+                    seenUrls.add(ch.url);
+                    chapters.add(ch);
+                  }
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      }
     }
 
-    var chapters = parseChapterList(novelUrl, body);
-    final seenUrls = chapters.map((c) => c.url).toSet();
-
-    // Check for pagination links on LightNovelWP
-    final doc = html_parser.parse(body);
-    final pageLinks = doc.querySelectorAll('.pagination a, .page-numbers a, ul.pagination li a');
-    for (final a in pageLinks) {
-      final href = a.attributes['href'] ?? '';
-      if (href.isNotEmpty) {
-        final clean = _cleanUrl(href);
-        if (clean != novelUrl) {
-          try {
-            final pResp = await _client.get(Uri.parse(clean), headers: _headers);
-            if (pResp.statusCode == 200) {
-              final pageChs = parseChapterList(novelUrl, pResp.body);
-              for (final ch in pageChs) {
-                if (!seenUrls.contains(ch.url)) {
-                  seenUrls.add(ch.url);
-                  chapters.add(ch);
+    // WP REST API fallback if HTML parsing yielded no chapters
+    if (chapters.isEmpty) {
+      final slug = Uri.tryParse(novelUrl)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
+      if (slug.isNotEmpty) {
+        try {
+          final catResp = await _client.get(Uri.parse('$baseUrl/wp-json/wp/v2/categories?slug=$slug'), headers: {
+            'Accept': 'application/json',
+            ..._headers,
+          });
+          if (catResp.statusCode == 200) {
+            final decoded = jsonDecode(catResp.body);
+            if (decoded is List && decoded.isNotEmpty) {
+              final catId = decoded.first['id'];
+              final postsResp = await _client.get(Uri.parse('$baseUrl/wp-json/wp/v2/posts?categories=$catId&per_page=100'), headers: {
+                'Accept': 'application/json',
+                ..._headers,
+              });
+              if (postsResp.statusCode == 200) {
+                final postsDecoded = jsonDecode(postsResp.body);
+                if (postsDecoded is List) {
+                  final novelSlug = slug;
+                  final novelId = '${id}_$novelSlug';
+                  int orderIndex = 0;
+                  for (final p in postsDecoded.reversed) {
+                    if (p is Map) {
+                      final rawTitle = p['title']?['rendered']?.toString() ?? '';
+                      final chTitle = html_parser.parseFragment(rawTitle).text?.trim() ?? rawTitle.trim();
+                      final chLink = p['link']?.toString() ?? '';
+                      if (chLink.isNotEmpty && chTitle.isNotEmpty) {
+                        chapters.add(Chapter(
+                          id: '${novelId}_ch_$orderIndex',
+                          novelId: novelId,
+                          title: chTitle,
+                          chapterNumber: (++orderIndex).toDouble(),
+                          url: _cleanUrl(chLink),
+                          releaseDate: p['date']?.toString(),
+                        ));
+                      }
+                    }
+                  }
                 }
               }
             }
-          } catch (_) {}
-        }
+          }
+        } catch (_) {}
       }
+    }
+
+    if (chapters.isEmpty && body.isEmpty) {
+      throw Exception('Failed to load chapter list: $novelUrl');
     }
 
     return chapters;
@@ -549,6 +765,35 @@ class LightNovelWpExtractor implements NovelSource {
     }
 
     if (body.isEmpty) {
+      final slug = Uri.tryParse(chapterUrl)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
+      if (slug.isNotEmpty) {
+        try {
+          final postResp = await _client.get(Uri.parse('$baseUrl/wp-json/wp/v2/posts?slug=$slug'), headers: {
+            'Accept': 'application/json',
+            ..._headers,
+          });
+          if (postResp.statusCode == 200) {
+            final decoded = jsonDecode(postResp.body);
+            if (decoded is List && decoded.isNotEmpty) {
+              final post = decoded.first as Map;
+              final rawTitle = post['title']?['rendered']?.toString() ?? '';
+              final title = html_parser.parseFragment(rawTitle).text?.trim() ?? 'Chapter';
+              final contentHtml = post['content']?['rendered']?.toString() ?? '';
+              final doc = html_parser.parse(contentHtml);
+              final pList = doc.querySelectorAll('p').map((p) => p.text).toList();
+              final paragraphs = TextCleaner.cleanParagraphs(pList.isNotEmpty ? pList : [doc.body?.text ?? '']);
+              final rawText = TextCleaner.toCleanRawText(paragraphs);
+              return ChapterContent(
+                chapterId: '${id}_$slug',
+                novelId: '',
+                title: title,
+                rawText: rawText,
+                paragraphs: paragraphs,
+              );
+            }
+          }
+        } catch (_) {}
+      }
       throw Exception('Failed to load chapter content: $chapterUrl');
     }
     return parseChapterContent(chapterUrl, body);

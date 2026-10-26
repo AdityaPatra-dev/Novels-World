@@ -130,6 +130,29 @@ class LightNovelWpExtractor implements NovelSource {
       }
     }
 
+    // RSS Feed fallback (RSS feeds are universally accessible and bypass Cloudflare challenges on CI)
+    try {
+      String xml = '';
+      try {
+        final feedResp = await _client.get(Uri.parse('$baseUrl/feed/'), headers: _headers);
+        if (feedResp.statusCode == 200) {
+          xml = feedResp.body;
+        }
+      } catch (_) {}
+
+      if (xml.isEmpty || !xml.contains('<rss')) {
+        final wvXml = await WebViewSessionManager.instance.fetchHtmlViaWebView('$baseUrl/feed/');
+        if (wvXml != null && wvXml.contains('<rss')) {
+          xml = wvXml;
+        }
+      }
+
+      if (xml.contains('<rss')) {
+        final list = _parseRssFeed(xml);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
+
     throw HttpException('Could not load popular novels from $name. Please try another source or tap Open in WebView.');
   }
 
@@ -166,6 +189,29 @@ class LightNovelWpExtractor implements NovelSource {
         if (list.isNotEmpty) return list;
       }
     }
+
+    // RSS Feed fallback (RSS feeds are universally accessible and bypass Cloudflare challenges on CI)
+    try {
+      String xml = '';
+      try {
+        final feedResp = await _client.get(Uri.parse('$baseUrl/feed/'), headers: _headers);
+        if (feedResp.statusCode == 200) {
+          xml = feedResp.body;
+        }
+      } catch (_) {}
+
+      if (xml.isEmpty || !xml.contains('<rss')) {
+        final wvXml = await WebViewSessionManager.instance.fetchHtmlViaWebView('$baseUrl/feed/');
+        if (wvXml != null && wvXml.contains('<rss')) {
+          xml = wvXml;
+        }
+      }
+
+      if (xml.contains('<rss')) {
+        final list = _parseRssFeed(xml);
+        if (list.isNotEmpty) return list;
+      }
+    } catch (_) {}
 
     throw HttpException('Could not load latest novels from $name. Please try another source or tap Open in WebView.');
   }
@@ -223,6 +269,35 @@ class LightNovelWpExtractor implements NovelSource {
       ));
     }
 
+    return list;
+  }
+
+  List<Novel> _parseRssFeed(String xmlContent) {
+    final items = RegExp(r'<item>([\s\S]*?)</item>').allMatches(xmlContent);
+    final list = <Novel>[];
+    final seen = <String>{};
+
+    for (final it in items) {
+      final block = it.group(1) ?? '';
+      final catMatch = RegExp(r'<category[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</category>').firstMatch(block);
+      final titleMatch = RegExp(r'<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>').firstMatch(block);
+      final linkMatch = RegExp(r'<link>(https?://[^<]+)</link>').firstMatch(block);
+
+      final title = catMatch?.group(1)?.trim() ?? titleMatch?.group(1)?.trim() ?? '';
+      final link = linkMatch?.group(1)?.trim() ?? '';
+
+      if (title.isEmpty || link.isEmpty) continue;
+      if (seen.contains(title)) continue;
+      seen.add(title);
+
+      final slug = Uri.tryParse(link)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? link.hashCode.toString();
+      list.add(Novel(
+        id: '${id}_$slug',
+        sourceId: id,
+        title: title,
+        sourceUrl: _cleanUrl(link),
+      ));
+    }
     return list;
   }
 

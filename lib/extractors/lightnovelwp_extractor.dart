@@ -116,10 +116,18 @@ class LightNovelWpExtractor implements NovelSource {
     }
 
     final primaryUrl = page == 1 ? '$baseUrl/series/?order=popular' : '$baseUrl/series/page/$page/?order=popular';
-    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(primaryUrl);
-    if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
-      final list = parseNovelList(wvHtml);
-      if (list.isNotEmpty) return list;
+    final fallbackCandidates = [
+      primaryUrl,
+      if (page == 1) '$baseUrl/' else '$baseUrl/page/$page/',
+      if (page == 1) '$baseUrl/series/' else '$baseUrl/series/page/$page/',
+    ];
+
+    for (final url in fallbackCandidates) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
+      if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
+        final list = parseNovelList(wvHtml);
+        if (list.isNotEmpty) return list;
+      }
     }
 
     throw HttpException('Could not load popular novels from $name. Please try another source or tap Open in WebView.');
@@ -145,10 +153,18 @@ class LightNovelWpExtractor implements NovelSource {
     }
 
     final primaryUrl = page == 1 ? '$baseUrl/series/?order=latest' : '$baseUrl/series/page/$page/?order=latest';
-    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(primaryUrl);
-    if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
-      final list = parseNovelList(wvHtml);
-      if (list.isNotEmpty) return list;
+    final fallbackCandidates = [
+      primaryUrl,
+      if (page == 1) '$baseUrl/' else '$baseUrl/page/$page/',
+      if (page == 1) '$baseUrl/series/' else '$baseUrl/series/page/$page/',
+    ];
+
+    for (final url in fallbackCandidates) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
+      if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
+        final list = parseNovelList(wvHtml);
+        if (list.isNotEmpty) return list;
+      }
     }
 
     throw HttpException('Could not load latest novels from $name. Please try another source or tap Open in WebView.');

@@ -6,6 +6,7 @@ import '../../core/services/epub_service.dart';
 import '../../providers/library_provider.dart';
 import '../novel/novel_detail_screen.dart';
 import '../widgets/novel_card.dart';
+import '../widgets/update_dialog.dart';
 
 class LibraryScreen extends StatefulWidget {
   final VoidCallback onBrowseTap;
@@ -40,6 +41,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.system_update_rounded, color: Color(0xFFA78BFA)),
+            tooltip: 'Check for Updates',
+            onPressed: () => showAppUpdateDialog(context),
+          ),
           IconButton(
             icon: const Icon(Icons.file_upload_outlined),
             tooltip: 'Import EPUB Book',

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../core/models/reader_settings.dart';
 import '../../data/storage_service.dart';
 import '../../providers/settings_provider.dart';
+import '../../core/services/app_update_service.dart';
+import '../widgets/update_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -56,6 +58,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.system_update_rounded, color: Color(0xFFA78BFA)),
+            tooltip: 'Check for Updates',
+            onPressed: () => showAppUpdateDialog(context),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -225,16 +234,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Card(
             color: const Color(0xFF181822),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: const Padding(
-              padding: EdgeInsets.all(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Novels-World v1.3.0 (Phase 3 Build)', style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(height: 6),
-                  Text(
-                    'High-performance offline-first novel reader with Universal Madara extractor, 3 neural TTS engines, and batch chapter downloader.',
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Novels-World v${AppUpdateService.currentVersion}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFF8B5CF6)),
+                        ),
+                        child: const Text('Latest', style: TextStyle(color: Color(0xFFA78BFA), fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'High-performance offline-first novel reader with Universal Madara extractor, 5 neural TTS engines, and batch chapter downloader.',
                     style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+                  ),
+                  const Divider(color: Colors.white10, height: 24),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.system_update_rounded, color: Color(0xFF8B5CF6), size: 20),
+                    ),
+                    title: const Text('Check for Updates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: const Text('Check GitHub Releases for new updates', style: TextStyle(fontSize: 12, color: Colors.white54)),
+                    trailing: OutlinedButton(
+                      onPressed: () => showAppUpdateDialog(context),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF8B5CF6)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      ),
+                      child: const Text('Check', style: TextStyle(color: Color(0xFFA78BFA), fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
                   ),
                 ],
               ),

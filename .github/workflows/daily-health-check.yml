@@ -85,6 +85,7 @@ jobs:
             test/sequential_fifo_test.dart \
             test/source_registry_test.dart \
             test/tts_engine_test.dart \
+            test/app_update_service_test.dart \
             test/webview_session_manager_test.dart \
             test/widget_test.dart
 

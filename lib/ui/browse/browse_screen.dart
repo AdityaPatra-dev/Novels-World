@@ -11,6 +11,7 @@ import '../novel/novel_detail_screen.dart';
 import '../widgets/novel_card.dart';
 import '../widgets/source_webview_screen.dart';
 import '../search/global_search_screen.dart';
+import '../widgets/update_dialog.dart';
 
 class BrowseScreen extends StatefulWidget {
   const BrowseScreen({super.key});
@@ -240,6 +241,11 @@ class _BrowseScreenState extends State<BrowseScreen> {
                 ),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.system_update_rounded, size: 22, color: Color(0xFFA78BFA)),
+            tooltip: 'Check for Updates',
+            onPressed: () => showAppUpdateDialog(context),
           ),
           IconButton(
             icon: const Icon(Icons.public, size: 22),

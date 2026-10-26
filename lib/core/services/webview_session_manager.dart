@@ -255,6 +255,32 @@ class WebViewSessionManager {
       }
     } catch (_) {}
 
+    // 3. Headless Chrome / Chromium fallback on desktop/CI environments
+    // Solves complex Cloudflare Turnstile JavaScript challenges where curl is rejected.
+    if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+      for (final bin in ['google-chrome', 'chromium', 'chromium-browser', 'chrome']) {
+        try {
+          final chromeRes = await Process.run(bin, [
+            '--headless=new',
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--dump-dom',
+            url,
+          ]);
+          if (chromeRes.exitCode == 0 && chromeRes.stdout is String) {
+            final html = chromeRes.stdout as String;
+            if (html.isNotEmpty &&
+                !html.contains('Just a moment...') &&
+                !html.contains('challenge-running') &&
+                !html.contains('Enable JavaScript and cookies to continue')) {
+              return html;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
     return null;
   }
 }

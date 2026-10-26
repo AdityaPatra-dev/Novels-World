@@ -80,12 +80,26 @@ class AllFreeNovelExtractor implements NovelSource {
   }
 
   Future<List<Novel>> _parseBookGrid(String url) async {
-    final response = await _client.get(Uri.parse(url), headers: _headers);
-    if (response.statusCode != 200) {
+    String html = '';
+    try {
+      final response = await _client.get(Uri.parse(url), headers: _headers);
+      if (response.statusCode == 200) {
+        html = response.body;
+      }
+    } catch (_) {}
+
+    if (html.isEmpty || html.contains('Just a moment...')) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
+      if (wvHtml != null && wvHtml.isNotEmpty) {
+        html = wvHtml;
+      }
+    }
+
+    if (html.isEmpty) {
       return [];
     }
 
-    final doc = html_parser.parse(response.body);
+    final doc = html_parser.parse(html);
     final novelList = <Novel>[];
     final seenUrls = <String>{};
 
@@ -160,12 +174,26 @@ class AllFreeNovelExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
-    final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-    if (response.statusCode != 200) {
+    String html = '';
+    try {
+      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      if (response.statusCode == 200) {
+        html = response.body;
+      }
+    } catch (_) {}
+
+    if (html.isEmpty || html.contains('Just a moment...')) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
+      if (wvHtml != null && wvHtml.isNotEmpty) {
+        html = wvHtml;
+      }
+    }
+
+    if (html.isEmpty) {
       throw HttpException('Failed to load novel details from AllFreeNovel ($novelUrl)');
     }
 
-    final doc = html_parser.parse(response.body);
+    final doc = html_parser.parse(html);
 
     final title = doc.querySelector('h1')?.text.trim() ?? 'Untitled';
 
@@ -219,12 +247,26 @@ class AllFreeNovelExtractor implements NovelSource {
 
   @override
   Future<List<Chapter>> getChapterList(String novelUrl) async {
-    final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-    if (response.statusCode != 200) {
+    String html = '';
+    try {
+      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      if (response.statusCode == 200) {
+        html = response.body;
+      }
+    } catch (_) {}
+
+    if (html.isEmpty || html.contains('Just a moment...')) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
+      if (wvHtml != null && wvHtml.isNotEmpty) {
+        html = wvHtml;
+      }
+    }
+
+    if (html.isEmpty) {
       return [];
     }
 
-    final doc = html_parser.parse(response.body);
+    final doc = html_parser.parse(html);
     final pageListContainer = doc.querySelector('#PageList');
     if (pageListContainer == null) {
       return [];
@@ -259,12 +301,26 @@ class AllFreeNovelExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
-    if (response.statusCode != 200) {
+    String html = '';
+    try {
+      final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
+      if (response.statusCode == 200) {
+        html = response.body;
+      }
+    } catch (_) {}
+
+    if (html.isEmpty || html.contains('Just a moment...')) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(chapterUrl);
+      if (wvHtml != null && wvHtml.isNotEmpty) {
+        html = wvHtml;
+      }
+    }
+
+    if (html.isEmpty) {
       throw HttpException('Failed to load chapter content from $chapterUrl');
     }
 
-    final doc = html_parser.parse(response.body);
+    final doc = html_parser.parse(html);
 
     final rawParas = <String>[];
     final storyTextElements = doc.querySelectorAll('p.storyText');

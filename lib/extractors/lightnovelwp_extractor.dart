@@ -159,17 +159,17 @@ class LightNovelWpExtractor implements NovelSource {
     final List<Novel> list = [];
 
     final elements = document.querySelectorAll(
-      '.listupd .bsx, .listupdate .bsx, .listupd .bs, .bsx, article.bs, article.maindet',
+      '.listupd .bsx, .listupdate .bsx, .listupd .bs, .bsx, article.bs, article.maindet, article.kol-series-archive__item, article[class*="archive__item"], article[class*="series"]',
     );
 
     for (final el in elements) {
-      final linkEl = el.querySelector('.mdthumb a, .inmain a, a');
+      final linkEl = el.querySelector('h2 a, h3 a, h4 a, .tt a, .mdthumb a, .inmain a, a');
       if (linkEl == null) continue;
 
       final href = linkEl.attributes['href'] ?? '';
       if (href.isEmpty || TextCleaner.isGenreOrCategoryUrl(href)) continue;
 
-      String title = el.querySelector('.tt, .bigor .tt, h2, h3, h4, .title')?.text.trim() ?? '';
+      String title = el.querySelector('h2 a, h3 a, h4 a, h2, h3, h4, .tt, .bigor .tt, .title')?.text.trim() ?? '';
       final imgEl = el.querySelector('.mdthumb img, img');
       if (title.isEmpty) {
         title = linkEl.attributes['title']?.trim() ?? '';

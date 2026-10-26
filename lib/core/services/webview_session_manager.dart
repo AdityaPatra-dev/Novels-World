@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -99,87 +100,119 @@ class WebViewSessionManager {
 
   /// Headless WebView fetcher to bypass Cloudflare TLS fingerprinting and JS challenges.
   /// When native Dart HttpClient is rejected with 403 or Cloudflare challenge,
-  /// this uses the underlying Chromium engine to retrieve the fully rendered DOM.
+  /// this uses the underlying Chromium engine on mobile, or curl on desktop/CI environments
+  /// to retrieve the fully rendered DOM.
   Future<String?> fetchHtmlViaWebView(String url, {Duration timeout = const Duration(seconds: 12)}) async {
-    try {
-      final completer = Completer<String?>();
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setUserAgent(defaultUserAgent);
+    // 1. Mobile WebViewController (Android / iOS)
+    if (Platform.isAndroid || Platform.isIOS) {
+      try {
+        final completer = Completer<String?>();
+        final controller = WebViewController()
+          ..setJavaScriptMode(JavaScriptMode.unrestricted)
+          ..setUserAgent(defaultUserAgent);
 
-      Timer? timer;
-      bool completed = false;
+        Timer? timer;
+        bool completed = false;
 
-      void finish(String? html) {
-        if (!completed) {
-          completed = true;
-          timer?.cancel();
-          if (!completer.isCompleted) {
-            completer.complete(html);
-          }
-        }
-      }
-
-      String decodeHtml(dynamic htmlObj) {
-        var str = htmlObj.toString();
-        if (str.startsWith('"') && str.endsWith('"')) {
-          try {
-            return jsonDecode(str).toString();
-          } catch (_) {
-            return str
-                .substring(1, str.length - 1)
-                .replaceAll(r'\"', '"')
-                .replaceAll(r'\n', '\n')
-                .replaceAll(r'\t', '\t')
-                .replaceAll(r'\/', '/');
-          }
-        }
-        return str;
-      }
-
-      timer = Timer(timeout, () async {
-        if (!completed) {
-          try {
-            final htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
-            finish(decodeHtml(htmlObj));
-          } catch (_) {
-            finish(null);
-          }
-        }
-      });
-
-      controller.setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (finishedUrl) async {
-            // Give scripts and redirections a brief moment to stabilize
-            await Future.delayed(const Duration(milliseconds: 1500));
-            if (!completed) {
-              try {
-                await syncCookiesFromWebView(finishedUrl);
-                var htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
-                var htmlStr = decodeHtml(htmlObj);
-                // If Turnstile challenge is still active, wait for resolution
-                if (htmlStr.contains('Just a moment...') || htmlStr.contains('challenge-running')) {
-                  await Future.delayed(const Duration(milliseconds: 2500));
-                  await syncCookiesFromWebView(finishedUrl);
-                  htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
-                  htmlStr = decodeHtml(htmlObj);
-                }
-                finish(htmlStr);
-              } catch (_) {
-                finish(null);
-              }
+        void finish(String? html) {
+          if (!completed) {
+            completed = true;
+            timer?.cancel();
+            if (!completer.isCompleted) {
+              completer.complete(html);
             }
-          },
-          onWebResourceError: (_) {},
-        ),
-      );
+          }
+        }
 
-      await controller.loadRequest(Uri.parse(url));
-      return await completer.future;
-    } catch (_) {
-      return null;
+        String decodeHtml(dynamic htmlObj) {
+          var str = htmlObj.toString();
+          if (str.startsWith('"') && str.endsWith('"')) {
+            try {
+              return jsonDecode(str).toString();
+            } catch (_) {
+              return str
+                  .substring(1, str.length - 1)
+                  .replaceAll(r'\"', '"')
+                  .replaceAll(r'\n', '\n')
+                  .replaceAll(r'\t', '\t')
+                  .replaceAll(r'\/', '/');
+            }
+          }
+          return str;
+        }
+
+        timer = Timer(timeout, () async {
+          if (!completed) {
+            try {
+              final htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
+              finish(decodeHtml(htmlObj));
+            } catch (_) {
+              finish(null);
+            }
+          }
+        });
+
+        controller.setNavigationDelegate(
+          NavigationDelegate(
+            onPageFinished: (finishedUrl) async {
+              // Give scripts and redirections a brief moment to stabilize
+              await Future.delayed(const Duration(milliseconds: 1500));
+              if (!completed) {
+                try {
+                  await syncCookiesFromWebView(finishedUrl);
+                  var htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
+                  var htmlStr = decodeHtml(htmlObj);
+                  // If Turnstile challenge is still active, wait for resolution
+                  if (htmlStr.contains('Just a moment...') || htmlStr.contains('challenge-running')) {
+                    await Future.delayed(const Duration(milliseconds: 2500));
+                    await syncCookiesFromWebView(finishedUrl);
+                    htmlObj = await controller.runJavaScriptReturningResult('document.documentElement.outerHTML');
+                    htmlStr = decodeHtml(htmlObj);
+                  }
+                  finish(htmlStr);
+                } catch (_) {
+                  finish(null);
+                }
+              }
+            },
+            onWebResourceError: (_) {},
+          ),
+        );
+
+        await controller.loadRequest(Uri.parse(url));
+        final wvResult = await completer.future;
+        if (wvResult != null && wvResult.isNotEmpty && !wvResult.contains('Just a moment...')) {
+          return wvResult;
+        }
+      } catch (_) {
+        // Fallback below
+      }
     }
+
+    // 2. Desktop/CLI/CI runner fallback using curl
+    // This allows automated health checks and desktop environments to bypass Cloudflare TLS fingerprint blocks.
+    try {
+      final res = await Process.run('curl', [
+        '-s',
+        '-L',
+        '--compressed',
+        '--max-time',
+        timeout.inSeconds.toString(),
+        '-A',
+        defaultUserAgent,
+        url,
+      ]);
+      if (res.exitCode == 0 && res.stdout is String) {
+        final html = res.stdout as String;
+        if (html.isNotEmpty &&
+            !html.contains('Just a moment...') &&
+            !html.contains('Enable JavaScript and cookies to continue')) {
+          return html;
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 }
 

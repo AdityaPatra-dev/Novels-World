@@ -113,8 +113,11 @@ void main() {
           stopwatch.stop();
           final errStr = e.toString();
           String classifiedType = 'Unknown Error';
-          if (errStr.contains('403') || errStr.toLowerCase().contains('cloudflare') || errStr.toLowerCase().contains('ddos-guard')) {
-            classifiedType = 'Cloudflare / 403 Forbidden';
+          if (errStr.contains('403') ||
+              errStr.toLowerCase().contains('cloudflare') ||
+              errStr.toLowerCase().contains('ddos-guard') ||
+              errStr.toLowerCase().contains('open in webview')) {
+            classifiedType = 'Cloudflare / Anti-Bot Protection';
           } else if (errStr.contains('SocketException') || errStr.contains('Failed host lookup') || errStr.contains('Connection refused')) {
             classifiedType = 'DNS / Network Unreachable';
           } else if (errStr.contains('TimeoutException') || errStr.contains('timed out')) {

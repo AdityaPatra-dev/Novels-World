@@ -58,6 +58,7 @@ class ReaderProvider extends ChangeNotifier {
             ReadingProgress(
               novelId: _novel!.id,
               chapterId: currentChapter!.id,
+              chapterTitle: currentChapter!.title,
               activeSentenceIndex: 0,
               lastReadAt: DateTime.now(),
             ),
@@ -98,6 +99,7 @@ class ReaderProvider extends ChangeNotifier {
 
   bool get hasPreviousChapter => _currentChapterIndex > 0;
   bool get hasNextChapter => _currentChapterIndex < _chapters.length - 1;
+  double get savedScrollOffset => _storage.getProgress(_novel?.id ?? '')?.scrollOffset ?? 0.0;
 
   Future<void> initializeNovelReader({
     required Novel novel,
@@ -167,6 +169,8 @@ class ReaderProvider extends ChangeNotifier {
         ReadingProgress(
           novelId: _novel!.id,
           chapterId: chapter.id,
+          chapterTitle: chapter.title,
+          scrollOffset: progress != null && progress.chapterId == chapter.id ? progress.scrollOffset : 0.0,
           activeSentenceIndex: _activeSentenceIndex,
           lastReadAt: DateTime.now(),
         ),
@@ -224,6 +228,7 @@ class ReaderProvider extends ChangeNotifier {
             ReadingProgress(
               novelId: _novel!.id,
               chapterId: currentChapter!.id,
+              chapterTitle: currentChapter!.title,
               activeSentenceIndex: 0,
               lastReadAt: DateTime.now(),
             ),
@@ -244,6 +249,21 @@ class ReaderProvider extends ChangeNotifier {
     }
   }
 
+  void saveScrollProgress(double scrollOffset) {
+    if (_novel != null && currentChapter != null) {
+      _storage.saveProgress(
+        ReadingProgress(
+          novelId: _novel!.id,
+          chapterId: currentChapter!.id,
+          chapterTitle: currentChapter!.title,
+          scrollOffset: scrollOffset,
+          activeSentenceIndex: _activeSentenceIndex,
+          lastReadAt: DateTime.now(),
+        ),
+      );
+    }
+  }
+
   void setActiveSentence(int index) {
     if (index >= 0 && index < _sentences.length) {
       _activeSentenceIndex = index;
@@ -253,6 +273,7 @@ class ReaderProvider extends ChangeNotifier {
           ReadingProgress(
             novelId: _novel!.id,
             chapterId: currentChapter!.id,
+            chapterTitle: currentChapter!.title,
             activeSentenceIndex: index,
             lastReadAt: DateTime.now(),
           ),

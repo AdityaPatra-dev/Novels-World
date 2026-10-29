@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/models/novel.dart';
 import '../core/models/chapter_content.dart';
 import '../core/models/reading_progress.dart';
+import '../core/services/cloud_sync_service.dart';
 import '../core/models/reader_settings.dart';
 
 class StorageService {
@@ -60,6 +61,9 @@ class StorageService {
 
     final rawList = list.map((n) => jsonEncode(n.toJson())).toList();
     await _safePrefs.setStringList(_libraryKey, rawList);
+    try {
+      CloudSyncService.instance.syncNovel(updatedNovel);
+    } catch (_) {}
   }
 
   Future<void> removeNovelFromLibrary(String novelId) async {
@@ -67,13 +71,16 @@ class StorageService {
     list.removeWhere((n) => n.id == novelId);
     final rawList = list.map((n) => jsonEncode(n.toJson())).toList();
     await _safePrefs.setStringList(_libraryKey, rawList);
+    try {
+      CloudSyncService.instance.deleteNovel(novelId);
+    } catch (_) {}
   }
 
   bool isNovelInLibrary(String novelId) {
     return getLibraryNovels().any((n) => n.id == novelId);
   }
 
-  // --- Reading Progress ---
+  // --- Reading Progress & Chapter History ---
 
   ReadingProgress? getProgress(String novelId) {
     final raw = _safePrefs.getString('progress_$novelId');
@@ -87,6 +94,14 @@ class StorageService {
 
   Future<void> saveProgress(ReadingProgress progress) async {
     await _safePrefs.setString('progress_${progress.novelId}', jsonEncode(progress.toJson()));
+
+    // Record chapter as read in novel's read-history set
+    await markChapterAsRead(progress.novelId, progress.chapterId);
+
+    // Sync to Cloud
+    try {
+      CloudSyncService.instance.syncProgress(progress);
+    } catch (_) {}
 
     // Also update novel in library last read info
     final library = getLibraryNovels();
@@ -102,6 +117,49 @@ class StorageService {
         library.map((n) => jsonEncode(n.toJson())).toList(),
       );
     }
+  }
+
+  Set<String> getReadChapterIds(String novelId) {
+    final list = _safePrefs.getStringList('read_chapters_$novelId') ?? [];
+    return list.toSet();
+  }
+
+  Future<void> markChapterAsRead(String novelId, String chapterId) async {
+    final set = getReadChapterIds(novelId);
+    if (set.add(chapterId)) {
+      await _safePrefs.setStringList('read_chapters_$novelId', set.toList());
+      try {
+        CloudSyncService.instance.syncReadChapters(novelId, set);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> markChapterAsUnread(String novelId, String chapterId) async {
+    final set = getReadChapterIds(novelId);
+    if (set.remove(chapterId)) {
+      await _safePrefs.setStringList('read_chapters_$novelId', set.toList());
+      try {
+        CloudSyncService.instance.syncReadChapters(novelId, set);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> markChaptersAsRead(String novelId, Iterable<String> chapterIds) async {
+    final set = getReadChapterIds(novelId);
+    set.addAll(chapterIds);
+    await _safePrefs.setStringList('read_chapters_$novelId', set.toList());
+    try {
+      CloudSyncService.instance.syncReadChapters(novelId, set);
+    } catch (_) {}
+  }
+
+  Future<void> clearReadChapters(String novelId) async {
+    await _safePrefs.remove('read_chapters_$novelId');
+    await _safePrefs.remove('progress_$novelId');
+  }
+
+  bool isChapterRead(String novelId, String chapterId) {
+    return getReadChapterIds(novelId).contains(chapterId);
   }
 
   // --- Offline Chapter Caching ---

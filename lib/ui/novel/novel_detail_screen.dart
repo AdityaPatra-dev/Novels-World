@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/novel.dart';
 import '../../core/models/chapter.dart';
+import '../../core/models/reading_progress.dart';
+import '../../data/storage_service.dart';
 import '../../extractors/source_registry.dart';
 import '../../data/download_service.dart';
 import '../../providers/library_provider.dart';
@@ -29,6 +31,9 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   String? _error;
   bool _ascending = true;
   bool _isSynopsisExpanded = false;
+  final ScrollController _scrollController = ScrollController();
+  ReadingProgress? _readingProgress;
+  Set<String> _readChapterIds = {};
 
   String get _sanitizedCoverUrl {
     var url = _novel.coverUrl.trim();
@@ -77,7 +82,80 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   void initState() {
     super.initState();
     _novel = widget.novel;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadReadingProgress();
+    });
     _fetchDetails();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _loadReadingProgress() {
+    if (!mounted) return;
+    try {
+      final storage = context.read<StorageService>();
+      setState(() {
+        _readingProgress = storage.getProgress(_novel.id);
+        _readChapterIds = storage.getReadChapterIds(_novel.id);
+      });
+    } catch (_) {}
+  }
+
+  Chapter? get _lastReadChapter {
+    if (_readingProgress == null || _chapters.isEmpty) return null;
+    final targetId = _readingProgress!.chapterId;
+    final targetTitle = _readingProgress!.chapterTitle;
+    for (final ch in _chapters) {
+      if (ch.id == targetId || ch.url == targetId) return ch;
+    }
+    if (targetTitle != null && targetTitle.isNotEmpty) {
+      for (final ch in _chapters) {
+        if (ch.title == targetTitle) return ch;
+      }
+    }
+    return null;
+  }
+
+  bool _isChapterRead(Chapter chapter) {
+    if (_readChapterIds.contains(chapter.id) || _readChapterIds.contains(chapter.url)) {
+      return true;
+    }
+    final last = _lastReadChapter;
+    if (last != null) {
+      final lastIdx = _chapters.indexOf(last);
+      final thisIdx = _chapters.indexOf(chapter);
+      if (thisIdx >= 0 && lastIdx >= 0 && thisIdx <= lastIdx) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int get _readCount {
+    if (_chapters.isEmpty) return 0;
+    int count = 0;
+    for (final ch in _chapters) {
+      if (_isChapterRead(ch)) count++;
+    }
+    return count;
+  }
+
+  void _jumpToCurrentChapter() {
+    if (_lastReadChapter == null || _chapters.isEmpty) return;
+    final sorted = _ascending ? _chapters : _chapters.reversed.toList();
+    final idx = sorted.indexWhere((c) => c.id == _lastReadChapter!.id || c.url == _lastReadChapter!.url);
+    if (idx >= 0 && _scrollController.hasClients) {
+      final targetOffset = (520.0 + (idx * 56.0)).clamp(0.0, _scrollController.position.maxScrollExtent);
+      _scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   Future<void> _fetchDetails() async {
@@ -102,6 +180,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           _chapters = chapters;
           _isLoading = false;
         });
+        _loadReadingProgress();
         context.read<DownloadService>().checkChaptersDownloaded(chapters);
       }
     } catch (e) {
@@ -123,10 +202,13 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     );
 
     if (mounted) {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const ReaderScreen()),
       );
+      if (mounted) {
+        _loadReadingProgress();
+      }
     }
   }
 
@@ -220,6 +302,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
     return Scaffold(
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           SliverAppBar(
             expandedHeight: 280,
@@ -419,9 +502,21 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: _chapters.isNotEmpty ? () => _openReader(_chapters.first) : null,
-                          icon: const Icon(Icons.menu_book),
-                          label: Text(_chapters.isNotEmpty ? 'Start Reading' : 'Loading...'),
+                          onPressed: _chapters.isNotEmpty
+                              ? () => _openReader(_lastReadChapter ?? _chapters.first)
+                              : null,
+                          icon: Icon(_lastReadChapter != null
+                              ? Icons.play_circle_fill_rounded
+                              : Icons.menu_book),
+                          label: Text(
+                            _chapters.isEmpty
+                                ? 'Loading...'
+                                : (_lastReadChapter != null
+                                    ? 'Continue: ${_lastReadChapter!.title}'
+                                    : 'Start Reading'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF8B5CF6),
                             foregroundColor: Colors.white,
@@ -510,14 +605,78 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Chapters (${_chapters.length})',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Chapters (${_chapters.length})',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          if (_chapters.isNotEmpty && _readCount > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                'Read $_readCount of ${_chapters.length} (${((_readCount / _chapters.length) * 100).toInt()}%)',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFFA78BFA),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                      IconButton(
-                        icon: Icon(_ascending ? Icons.arrow_downward : Icons.arrow_upward, size: 20),
-                        tooltip: _ascending ? 'Showing Oldest First' : 'Showing Newest First',
-                        onPressed: () => setState(() => _ascending = !_ascending),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_lastReadChapter != null)
+                            IconButton(
+                              icon: const Icon(Icons.my_location_rounded, size: 19, color: Color(0xFFA78BFA)),
+                              tooltip: 'Jump to current chapter',
+                              onPressed: _jumpToCurrentChapter,
+                            ),
+                          IconButton(
+                            icon: Icon(_ascending ? Icons.arrow_downward : Icons.arrow_upward, size: 20),
+                            tooltip: _ascending ? 'Showing Oldest First' : 'Showing Newest First',
+                            onPressed: () => setState(() => _ascending = !_ascending),
+                          ),
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert, size: 20, color: Colors.white70),
+                            tooltip: 'Reading Options',
+                            onSelected: (val) async {
+                              final storage = context.read<StorageService>();
+                              if (val == 'mark_all_read') {
+                                await storage.markChaptersAsRead(_novel.id, _chapters.map((c) => c.id));
+                                _loadReadingProgress();
+                              } else if (val == 'clear_progress') {
+                                await storage.clearReadChapters(_novel.id);
+                                _loadReadingProgress();
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'mark_all_read',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.done_all, size: 18, color: Color(0xFF10B981)),
+                                    SizedBox(width: 8),
+                                    Text('Mark all as read'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'clear_progress',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.restart_alt, size: 18, color: Colors.redAccent),
+                                    SizedBox(width: 8),
+                                    Text('Clear reading progress'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -585,46 +744,168 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final chapter = sortedChapters[index];
+                  final isLastRead = _lastReadChapter != null &&
+                      (chapter.id == _lastReadChapter!.id || chapter.url == _lastReadChapter!.url);
+                  final isRead = _isChapterRead(chapter);
                   final isDownloaded = downloadService.isChapterDownloaded(chapter.id);
                   final isDownloading = downloadService.currentTask?.chapter.id == chapter.id;
 
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    title: Text(
-                      chapter.title,
-                      style: const TextStyle(fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: chapter.releaseDate != null
-                        ? Text(
-                            chapter.releaseDate!,
-                            style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.4)),
-                          )
-                        : null,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isDownloading)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF8B5CF6)),
-                          )
-                        else if (isDownloaded)
-                          const Icon(Icons.check_circle, size: 18, color: Colors.greenAccent)
-                        else
-                          IconButton(
-                            icon: const Icon(Icons.download_outlined, size: 18, color: Colors.white38),
-                            tooltip: 'Download Chapter',
-                            onPressed: () => downloadService.enqueueChapters(_novel, [chapter]),
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    child: Material(
+                      color: isLastRead
+                          ? const Color(0xFF8B5CF6).withValues(alpha: 0.14)
+                          : Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: isLastRead
+                            ? BorderSide(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+                                width: 1.2,
+                              )
+                            : BorderSide.none,
+                      ),
+                      child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      leading: isLastRead
+                          ? Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFF8B5CF6), width: 1.5),
+                              ),
+                              child: const Icon(
+                                Icons.bookmark_rounded,
+                                color: Color(0xFFA78BFA),
+                                size: 16,
+                              ),
+                            )
+                          : (isRead
+                              ? const Icon(Icons.check_circle_rounded, size: 18, color: Color(0xFF10B981))
+                              : const Icon(Icons.circle_outlined, size: 16, color: Colors.white24)),
+                      title: Text(
+                        chapter.title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isLastRead ? FontWeight.bold : FontWeight.normal,
+                          color: isLastRead
+                              ? Colors.white
+                              : (isRead ? Colors.white.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.95)),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Row(
+                        children: [
+                          if (isLastRead) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.history, size: 10, color: Color(0xFFA78BFA)),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'Left off here',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFA78BFA),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          if (chapter.releaseDate != null)
+                            Expanded(
+                              child: Text(
+                                chapter.releaseDate!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: isRead ? 0.3 : 0.45),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isDownloading)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF8B5CF6)),
+                            )
+                          else if (isDownloaded)
+                            const Icon(Icons.check_circle, size: 18, color: Colors.greenAccent)
+                          else
+                            IconButton(
+                              icon: const Icon(Icons.download_outlined, size: 18, color: Colors.white38),
+                              tooltip: 'Download Chapter',
+                              onPressed: () => downloadService.enqueueChapters(_novel, [chapter]),
+                            ),
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert, size: 16, color: Colors.white30),
+                            tooltip: 'Chapter Options',
+                            onSelected: (action) async {
+                              final storage = context.read<StorageService>();
+                              if (action == 'mark_read') {
+                                await storage.markChapterAsRead(_novel.id, chapter.id);
+                                _loadReadingProgress();
+                              } else if (action == 'mark_unread') {
+                                await storage.markChapterAsUnread(_novel.id, chapter.id);
+                                _loadReadingProgress();
+                              } else if (action == 'set_as_current') {
+                                await storage.saveProgress(
+                                  ReadingProgress(
+                                    novelId: _novel.id,
+                                    chapterId: chapter.id,
+                                    chapterTitle: chapter.title,
+                                    activeSentenceIndex: 0,
+                                    lastReadAt: DateTime.now(),
+                                  ),
+                                );
+                                _loadReadingProgress();
+                              } else if (action == 'mark_previous_read') {
+                                final thisIdx = _chapters.indexOf(chapter);
+                                if (thisIdx >= 0) {
+                                  final priorIds = _chapters.sublist(0, thisIdx + 1).map((c) => c.id);
+                                  await storage.markChaptersAsRead(_novel.id, priorIds);
+                                  _loadReadingProgress();
+                                }
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              PopupMenuItem(
+                                value: isRead ? 'mark_unread' : 'mark_read',
+                                child: Text(isRead ? 'Mark as unread' : 'Mark as read'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'set_as_current',
+                                child: Text('Set as current position'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'mark_previous_read',
+                                child: Text('Mark all prior as read'),
+                              ),
+                            ],
                           ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.chevron_right, size: 18, color: Colors.white30),
-                      ],
+                        ],
+                      ),
+                      onTap: () => _openReader(chapter),
                     ),
-                    onTap: () => _openReader(chapter),
-                  );
+                  ),
+                );
                 },
                 childCount: sortedChapters.length,
               ),

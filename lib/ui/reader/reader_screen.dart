@@ -17,6 +17,23 @@ class _ReaderScreenState extends State<ReaderScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _showFloatingTts = false;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreScrollPosition();
+    });
+  }
+
+  void _restoreScrollPosition() {
+    if (!mounted) return;
+    final reader = context.read<ReaderProvider>();
+    final offset = reader.savedScrollOffset;
+    if (offset > 0 && _scrollController.hasClients) {
+      _scrollController.jumpTo(offset.clamp(0.0, _scrollController.position.maxScrollExtent));
+    }
+  }
+
   void _showSettings() {
     showModalBottomSheet(
       context: context,
@@ -27,6 +44,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    if (_scrollController.hasClients) {
+      try {
+        context.read<ReaderProvider>().saveScrollProgress(_scrollController.offset);
+      } catch (_) {}
+    }
     _scrollController.dispose();
     super.dispose();
   }
@@ -61,8 +83,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     final isTtsActive = reader.isTtsPlaying || _showFloatingTts;
 
-    return Scaffold(
-      backgroundColor: settings.backgroundColor,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (_scrollController.hasClients) {
+          try {
+            context.read<ReaderProvider>().saveScrollProgress(_scrollController.offset);
+          } catch (_) {}
+        }
+      },
+      child: Scaffold(
+        backgroundColor: settings.backgroundColor,
       appBar: AppBar(
         backgroundColor: settings.backgroundColor.withValues(alpha: 0.95),
         elevation: 0,
@@ -361,8 +392,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   List<Widget> _buildInteractiveParagraphs(
     ReaderProvider reader,

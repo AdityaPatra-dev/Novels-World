@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/reader_settings.dart';
+import '../../core/services/auth_service.dart';
 import '../../data/storage_service.dart';
 import '../../providers/settings_provider.dart';
 import '../../core/services/app_update_service.dart';
+import '../profile/profile_screen.dart';
 import '../widgets/update_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -69,6 +71,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         children: [
+          // Account & Cloud Sync Tile
+          _buildAccountTile(context),
+          const SizedBox(height: 20),
+
           // Section 1: Neural TTS Engine
           _buildSectionHeader('Neural Text-To-Speech'),
           Card(
@@ -288,6 +294,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAccountTile(BuildContext context) {
+    final auth = AuthService.instance;
+    return ListenableBuilder(
+      listenable: auth,
+      builder: (context, _) {
+        final isSignedIn = auth.isAuthenticated;
+
+        return Card(
+          color: const Color(0xFF181824),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: isSignedIn
+                  ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                  : const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+              width: 1.2,
+            ),
+          ),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: isSignedIn ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
+                    backgroundImage: (isSignedIn && auth.photoUrl != null)
+                        ? NetworkImage(auth.photoUrl!)
+                        : null,
+                    child: (isSignedIn && auth.photoUrl == null)
+                        ? Text(
+                            auth.displayName.isNotEmpty ? auth.displayName[0].toUpperCase() : 'U',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+                          )
+                        : (!isSignedIn
+                            ? const Icon(Icons.person_outline, color: Colors.white, size: 24)
+                            : null),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isSignedIn ? auth.displayName : 'Sign in with Google',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isSignedIn
+                              ? 'Cloud Sync Active • View Profile'
+                              : 'Sync library & reading progress across devices',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isSignedIn ? const Color(0xFF34D399) : Colors.white.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Colors.white38),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'library/library_screen.dart';
 import 'browse/browse_screen.dart';
+import 'profile/profile_screen.dart';
 import 'settings/settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final List<Widget> pages = [
       LibraryScreen(onBrowseTap: () => setState(() => _currentIndex = 1)),
       const BrowseScreen(),
+      const ProfileScreen(),
       const SettingsScreen(),
     ];
 
@@ -39,6 +41,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.explore_outlined),
             selectedIcon: Icon(Icons.explore),
             label: 'Browse',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),

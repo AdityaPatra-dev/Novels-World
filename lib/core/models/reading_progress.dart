@@ -1,6 +1,7 @@
 class ReadingProgress {
   final String novelId;
   final String chapterId;
+  final String? chapterTitle;
   final double scrollOffset; // 0.0 to 1.0 (or pixel offset)
   final int activeSentenceIndex;
   final DateTime lastReadAt;
@@ -8,6 +9,7 @@ class ReadingProgress {
   const ReadingProgress({
     required this.novelId,
     required this.chapterId,
+    this.chapterTitle,
     this.scrollOffset = 0.0,
     this.activeSentenceIndex = 0,
     required this.lastReadAt,
@@ -17,6 +19,7 @@ class ReadingProgress {
     return {
       'novelId': novelId,
       'chapterId': chapterId,
+      if (chapterTitle != null) 'chapterTitle': chapterTitle,
       'scrollOffset': scrollOffset,
       'activeSentenceIndex': activeSentenceIndex,
       'lastReadAt': lastReadAt.toIso8601String(),
@@ -27,6 +30,7 @@ class ReadingProgress {
     return ReadingProgress(
       novelId: json['novelId'] as String,
       chapterId: json['chapterId'] as String,
+      chapterTitle: json['chapterTitle'] as String?,
       scrollOffset: (json['scrollOffset'] as num?)?.toDouble() ?? 0.0,
       activeSentenceIndex: json['activeSentenceIndex'] as int? ?? 0,
       lastReadAt: DateTime.tryParse(json['lastReadAt'] as String? ?? '') ?? DateTime.now(),

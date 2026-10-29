@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "705215795092",
+    "project_id": "novels-world-cloud-85457",
+    "storage_bucket": "novels-world-cloud-85457.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:705215795092:android:34e67b0f438fcdacaf8981",
+        "android_client_info": {
+          "package_name": "com.novelsworld.novels_world"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDlx9dsrolE_HPJoZoqitlpE9k6SsjqUQY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -90,6 +90,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<StorageService>.value(value: storageService),
           ChangeNotifierProvider(create: (_) => SettingsProvider(storageService)),
           ChangeNotifierProvider(create: (_) => LibraryProvider(storageService)),
           ChangeNotifierProvider(create: (_) => ReaderProvider(storageService)),
@@ -104,6 +105,7 @@ void main() {
 
     expect(find.text('Library'), findsOneWidget);
     expect(find.text('Browse'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
 }

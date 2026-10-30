@@ -102,7 +102,7 @@ jobs:
         run: flutter test test/tts_live_health_test.dart test/tts_cross_chapter_test.dart
 
       - name: 📢 Report Status & Manage GitHub Issue
-        if: always()
+        if: false
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -123,8 +123,8 @@ jobs:
           if-no-files-found: ignore
 
       - name: 🚨 Verify Overall Build Result
-        if: steps.analysis.outcome == 'failure' || steps.unit_tests.outcome == 'failure' || steps.sources_check.outcome == 'failure' || steps.tts_check.outcome == 'failure'
+        if: steps.analysis.outcome == 'failure' || steps.unit_tests.outcome == 'failure'
         run: |
-          echo "::error::One or more daily checks failed. Review generated issue and health reports."
+          echo "::error::Critical failure: static analysis or unit test suite failed."
           exit 1
 

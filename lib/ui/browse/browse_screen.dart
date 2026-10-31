@@ -5,6 +5,7 @@ import '../../extractors/source_registry.dart';
 import '../novel/novel_detail_screen.dart';
 import '../widgets/novel_card.dart';
 import '../widgets/source_webview_screen.dart';
+import '../search/global_search_screen.dart';
 
 class BrowseScreen extends StatefulWidget {
   const BrowseScreen({super.key});
@@ -129,6 +130,18 @@ class _BrowseScreenState extends State<BrowseScreen> {
         title: const Text('Browse Novels', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.travel_explore_rounded, size: 24, color: Color(0xFFA78BFA)),
+            tooltip: 'Global Search (All Sources)',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => GlobalSearchScreen(initialQuery: _searchController.text),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.public, size: 22),
             tooltip: 'Open in WebView / Bypass Cloudflare',
             onPressed: _openSourceWebView,
@@ -176,7 +189,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
               ),
               const SizedBox(height: 10),
 
-              // Search Bar
+              // Search Bar with In-Line Global Search Trigger
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: TextField(
@@ -185,15 +198,31 @@ class _BrowseScreenState extends State<BrowseScreen> {
                     hintText: 'Search title or author...',
                     hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
                     prefixIcon: const Icon(Icons.search, size: 20),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_searchController.text.isNotEmpty)
+                          IconButton(
                             icon: const Icon(Icons.clear, size: 18),
                             onPressed: () {
                               _searchController.clear();
                               _loadPopular();
                             },
-                          )
-                        : null,
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.travel_explore_rounded, size: 20, color: Color(0xFF8B5CF6)),
+                          tooltip: 'Global Search across all sources',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => GlobalSearchScreen(initialQuery: _searchController.text),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                     filled: true,
                     fillColor: const Color(0xFF1E1E28),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),

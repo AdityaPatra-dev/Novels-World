@@ -266,13 +266,31 @@ class NovelFullExtractor implements NovelSource {
   Novel parseNovelDetails(String novelUrl, String htmlContent) {
     final document = html_parser.parse(htmlContent);
 
-    var title = document
-            .querySelector('h1.novel-title, h3.title, h3.novel-title, .title, h1, .breadcrumb li.active')
-            ?.text
-            .trim() ??
-        '';
-    if (title.isEmpty || title.toLowerCase() == 'novel info' || title.toLowerCase() == 'novel') {
-      title = document.querySelector('title')?.text.trim() ?? 'Unknown Novel';
+    final titleCandidates = [
+      document.querySelector('h1.novel-title')?.text.trim(),
+      document.querySelector('.books .desc h3')?.text.trim(),
+      document.querySelector('div.desc > h3.title')?.text.trim(),
+      document.querySelector('.col-info-desc h3.title')?.text.trim(),
+      document.querySelector('h3.title')?.text.trim(),
+      document.querySelector('h1')?.text.trim(),
+    ];
+
+    String title = '';
+    for (final cand in titleCandidates) {
+      if (cand != null && cand.isNotEmpty && TextCleaner.isValidNovelTitle(cand, novelUrl)) {
+        title = cand;
+        break;
+      }
+    }
+
+    if (title.isEmpty) {
+      final docTitle = document.querySelector('title')?.text.trim() ?? '';
+      final cleanDocTitle = docTitle.split(RegExp(r'[-–|]')).first.replaceAll(RegExp(r'^(?:Read|Novel)\s+', caseSensitive: false), '').trim();
+      if (cleanDocTitle.isNotEmpty && TextCleaner.isValidNovelTitle(cleanDocTitle, novelUrl)) {
+        title = cleanDocTitle;
+      } else {
+        title = 'Unknown Novel';
+      }
     }
 
     final imgEl = document.querySelector(
@@ -288,30 +306,55 @@ class NovelFullExtractor implements NovelSource {
     }
 
     String author = 'Unknown Author';
-    final authorLink = document.querySelector('.info a[href*="author"], .info a[href*="tac-gia"], .author a');
-    if (authorLink != null) {
+    final authorLink = document.querySelector(
+      '.info a[href*="author"], .info a[href*="tac-gia"], .author a, .info-meta a[href*="/a/"], a[href*="/a/"], a[href*="/author/"], .m-imgtxt a[href*="/author/"]',
+    );
+    if (authorLink != null && authorLink.text.trim().isNotEmpty) {
       author = authorLink.text.trim();
     } else {
-      final infoDivs = document.querySelectorAll('.info > div, .meta-item, .item');
-      for (final div in infoDivs) {
-        if (div.text.toLowerCase().contains('author')) {
-          author = div.text.replaceAll(RegExp(r'Author\s*:?', caseSensitive: false), '').trim();
-          break;
+      final ogAuthor = document.querySelector('meta[property="og:novel:author"]')?.attributes['content']?.trim();
+      if (ogAuthor != null && ogAuthor.isNotEmpty) {
+        author = ogAuthor;
+      } else {
+        final infoDivs = document.querySelectorAll('.info > div, .info-meta li, .info li, .meta-item, .item');
+        for (final div in infoDivs) {
+          if (div.text.toLowerCase().contains('author')) {
+            final authorAnchor = div.querySelector('a');
+            if (authorAnchor != null && authorAnchor.text.trim().isNotEmpty) {
+              author = authorAnchor.text.trim();
+            } else {
+              author = div.text.replaceAll(RegExp(r'Author\s*:?', caseSensitive: false), '').trim();
+            }
+            break;
+          }
         }
       }
     }
 
     String status = 'ONGOING';
-    final statusLink = document.querySelector('.info a[href*="status"], .info a[href*="the-loai"]');
+    final statusLink = document.querySelector('.info a[href*="status"], .info a[href*="the-loai"], .m-imgtxt a[href*="latest-release"], .m-imgtxt a[href*="completed"]');
     if (statusLink != null) {
       final st = statusLink.text.toUpperCase();
       if (st.contains('COMPLETE')) {
         status = 'COMPLETED';
       }
+    } else {
+      final ogStatus = document.querySelector('meta[property="og:novel:status"]')?.attributes['content']?.trim();
+      if (ogStatus == '2') {
+        status = 'COMPLETED';
+      }
     }
 
-    final genreLinks = document.querySelectorAll('.info a[href*="genre"], .info a[href*="the-loai"]');
+    var genreLinks = document.querySelectorAll(
+      '.info a[href*="genre"], .info a[href*="the-loai"], .m-imgtxt a[href*="/genre/"], .categories a, .genre a',
+    );
     final genres = genreLinks.map((g) => g.text.trim()).where((g) => g.isNotEmpty).toSet().toList();
+    if (genres.isEmpty) {
+      final ogGenre = document.querySelector('meta[property="og:novel:genre"]')?.attributes['content']?.trim();
+      if (ogGenre != null && ogGenre.isNotEmpty) {
+        genres.add(ogGenre);
+      }
+    }
 
     final descEl = document.querySelector(
       '.desc-text, div[itemprop="description"], .desc, .inner, .summary, #tab-description',
@@ -365,8 +408,14 @@ class NovelFullExtractor implements NovelSource {
 
     final document = html_parser.parse(body);
 
-    final ratingEl = document.querySelector('#rating, div[data-novel-id], input#novelId, #novel_id, input[name="novel_id"]');
-    final ajaxNovelId = ratingEl?.attributes['data-novel-id'] ?? ratingEl?.attributes['value'];
+    final ratingEl = document.querySelector('#rating, div[data-novel-id], [data-novel-id], input#novelId, #novel_id, input[name="novel_id"]');
+    var ajaxNovelId = ratingEl?.attributes['data-novel-id'] ?? ratingEl?.attributes['value'];
+    if (ajaxNovelId == null || ajaxNovelId.isEmpty) {
+      final segs = Uri.tryParse(novelUrl)?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
+      if (segs.isNotEmpty) {
+        ajaxNovelId = segs.last.replaceAll('.html', '');
+      }
+    }
 
     var chapters = parseChapterList(novelUrl, body);
     final seenUrls = chapters.map((c) => c.url).toSet();
@@ -447,21 +496,68 @@ class NovelFullExtractor implements NovelSource {
       }
     } catch (_) {}
 
-    // 3. Support FreeWebNovel & LibRead AJAX pagination (?ajax=chapters&page=N&pageSize=100)
-    final indexListPage = document.querySelector('#indexListPage, [data-total-page]');
-    final totalPages = int.tryParse(indexListPage?.attributes['data-total-page'] ?? '');
-    if (totalPages != null && totalPages > 1) {
-      for (int p = 2; p <= totalPages && p <= 60; p++) {
-        final ajaxUrl = novelUrl.contains('?')
-            ? '$novelUrl&ajax=chapters&page=$p&pageSize=100'
-            : '$novelUrl?ajax=chapters&page=$p&pageSize=100';
+    // 3. Support FreeWebNovel & NOVGO AJAX chapter pagination (/ajax-chapter-list?novelId={id}&page={p})
+    final listChapterEl = document.querySelector('#list-chapter, [data-list-url]');
+    final ajaxChapterListUrl = listChapterEl?.attributes['data-list-url'];
+    final fwnNovelId = listChapterEl?.attributes['data-novel-id'] ?? ajaxNovelId;
+    final fwnTotalPages = int.tryParse(listChapterEl?.attributes['data-total-page'] ?? '');
+
+    if (ajaxChapterListUrl != null && ajaxChapterListUrl.isNotEmpty && fwnNovelId != null && fwnNovelId.isNotEmpty && fwnTotalPages != null && fwnTotalPages > 1) {
+      final headersWithXHR = Map<String, String>.from(_headers)..['X-Requested-With'] = 'XMLHttpRequest';
+      final int maxP = fwnTotalPages > 40 ? 40 : fwnTotalPages;
+      const int batchSize = 10;
+      for (int i = 2; i <= maxP; i += batchSize) {
+        final end = (i + batchSize - 1) > maxP ? maxP : (i + batchSize - 1);
+        final futures = <Future<http.Response>>[];
+        for (int p = i; p <= end; p++) {
+          final pUrl = '$baseUrl$ajaxChapterListUrl?novelId=$fwnNovelId&page=$p';
+          futures.add(_client.get(Uri.parse(pUrl), headers: headersWithXHR));
+        }
         try {
-          final ajaxResp = await _client.get(Uri.parse(ajaxUrl), headers: _headers);
-          if (ajaxResp.statusCode == 200) {
-            try {
-              final data = json.decode(ajaxResp.body);
-              if (data is Map && data['html'] != null) {
-                final pChs = parseChapterList(novelUrl, data['html'].toString());
+          final responses = await Future.wait(futures);
+          for (final resp in responses) {
+            if (resp.statusCode == 200) {
+              try {
+                final data = json.decode(resp.body);
+                if (data is Map && data['html'] != null) {
+                  final pChs = parseChapterList(novelUrl, data['html'].toString());
+                  for (final c in pChs) {
+                    if (!seenUrls.contains(c.url)) {
+                      seenUrls.add(c.url);
+                      chapters.add(c);
+                    }
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      }
+    } else {
+      // LibRead / FreeWebNovel variant (?ajax=chapters&page=N&pageSize=100)
+      final indexListPage = document.querySelector('#indexListPage');
+      final totalPages = int.tryParse(indexListPage?.attributes['data-total-page'] ?? '');
+      if (totalPages != null && totalPages > 1) {
+        for (int p = 2; p <= totalPages && p <= 60; p++) {
+          final ajaxUrl = novelUrl.contains('?')
+              ? '$novelUrl&ajax=chapters&page=$p&pageSize=100'
+              : '$novelUrl?ajax=chapters&page=$p&pageSize=100';
+          try {
+            final ajaxResp = await _client.get(Uri.parse(ajaxUrl), headers: _headers);
+            if (ajaxResp.statusCode == 200) {
+              try {
+                final data = json.decode(ajaxResp.body);
+                if (data is Map && data['html'] != null) {
+                  final pChs = parseChapterList(novelUrl, data['html'].toString());
+                  for (final c in pChs) {
+                    if (!seenUrls.contains(c.url)) {
+                      seenUrls.add(c.url);
+                      chapters.add(c);
+                    }
+                  }
+                }
+              } catch (_) {
+                final pChs = parseChapterList(novelUrl, ajaxResp.body);
                 for (final c in pChs) {
                   if (!seenUrls.contains(c.url)) {
                     seenUrls.add(c.url);
@@ -469,20 +565,12 @@ class NovelFullExtractor implements NovelSource {
                   }
                 }
               }
-            } catch (_) {
-              final pChs = parseChapterList(novelUrl, ajaxResp.body);
-              for (final c in pChs) {
-                if (!seenUrls.contains(c.url)) {
-                  seenUrls.add(c.url);
-                  chapters.add(c);
-                }
-              }
+            } else {
+              break;
             }
-          } else {
+          } catch (_) {
             break;
           }
-        } catch (_) {
-          break;
         }
       }
     }
@@ -548,9 +636,15 @@ class NovelFullExtractor implements NovelSource {
     final novelSlug = segments.isNotEmpty ? segments.last.replaceAll('.html', '') : novelUrl.hashCode.toString();
     final novelId = '${id}_$novelSlug';
 
-    final links = document.querySelectorAll(
-      'ul.list-chapter li a, #list-chapter li a, .panel-body ul li a, .list-chapter a, ul.ul-list5 li a, .ul-list5 li a, .ul-list3 li a, ul.chapter-list li a, .chapter-list a',
+    var links = document.querySelectorAll(
+      '#idData li a, #list-chapter ul li a, ul.list-chapter li a, #list-chapter li a, .panel-body ul li a, .list-chapter a, ul.chapter-list li a, .chapter-list a, li.chapter-list-item a, .chapter-list-item a, a.chapter-title',
     );
+    if (links.isEmpty) {
+      links = document.querySelectorAll('li a.con, ul.ul-list5 li a, .ul-list5 li a, .ul-list3 li a');
+    }
+    if (links.isEmpty) {
+      links = document.querySelectorAll('a[href*="/chapter-"], a[href*="/chuong-"], a[href*="/chap-"]');
+    }
 
     int orderIndex = 0;
     for (final link in links) {

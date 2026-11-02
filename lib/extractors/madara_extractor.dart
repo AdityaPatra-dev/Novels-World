@@ -187,9 +187,9 @@ class MadaraExtractor implements NovelSource {
       if (!TextCleaner.isValidNovelTitle(title, url)) continue;
       seenUrls.add(url);
 
-      var img = item.querySelector('.item-thumb img, img');
-      img ??= item.parent?.querySelector('.item-thumb img, img');
-      img ??= item.previousElementSibling?.querySelector('.item-thumb img, img');
+      var img = item.querySelector('.item-thumb img, .post-thumb img, img[data-src], img[data-lazy-src], img[data-original], img');
+      img ??= item.parent?.querySelector('.item-thumb img, .post-thumb img, img[data-src], img');
+      img ??= item.previousElementSibling?.querySelector('.item-thumb img, .post-thumb img, img[data-src], img');
 
       String cover = '';
       if (img != null) {
@@ -299,15 +299,19 @@ class MadaraExtractor implements NovelSource {
 
     final title = document.querySelector('.post-title h1, .post-title h3, .post-title')?.text.trim() ?? 'Untitled';
 
-    final img = document.querySelector('.summary_image img');
+    final img = document.querySelector('.summary_image img, .post-thumb img, .featured-image img');
     String cover = '';
     if (img != null) {
       cover = img.attributes['data-src'] ??
           img.attributes['data-lazy-src'] ??
+          img.attributes['data-original'] ??
           img.attributes['srcset']?.split(' ').first ??
           img.attributes['src'] ??
           '';
       cover = _cleanUrl(cover);
+      if (cover.contains('dflazy.jpg') || cover.contains('blank.gif') || cover.startsWith('data:')) {
+        cover = '';
+      }
     }
 
     final author = document.querySelector('.author-content a, .mg_author .summary-content a')?.text.trim() ??

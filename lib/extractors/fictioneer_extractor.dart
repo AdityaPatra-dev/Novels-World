@@ -133,24 +133,24 @@ class FictioneerExtractor implements NovelSource {
     final seenUrls = <String>{};
 
     final cards = document.querySelectorAll(
-      '.custom-vertical-card, .fictioneer-slide-item, .story-card, article.story, .story-item',
+      '.card, .custom-vertical-card, .fictioneer-slide-item, .story-card, article.story, .story-item, article.card',
     );
 
     for (final card in cards) {
-      final linkEl = card.querySelector('a.title-link, .custom-story-title a, a.custom-cover-wrapper, a[href*="/story/"]');
+      final linkEl = card.querySelector('a.card__image, a.title-link, .custom-story-title a, a.custom-cover-wrapper, h3 a, a[href*="/story/"]');
       if (linkEl == null) continue;
 
       final href = _cleanUrl(linkEl.attributes['href'] ?? '');
       if (href.isEmpty || seenUrls.contains(href)) continue;
 
-      String title = card.querySelector('.custom-story-title, .story-title, h3, h2')?.text.trim() ?? '';
+      String title = card.querySelector('.card__title, .custom-story-title, .story-title, h3, h2')?.text.trim() ?? '';
       if (title.isEmpty) {
         title = linkEl.attributes['title']?.trim() ?? linkEl.text.trim();
       }
       if (title.isEmpty) continue;
       if (!TextCleaner.isValidNovelTitle(title, href)) continue;
 
-      final imgEl = card.querySelector('img.custom-cover-image, img.story-cover, img');
+      final imgEl = card.querySelector('img.wp-post-image, img.custom-cover-image, img.story-cover, img');
       String coverUrl = '';
       if (imgEl != null) {
         coverUrl = imgEl.attributes['data-src'] ??
@@ -266,9 +266,10 @@ class FictioneerExtractor implements NovelSource {
         'Unknown Author';
 
     final synopsis = document
-            .querySelector('.story-tab-content.active, .story-tab-content, .story-description, .description')
+            .querySelector('.story__summary, .story-tab-content.active, .story-tab-content, .story-description, .description')
             ?.text
             .trim() ??
+        document.querySelector('meta[property="og:description"]')?.attributes['content']?.trim() ??
         '';
 
     final uri = Uri.tryParse(novelUrl);
@@ -324,7 +325,9 @@ class FictioneerExtractor implements NovelSource {
 
     final List<Chapter> chapters = [];
     final seenChapterUrls = <String>{};
-    final chapterLinks = document.querySelectorAll('a[href*="/story/"], .custom-chapter-item a, .chapter-list a');
+    final chapterLinks = document.querySelectorAll(
+      '.chapter-group__list a, a.chapter-group__list-item-link, a[href*="/story/"], .custom-chapter-item a, .chapter-list a',
+    );
 
     int index = 1;
     for (final a in chapterLinks) {
@@ -379,7 +382,7 @@ class FictioneerExtractor implements NovelSource {
             .trim() ??
         '';
 
-    final contentEl = document.querySelector('#chapter-content, article, .chapter-content, .entry-content');
+    final contentEl = document.querySelector('.chapter__content, #chapter-content, article.chapter, article, .chapter-content, .entry-content');
     if (contentEl == null) {
       throw HttpException('Could not locate chapter content container');
     }

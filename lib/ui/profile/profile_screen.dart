@@ -155,12 +155,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              width: 76,
+              height: 76,
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
-              child: const Icon(Icons.cloud_sync_rounded, size: 48, color: Color(0xFFA78BFA)),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset(
+                  'assets/icon/app_icon_1024.png',
+                  fit: BoxFit.cover,
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             const Text(

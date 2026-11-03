@@ -6,6 +6,8 @@ import 'readwn_extractor.dart';
 import 'fictioneer_extractor.dart';
 import 'bespoke/royalroad_extractor.dart';
 import 'bespoke/scribblehub_extractor.dart';
+import 'bespoke/novelcool_extractor.dart';
+import 'bespoke/kakuyomu_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -18,14 +20,24 @@ import 'bespoke/scribblehub_extractor.dart';
 class SourceRegistry {
   static final Map<String, NovelSource> _sources = {
     // ==========================================
-    // 1. Bespoke Western Web Fiction
+    // 1. Bespoke Western Web Fiction & Megaportals
     // ==========================================
     'royalroad': RoyalRoadExtractor(),
     'scribblehub': ScribbleHubExtractor(),
+    'novelcool': NovelCoolExtractor(),
 
     // ==========================================
     // 2. High-Capacity NovelFull Aggregators
     // ==========================================
+    'novelbin': NovelFullExtractor(
+      id: 'novelbin',
+      name: 'NovelBin',
+      baseUrl: 'https://novelbin.com',
+      popularPath: '/sort/top-view-novel',
+      latestPath: '/sort/latest-release-novel',
+      lang: 'en',
+      estimatedNovelCount: 65000,
+    ),
     'readnovelfull': NovelFullExtractor(
       id: 'readnovelfull',
       name: 'ReadNovelFull',
@@ -98,6 +110,15 @@ class SourceRegistry {
       lang: 'en',
       estimatedNovelCount: 35000,
     ),
+    'novgo': NovelFullExtractor(
+      id: 'novgo',
+      name: 'NOVGO',
+      baseUrl: 'https://novgo.net',
+      popularPath: '/sort/most-popular',
+      latestPath: '/sort/latest-release',
+      lang: 'en',
+      estimatedNovelCount: 45000,
+    ),
 
     // ==========================================
     // 3. ReadWN / WuxiaBox MTL Network
@@ -108,6 +129,13 @@ class SourceRegistry {
       baseUrl: 'https://www.wuxiabox.com',
       lang: 'en',
       estimatedNovelCount: 45000,
+    ),
+    'fanmtl': ReadWnExtractor(
+      id: 'fanmtl',
+      name: 'FanMTL',
+      baseUrl: 'https://www.fanmtl.com',
+      lang: 'en',
+      estimatedNovelCount: 35000,
     ),
     'wuxiaspace': ReadWnExtractor(
       id: 'wuxiaspace',
@@ -134,6 +162,13 @@ class SourceRegistry {
       lang: 'en',
       estimatedNovelCount: 10000,
     ),
+    'divinedaolibrary': FictioneerExtractor(
+      id: 'divinedaolibrary',
+      name: 'Divine Dao Library',
+      baseUrl: 'https://www.divinedaolibrary.com',
+      lang: 'en',
+      estimatedNovelCount: 5000,
+    ),
 
     // ==========================================
     // 5. WordPress Madara Engine (English)
@@ -151,6 +186,13 @@ class SourceRegistry {
       baseUrl: 'https://wuxiaworld.site',
       lang: 'en',
       estimatedNovelCount: 15000,
+    ),
+    'wbnovel': MadaraExtractor(
+      id: 'wbnovel',
+      name: 'WBNovel',
+      baseUrl: 'https://wbnovel.com',
+      lang: 'en',
+      estimatedNovelCount: 10000,
     ),
     'boxnovel': MadaraExtractor(
       id: 'boxnovel',
@@ -267,6 +309,13 @@ class SourceRegistry {
     // ==========================================
     // 9. International Sources: Thai (th)
     // ==========================================
+    'novellucky': MadaraExtractor(
+      id: 'novellucky',
+      name: 'NovelLucky',
+      baseUrl: 'https://novel-lucky.com',
+      lang: 'th',
+      estimatedNovelCount: 5000,
+    ),
     'novelpdf': MadaraExtractor(
       id: 'novelpdf',
       name: 'NovelPDF',
@@ -274,6 +323,11 @@ class SourceRegistry {
       lang: 'th',
       estimatedNovelCount: 2500,
     ),
+
+    // ==========================================
+    // 10. International Sources: Japanese (ja)
+    // ==========================================
+    'kakuyomu': KakuyomuExtractor(),
   };
 
   static String _defaultSourceId = 'royalroad';

@@ -9,6 +9,7 @@ import '../../providers/reader_provider.dart';
 import '../reader/reader_screen.dart';
 import '../widgets/source_webview_screen.dart';
 import '../../core/services/webview_session_manager.dart';
+import '../../core/utils/text_cleaner.dart';
 
 class NovelDetailScreen extends StatefulWidget {
   final Novel novel;
@@ -90,8 +91,10 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
       if (mounted) {
         setState(() {
+          final isFetchedTitleValid = TextCleaner.isValidNovelTitle(fullNovel.title, _novel.sourceUrl);
           _novel = fullNovel.copyWith(
             id: _novel.id,
+            title: isFetchedTitleValid ? fullNovel.title : _novel.title,
             inLibrary: context.read<LibraryProvider>().isInLibrary(_novel.id),
           );
           _chapters = chapters;

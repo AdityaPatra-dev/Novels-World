@@ -72,17 +72,53 @@ class ReadWnExtractor implements NovelSource {
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
     final cleanQuery = Uri.encodeComponent(query);
-    final targetUrl = '$baseUrl/search.html?keyword=$cleanQuery';
+    final targetUrls = [
+      '$baseUrl/search.html?keyword=$cleanQuery',
+      '$baseUrl/search?keyword=$cleanQuery',
+    ];
 
+    for (final targetUrl in targetUrls) {
+      try {
+        final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
+        if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
+          final list = parseNovelList(response.body);
+          if (list.isNotEmpty) return list;
+        }
+      } catch (_) {}
+    }
+
+    // EmpireCMS POST Search Fallback (used by FanMTL and EmpireCMS networks)
+    final postSearchUrl = '$baseUrl/e/search/index.php';
     try {
-      final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
-      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
-        final list = parseNovelList(response.body);
+      final postResp = await _client.post(
+        Uri.parse(postSearchUrl),
+        headers: {
+          ..._headers,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: {
+          'show': 'title',
+          'tempid': '1',
+          'tbname': 'news',
+          'keyboard': query,
+        },
+      );
+
+      if (postResp.statusCode == 200 && postResp.body.isNotEmpty) {
+        final list = parseNovelList(postResp.body);
         if (list.isNotEmpty) return list;
+      } else if (postResp.statusCode == 302 && postResp.headers['location'] != null) {
+        final loc = postResp.headers['location']!;
+        final resolvedUrl = Uri.parse(postSearchUrl).resolve(loc);
+        final locResp = await _client.get(resolvedUrl, headers: _headers);
+        if (locResp.statusCode == 200) {
+          final list = parseNovelList(locResp.body);
+          if (list.isNotEmpty) return list;
+        }
       }
     } catch (_) {}
 
-    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrl);
+    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrls.first);
     if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
       final list = parseNovelList(wvHtml);
       if (list.isNotEmpty) return list;

@@ -91,7 +91,7 @@ Madara was originally created as a manga WordPress theme by MangaStream/WP-Manga
 | **Zetro Translation** | `https://zetrotranslation.com/` | English / Light Novels |
 | **ArNovel** | `https://ar-no.com/` | Arabic / Translated Novels |
 | **WebNovelLover** | `https://www.webnovelover.com/` | English / Webnovels |
-| **WBNovel** | `https://wbnovel.com/` | English / Webnovels |
+| **WBNovel** | `https://wbnovel.com/` | English / Webnovels (Active in App) |
 | **MysticalSeries** | `https://mysticalmerries.com/` | English / Romance & Fantasy |
 | **Vanovel** | `https://vanovel.com/` | Turkish / Light Novels |
 | **HizoManga** | `https://hizomanga.net/` | Arabic / Novel & Manga |
@@ -107,7 +107,7 @@ Madara was originally created as a manga WordPress theme by MangaStream/WP-Manga
 | **Pancho Translations** | `https://panchotranslations.com/` | English / Translations |
 | **Salmon Latte** | `https://salmonlatte.com/` | English / Japanese Novels |
 | **Srank Manga** | `https://srankmanga.com/` | English / Novels |
-| **Novel Lucky** | `https://novel-lucky.com/` | English / Webnovels |
+| **Novel Lucky** | `https://novel-lucky.com/` | Thai / Webnovels (Active in App) |
 | **Fans Translations** | `https://fanstranslations.com/` | English / Fan Translations |
 | **WorldNovel** | `https://world-novel.fr/` | French / Light Novels |
 | **Hiraeth Translation** | `https://hiraethtranslation.com/` | English / Korean Novels |
@@ -157,7 +157,7 @@ Madara was originally created as a manga WordPress theme by MangaStream/WP-Manga
 | Website Name | URL | Core Features |
 | :--- | :--- | :--- |
 | **NovelFull** | `https://novelfull.com/` | Huge library, standard `#chr-content`, AJAX archive |
-| **Novel Bin** | `https://novelbin.com/` | High traffic, clean reading layout |
+| **Novel Bin** | `https://novelbin.com/` | High traffic, clean reading layout (Active in App) |
 | **ReadNovelFull** | `https://readnovelfull.com/` | Sister to NovelFull |
 | **Lib Read** | `https://libread.com/` | NovelFull clone layout |
 | **AllNovelFull** | `https://novgo.net/` | Fast chapter loading |
@@ -175,7 +175,7 @@ Madara was originally created as a manga WordPress theme by MangaStream/WP-Manga
 | **WuxiaBox** | `https://www.wuxiabox.com` | High-speed MTL aggregation |
 | **WuxiaFox** | `https://www.wuxiafox.com` | Mirror of WuxiaBox |
 | **Ltnovel** | `https://www.ltnovels.com` | Fast raw/MTL translations |
-| **FanMTL** | `https://www.fanmtl.com` | Fan machine translations |
+| **FanMTL** | `https://www.fanmtl.com` | Fan machine translations (Active in App) |
 | **Wuxia Space** | `https://www.wuxiaspot.com` | Xianxia / Wuxia focus |
 | **WuxiaV** | `https://www.wuxiav.com` | Raw translation archive |
 
@@ -261,6 +261,20 @@ These platforms cannot be scraped using off-the-shelf template extractors becaus
    - Fast plain-HTML aggregator with straightforward table-of-contents.
 6. **WTR-LAB (`https://wtr-lab.com`)**:
    - Modern AI-assisted translation portal with clean JSON endpoints and raw source comparisons.
+7. **Just Light Novels (`https://justlightnovels.com`)**:
+   - High-quality officially formatted light novel archive with volume downloads and illustrations.
+8. **Fenrir Translations (`https://fenrirtranslations.com`)**:
+   - Fast-growing human translation group for popular Japanese and Korean light novels (WordPress Madara).
+9. **Chichome MTL (`https://chichome.com`)**:
+   - Popular high-speed raw machine-translation reader for Chinese progression fantasy.
+10. **Moonlight Novels (`https://moonlightnovels.com`)**:
+    - Dedicated romance and villainess web fiction translation collective (WordPress Madara).
+11. **NovelToT (`https://noveltot.com`)**:
+    - Clean, ad-light aggregator with fast mobile chapter rendering.
+12. **Shousetsuka ni Narou - Syosetu (`https://ncode.syosetu.com`)**:
+    - The legendary Japanese user-generated web fiction platform where *Re:Zero*, *Slime*, and *Mushoku Tensei* originated.
+13. **Kakuyomu (`https://kakuyomu.jp`)**:
+    - Kadokawa's official web novel publication portal for serialized Japanese light novels.
 
 ### D. Scanlation & Translator Blogs (Obfuscation & Custom CMS)
 1. **Chrysanthemum Garden (`https://chrysanthemumgarden.com`)**:

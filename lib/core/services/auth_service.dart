@@ -73,6 +73,10 @@ class AuthService extends ChangeNotifier {
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
+      if (googleAuth.idToken == null && googleAuth.accessToken == null) {
+        throw 'No identity token or access token received from Google.';
+      }
+
       final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -87,7 +91,14 @@ class AuthService extends ChangeNotifier {
       return userCredential;
     } catch (e) {
       debugPrint('[AUTH] Google Sign-In error: $e');
-      _authError = 'Sign-in failed: ${e.toString()}';
+      final errStr = e.toString();
+      if (errStr.contains('10') || errStr.contains('developer_error')) {
+        _authError = 'Google Sign-In configuration error. Please ensure the Google provider is enabled in Firebase Console.';
+      } else if (errStr.contains('network') || errStr.contains('7:')) {
+        _authError = 'Network error during Google Sign-In. Please check your internet connection.';
+      } else {
+        _authError = 'Sign-in failed: $errStr';
+      }
       _isSigningIn = false;
       notifyListeners();
       return null;

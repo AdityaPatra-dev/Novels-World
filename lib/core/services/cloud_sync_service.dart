@@ -32,8 +32,21 @@ class CloudSyncService extends ChangeNotifier {
   bool _isSyncing = false;
   DateTime? _lastSyncTime;
   String? _syncError;
+  StorageService? _storage;
+  StreamSubscription<User?>? _authSubscription;
 
   CloudSyncService._internal();
+
+  void init(StorageService storage) {
+    _storage = storage;
+    _authSubscription?.cancel();
+    _authSubscription = _auth?.authStateChanges().listen((user) async {
+      if (user != null && _storage != null) {
+        debugPrint('[CLOUD_SYNC] Authenticated user detected (${user.email}), starting automatic sync...');
+        await syncFull(_storage!);
+      }
+    });
+  }
 
   bool get isSyncing => _isSyncing;
   DateTime? get lastSyncTime => _lastSyncTime;
@@ -215,6 +228,17 @@ class CloudSyncService extends ChangeNotifier {
           .collection('library')
           .doc(novelId)
           .delete();
+    } catch (_) {}
+  }
+
+  Future<void> deleteProgress(String novelId) async {
+    final firestore = _firestore;
+    final user = _currentUser;
+    if (firestore == null || user == null) return;
+    try {
+      final userDoc = firestore.collection('users').doc(user.uid);
+      await userDoc.collection('progress').doc(novelId).delete();
+      await userDoc.collection('history').doc(novelId).delete();
     } catch (_) {}
   }
 

@@ -161,6 +161,9 @@ class StorageService {
   Future<void> clearReadChapters(String novelId) async {
     await _safePrefs.remove('read_chapters_$novelId');
     await _safePrefs.remove('progress_$novelId');
+    try {
+      CloudSyncService.instance.deleteProgress(novelId);
+    } catch (_) {}
   }
 
   bool isChapterRead(String novelId, String chapterId) {

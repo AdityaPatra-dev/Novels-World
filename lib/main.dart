@@ -38,6 +38,9 @@ void main() async {
   await storageService.init();
   await WebViewSessionManager.instance.init();
 
+  // Initialize CloudSyncService with local storage and enable auto-sync on auth change
+  CloudSyncService.instance.init(storageService);
+
   // If user is already authenticated from a previous session, do a silent background sync
   try {
     if (AuthService.instance.isAuthenticated) {

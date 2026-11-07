@@ -12,7 +12,28 @@
           "package_name": "com.novelsworld.novels_world"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "705215795092-jts6r4fgu5kpqktu14909vc5btk9buat.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.novelsworld.novels_world",
+            "certificate_hash": "317c660179d7cc28a2c47159768b94ce18068c12"
+          }
+        },
+        {
+          "client_id": "705215795092-r9gqono9tegkekps8lov29e4hd5vsj1r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.novelsworld.novels_world",
+            "certificate_hash": "7ae41720d6d0be2c06bbe6c758fa95df73572cec"
+          }
+        },
+        {
+          "client_id": "705215795092-mbsfcb3il4grq6mnq42kh1nrh48fpsur.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDlx9dsrolE_HPJoZoqitlpE9k6SsjqUQY"
@@ -20,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "705215795092-mbsfcb3il4grq6mnq42kh1nrh48fpsur.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

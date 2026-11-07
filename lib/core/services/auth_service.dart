@@ -17,8 +17,12 @@ class AuthService extends ChangeNotifier {
     return null;
   }
 
+  static const String _webClientId =
+      '705215795092-mbsfcb3il4grq6mnq42kh1nrh48fpsur.apps.googleusercontent.com';
+
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
+    serverClientId: _webClientId,
   );
 
   bool _isSigningIn = false;

@@ -1,11 +1,11 @@
 {
-    "name": "novels_world",
-    "short_name": "novels_world",
+    "name": "Novels World",
+    "short_name": "Novels World",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0D0C1D",
+    "theme_color": "#8B5CF6",
+    "description": "Read and listen to thousands of web novels with smart AI voice narration, offline downloads, and cloud sync.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

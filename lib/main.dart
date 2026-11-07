@@ -70,7 +70,7 @@ class NovelsWorldApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Novels-World',
+      title: 'Novels World',
       debugShowCheckedModeBanner: false,
       scrollBehavior: const NonStretchingScrollBehavior(),
       theme: AppTheme.darkTheme,

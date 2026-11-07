@@ -41,7 +41,10 @@ class MockDownloadNovelSource implements NovelSource {
       );
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async => [];
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async => [];
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
@@ -145,6 +148,40 @@ void main() {
       await downloadService.deleteNovelDownloads(testNovel.id, [testChapters[0]]);
 
       expect(downloadService.isChapterDownloaded('mock_ch_0'), false);
+    });
+
+    test('enqueueRange handles expressions: 1-40, 1-30,40-50, 1,2, and 30', () async {
+      // testChapters has 10 items (mock_ch_0 .. mock_ch_9) with chapterNumber 0..9
+      downloadService.pause();
+      downloadService.cancelAll();
+
+      // Range 1-3
+      final count1 = await downloadService.enqueueRange(testNovel, testChapters, '1-3');
+      expect(count1, 3);
+      expect(downloadService.queue.length, 3);
+      expect(downloadService.queue.map((t) => t.chapter.id).toList(), ['mock_ch_1', 'mock_ch_2', 'mock_ch_3']);
+
+      downloadService.cancelAll();
+
+      // Range 1,3
+      final count2 = await downloadService.enqueueRange(testNovel, testChapters, '1,3');
+      expect(count2, 2);
+      expect(downloadService.queue.length, 2);
+      expect(downloadService.queue.map((t) => t.chapter.id).toList(), ['mock_ch_1', 'mock_ch_3']);
+
+      downloadService.cancelAll();
+
+      // Single chapter 5
+      final count3 = await downloadService.enqueueRange(testNovel, testChapters, '5');
+      expect(count3, 1);
+      expect(downloadService.queue.first.chapter.id, 'mock_ch_5');
+
+      downloadService.cancelAll();
+
+      // Multi range 1-2, 4-5
+      final count4 = await downloadService.enqueueRange(testNovel, testChapters, '1-2, 4-5');
+      expect(count4, 4);
+      expect(downloadService.queue.map((t) => t.chapter.id).toList(), ['mock_ch_1', 'mock_ch_2', 'mock_ch_4', 'mock_ch_5']);
     });
   });
 }

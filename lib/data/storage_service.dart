@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/models/novel.dart';
+import '../core/models/chapter.dart';
 import '../core/models/chapter_content.dart';
 import '../core/models/reading_progress.dart';
 import '../core/services/cloud_sync_service.dart';
@@ -15,12 +16,16 @@ class StorageService {
 
   static const String _libraryKey = 'novels_world_library';
   static const String _settingsKey = 'novels_world_reader_settings';
+  static const String _downloadedNovelsKey = 'novels_world_downloaded_novels';
 
   SharedPreferences? _prefs;
   Directory? _appDir;
 
   SharedPreferences get _safePrefs => _prefs!;
   Directory get _safeAppDir => _appDir!;
+
+  String get chaptersDirectoryPath => '${_safeAppDir.path}/chapters';
+  String get appDocumentsDirectoryPath => _safeAppDir.path;
 
   Future<void> init({Directory? appDir}) async {
     if (_prefs != null && _appDir != null && appDir == null) return;
@@ -376,6 +381,144 @@ class StorageService {
         }
       }
     }
+    await removeDownloadedNovel(novel.id);
+  }
+
+  // --- Downloaded Novels Index & Management ---
+
+  // --- Novel Chapter List & Details Caching ---
+
+  File _getNovelChaptersCacheFile(String novelId) {
+    final safeName = novelId.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+    return File('${_safeAppDir.path}/novel_cache/chapters_$safeName.json');
+  }
+
+  Future<void> cacheChapterList(String novelId, List<Chapter> chapters) async {
+    await init();
+    try {
+      final dir = Directory('${_safeAppDir.path}/novel_cache');
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final file = _getNovelChaptersCacheFile(novelId);
+      final rawList = chapters.map((c) => c.toJson()).toList();
+      await file.writeAsString(jsonEncode(rawList));
+    } catch (_) {}
+  }
+
+  Future<List<Chapter>?> getCachedChapters(String novelId) async {
+    await init();
+    final file = _getNovelChaptersCacheFile(novelId);
+    if (!await file.exists()) return null;
+    try {
+      final raw = await file.readAsString();
+      final list = jsonDecode(raw) as List;
+      return list
+          .map((item) => Chapter.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  File _getNovelDetailsCacheFile(String novelId) {
+    final safeName = novelId.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+    return File('${_safeAppDir.path}/novel_cache/details_$safeName.json');
+  }
+
+  Future<void> cacheNovelDetails(Novel novel) async {
+    await init();
+    try {
+      final dir = Directory('${_safeAppDir.path}/novel_cache');
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final file = _getNovelDetailsCacheFile(novel.id);
+      await file.writeAsString(jsonEncode(novel.toJson()));
+    } catch (_) {}
+  }
+
+  Future<Novel?> getCachedNovelDetails(String novelId) async {
+    await init();
+    final file = _getNovelDetailsCacheFile(novelId);
+    if (!await file.exists()) return null;
+    try {
+      final raw = await file.readAsString();
+      return Novel.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> recordDownloadedNovel(Novel novel, String chapterId) async {
+    await init();
+    // Track downloaded chapter ID
+    final chSet = getDownloadedChapterIds(novel.id);
+    chSet.add(chapterId);
+    await _safePrefs.setStringList('downloaded_chapters_${novel.id}', chSet.toList());
+
+    // Track novel metadata
+    final list = _getDownloadedNovelsList();
+    final idx = list.indexWhere((n) => n.id == novel.id);
+    if (idx >= 0) {
+      list[idx] = novel;
+    } else {
+      list.insert(0, novel);
+    }
+    final rawList = list.map((n) => jsonEncode(n.toJson())).toList();
+    await _safePrefs.setStringList(_downloadedNovelsKey, rawList);
+  }
+
+  Set<String> getDownloadedChapterIds(String novelId) {
+    if (_prefs == null) return {};
+    final list = _safePrefs.getStringList('downloaded_chapters_$novelId') ?? [];
+    return list.toSet();
+  }
+
+  List<Novel> _getDownloadedNovelsList() {
+    if (_prefs == null) return [];
+    final rawList = _safePrefs.getStringList(_downloadedNovelsKey) ?? [];
+    return rawList
+        .map((str) {
+          try {
+            return Novel.fromJson(jsonDecode(str) as Map<String, dynamic>);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<Novel>()
+        .toList();
+  }
+
+  Future<List<Novel>> getDownloadedNovels() async {
+    await init();
+    final downloadedList = _getDownloadedNovelsList();
+    final novelMap = <String, Novel>{};
+    for (final n in downloadedList) {
+      novelMap[n.id] = n;
+    }
+
+    // Also include any library novels that are local_epub or have downloaded chapters
+    for (final n in getLibraryNovels()) {
+      if (n.sourceId == 'local_epub') {
+        novelMap[n.id] = n;
+      } else {
+        final chs = getDownloadedChapterIds(n.id);
+        if (chs.isNotEmpty) {
+          novelMap[n.id] = n;
+        }
+      }
+    }
+
+    return novelMap.values.toList();
+  }
+
+  Future<void> removeDownloadedNovel(String novelId) async {
+    await init();
+    final list = _getDownloadedNovelsList()..removeWhere((n) => n.id == novelId);
+    final rawList = list.map((n) => jsonEncode(n.toJson())).toList();
+    await _safePrefs.setStringList(_downloadedNovelsKey, rawList);
+    await _safePrefs.remove('downloaded_chapters_$novelId');
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/epub_service.dart';
+import '../../data/storage_service.dart';
 import '../../providers/library_provider.dart';
 import '../novel/novel_detail_screen.dart';
 import '../widgets/novel_card.dart';
@@ -18,17 +19,25 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  int _selectedFilter = 0; // 0 = All, 1 = Reading, 2 = Completed
+  int _selectedFilter = 0; // 0 = All, 1 = Reading, 2 = Downloaded, 3 = Completed
+  final StorageService _storageService = StorageService();
 
   @override
   Widget build(BuildContext context) {
     final libraryProvider = context.watch<LibraryProvider>();
     final allNovels = libraryProvider.novels;
 
+    final downloadedNovels = allNovels.where((n) {
+      if (n.sourceId == 'local_epub') return true;
+      return _storageService.getDownloadedChapterIds(n.id).isNotEmpty;
+    }).toList();
+
     final filteredNovels = allNovels.where((n) {
       if (_selectedFilter == 1) {
         return n.lastReadChapterId != null;
       } else if (_selectedFilter == 2) {
+        return n.sourceId == 'local_epub' || _storageService.getDownloadedChapterIds(n.id).isNotEmpty;
+      } else if (_selectedFilter == 3) {
         return n.status == 'COMPLETED';
       }
       return true;
@@ -57,14 +66,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 preferredSize: const Size.fromHeight(48),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  child: Row(
-                    children: [
-                      _buildFilterChip(0, 'All (${allNovels.length})'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip(1, 'Reading (${allNovels.where((n) => n.lastReadChapterId != null).length})'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip(2, 'Completed (${allNovels.where((n) => n.status == 'COMPLETED').length})'),
-                    ],
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterChip(0, 'All (${allNovels.length})'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(1, 'Reading (${allNovels.where((n) => n.lastReadChapterId != null).length})'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(2, 'Downloaded (${downloadedNovels.length})'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(3, 'Completed (${allNovels.where((n) => n.status == 'COMPLETED').length})'),
+                      ],
+                    ),
                   ),
                 ),
               )

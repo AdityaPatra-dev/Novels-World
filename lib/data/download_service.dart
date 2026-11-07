@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../core/models/novel.dart';
 import '../core/models/chapter.dart';
 import '../core/models/chapter_content.dart';
+import '../core/utils/chapter_range_parser.dart';
 import '../extractors/source_registry.dart';
 import 'storage_service.dart';
 
@@ -112,6 +113,14 @@ class DownloadService extends ChangeNotifier {
     await enqueueChapters(novel, toDownload);
   }
 
+  /// Parses ranges like "1-40", "1-30,40-50", "1,2", "30" and enqueues matched chapters
+  Future<int> enqueueRange(Novel novel, List<Chapter> allChapters, String rangeText) async {
+    final requestedNumbers = ChapterRangeParser.parseRange(rangeText);
+    final matchingChapters = ChapterRangeParser.filterChapters(allChapters, requestedNumbers);
+    await enqueueChapters(novel, matchingChapters);
+    return matchingChapters.length;
+  }
+
   void pause() {
     _isPaused = true;
     notifyListeners();
@@ -138,6 +147,7 @@ class DownloadService extends ChangeNotifier {
       _downloadedChapterIds.remove(ch.id);
     }
     _queue.removeWhere((t) => t.novel.id == novelId);
+    await _storage.removeDownloadedNovel(novelId);
     notifyListeners();
   }
 
@@ -165,6 +175,7 @@ class DownloadService extends ChangeNotifier {
 
         task.status = DownloadStatus.completed;
         _downloadedChapterIds.add(task.chapter.id);
+        await _storage.recordDownloadedNovel(task.novel, task.chapter.id);
       } catch (e) {
         if (task.retryCount < 2) {
           task.retryCount++;

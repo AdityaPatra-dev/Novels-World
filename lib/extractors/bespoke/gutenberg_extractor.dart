@@ -132,6 +132,7 @@ class GutenbergExtractor implements NovelSource {
     if (title.contains(' by ')) {
       title = title.split(' by ').first.trim();
     }
+    title = TextCleaner.cleanNovelTitle(title);
 
     // Author
     String author = 'Unknown Author';
@@ -184,7 +185,10 @@ class GutenbergExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     final bookNum = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
     if (bookNum.isEmpty) return [];
 
@@ -195,10 +199,14 @@ class GutenbergExtractor implements NovelSource {
       final fallbackUrl = '$baseUrl/cache/epub/$bookNum/pg$bookNum.html';
       final fbResp = await _client.get(Uri.parse(fallbackUrl), headers: _headers);
       if (fbResp.statusCode != 200) return [];
-      return _extractChaptersFromHtml(fbResp.body, fallbackUrl, bookNum);
+      final chs = _extractChaptersFromHtml(fbResp.body, fallbackUrl, bookNum);
+      if (chs.isNotEmpty) onBatchLoaded?.call(chs);
+      return chs;
     }
 
-    return _extractChaptersFromHtml(response.body, htmlUrl, bookNum);
+    final chs = _extractChaptersFromHtml(response.body, htmlUrl, bookNum);
+    if (chs.isNotEmpty) onBatchLoaded?.call(chs);
+    return chs;
   }
 
   List<Chapter> _extractChaptersFromHtml(String html, String bookHtmlUrl, String bookNum) {

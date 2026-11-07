@@ -186,7 +186,8 @@ class AsuraScansExtractor implements NovelSource {
       throw HttpException('Missing series object from Asura Scans');
     }
 
-    final title = series['title']?.toString().trim() ?? 'Untitled';
+    final rawTitle = series['title']?.toString().trim() ?? 'Untitled';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
     final rawCover = series['cover_url']?.toString() ?? '';
     final author = series['author']?.toString() ?? 'Unknown Author';
     final status = (series['status']?.toString().toUpperCase() == 'COMPLETED') ? 'COMPLETED' : 'ONGOING';
@@ -220,7 +221,10 @@ class AsuraScansExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     final slug = _extractSlug(novelUrl);
     if (slug.isEmpty) return [];
 
@@ -273,6 +277,9 @@ class AsuraScansExtractor implements NovelSource {
           chapterNumber: chNum,
           releaseDate: ch['published_at']?.toString(),
         ));
+      }
+      if (chapters.isNotEmpty) {
+        onBatchLoaded?.call(chapters);
       }
       return chapters;
     } catch (_) {

@@ -57,7 +57,10 @@ class MockNovelSource implements NovelSource {
       );
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async => [];
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async => [];
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async => const ChapterContent(

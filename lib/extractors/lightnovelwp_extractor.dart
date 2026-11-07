@@ -557,7 +557,8 @@ class LightNovelWpExtractor implements NovelSource {
   Novel parseNovelDetails(String novelUrl, String htmlContent) {
     final document = html_parser.parse(htmlContent);
 
-    final title = document.querySelector('h1.entry-title, .entry-title, .infox h1')?.text.trim() ?? 'Unknown Novel';
+    final rawTitle = document.querySelector('h1.entry-title, .entry-title, .infox h1')?.text.trim() ?? 'Unknown Novel';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
 
     final imgEl = document.querySelector('.thumbook .thumb img, .thumb img, .entry-details img');
     String coverUrl = '';
@@ -567,6 +568,9 @@ class LightNovelWpExtractor implements NovelSource {
           imgEl.attributes['data-lazy-src'] ??
           '';
       coverUrl = _cleanUrl(coverUrl);
+      if (!TextCleaner.isValidCoverUrl(coverUrl)) {
+        coverUrl = '';
+      }
     }
 
     String author = 'Unknown Author';
@@ -637,7 +641,10 @@ class LightNovelWpExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
       throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
     }
@@ -659,6 +666,9 @@ class LightNovelWpExtractor implements NovelSource {
     if (body.isNotEmpty) {
       chapters = parseChapterList(novelUrl, body);
       final seenUrls = chapters.map((c) => c.url).toSet();
+      if (chapters.isNotEmpty) {
+        onBatchLoaded?.call(List.from(chapters));
+      }
 
       // Check for pagination links on LightNovelWP
       final doc = html_parser.parse(body);
@@ -678,6 +688,7 @@ class LightNovelWpExtractor implements NovelSource {
                     chapters.add(ch);
                   }
                 }
+                onBatchLoaded?.call(List.from(chapters));
               }
             } catch (_) {}
           }

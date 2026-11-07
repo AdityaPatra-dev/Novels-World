@@ -154,9 +154,10 @@ class RoliaScanExtractor implements NovelSource {
     final doc = html_parser.parse(response.body);
 
     // 1. Title & cover
-    var title = doc.querySelector('h1')?.text.trim() ??
+    final rawTitle = doc.querySelector('h1')?.text.trim() ??
         doc.querySelector('title')?.text.split('|').first.trim() ??
         'Untitled';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
 
     String coverUrl = '';
     final coverEl = doc.querySelector('.poster img, .manga-poster img, img[src*="cover"]');
@@ -165,6 +166,9 @@ class RoliaScanExtractor implements NovelSource {
       if (src != null && src.isNotEmpty) {
         coverUrl = _resolveUrl(src);
       }
+    }
+    if (!TextCleaner.isValidCoverUrl(coverUrl)) {
+      coverUrl = '';
     }
 
     // 2. Synopsis / Description
@@ -222,7 +226,10 @@ class RoliaScanExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
     if (response.statusCode != 200) {
       return [];
@@ -307,6 +314,7 @@ class RoliaScanExtractor implements NovelSource {
 
         hasMore = decoded['has_more'] == true;
         offset += items.length;
+        onBatchLoaded?.call(List.from(chapters));
 
         if (items.length < limit || offset >= (decoded['total'] as num? ?? 999999)) {
           break;

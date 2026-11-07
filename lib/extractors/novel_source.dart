@@ -14,7 +14,10 @@ abstract class NovelSource {
   Future<List<Novel>> getPopular({int page = 1});
   Future<List<Novel>> getLatest({int page = 1});
   Future<Novel> getNovelDetails(String novelUrl);
-  Future<List<Chapter>> getChapterList(String novelUrl);
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  });
   Future<ChapterContent> getChapterContent(String chapterUrl);
 }
 

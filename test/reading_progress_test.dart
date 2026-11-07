@@ -290,7 +290,13 @@ class _MockProgressSource implements NovelSource {
   @override
   Future<Novel> getNovelDetails(String novelUrl) async => _novel;
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async => _chapters;
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
+    if (_chapters.isNotEmpty) onBatchLoaded?.call(_chapters);
+    return _chapters;
+  }
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async => ChapterContent(
         chapterId: 'test_ch_1',

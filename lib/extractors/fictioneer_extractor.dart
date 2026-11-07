@@ -239,13 +239,14 @@ class FictioneerExtractor implements NovelSource {
   Novel parseNovelDetails(String novelUrl, String htmlContent) {
     final document = html_parser.parse(htmlContent);
 
-    final title = document
+    final rawTitle = document
             .querySelector('h1.story-title, h1, .story-header-title')
             ?.text
             .trim() ??
         'Unknown Novel';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
 
-    final imgEl = document.querySelector('img.story-cover, img.wp-post-image, .story-cover img, img');
+    final imgEl = document.querySelector('img.story-cover, img.wp-post-image, .story-cover img');
     String coverUrl = '';
     if (imgEl != null) {
       coverUrl = imgEl.attributes['data-src'] ??
@@ -254,7 +255,7 @@ class FictioneerExtractor implements NovelSource {
           imgEl.attributes['src'] ??
           '';
       coverUrl = _cleanUrl(coverUrl);
-      if (coverUrl.startsWith('data:') || coverUrl.contains('blank.gif')) {
+      if (!TextCleaner.isValidCoverUrl(coverUrl)) {
         coverUrl = '';
       }
     }
@@ -289,7 +290,10 @@ class FictioneerExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
       throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
     }
@@ -313,7 +317,11 @@ class FictioneerExtractor implements NovelSource {
       throw HttpException('Failed to load chapter list for $novelUrl');
     }
 
-    return parseChapterList(novelUrl, body);
+    final chapters = parseChapterList(novelUrl, body);
+    if (chapters.isNotEmpty) {
+      onBatchLoaded?.call(chapters);
+    }
+    return chapters;
   }
 
   List<Chapter> parseChapterList(String novelUrl, String htmlContent) {

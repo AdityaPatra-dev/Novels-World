@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/models/novel.dart';
 import '../../core/services/webview_session_manager.dart';
+import '../../core/utils/text_cleaner.dart';
 
 import 'package:flutter/services.dart';
 import 'source_webview_screen.dart';
@@ -19,7 +20,7 @@ class NovelCard extends StatelessWidget {
 
   String get _sanitizedCoverUrl {
     var url = novel.coverUrl.trim();
-    if (url.isEmpty) return '';
+    if (url.isEmpty || !TextCleaner.isValidCoverUrl(url)) return '';
     if (url.startsWith('//')) {
       url = 'https:$url';
     }
@@ -202,7 +203,7 @@ class NovelCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            novel.title,
+            TextCleaner.cleanNovelTitle(novel.title),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(

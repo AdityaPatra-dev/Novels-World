@@ -302,7 +302,8 @@ class MadaraExtractor implements NovelSource {
 
     final document = html_parser.parse(body);
 
-    final title = document.querySelector('.post-title h1, .post-title h3, .post-title, .nhv-single-novel__title, h1')?.text.trim() ?? 'Untitled';
+    final rawTitle = document.querySelector('.post-title h1, .post-title h3, .post-title, .nhv-single-novel__title, h1')?.text.trim() ?? 'Untitled';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
 
     final img = document.querySelector('.summary_image img, .nhv-single-novel__cover img, .post-thumb img, .featured-image img, .item-thumb img, .wp-post-image');
     String cover = '';
@@ -314,7 +315,10 @@ class MadaraExtractor implements NovelSource {
           img.attributes['src'] ??
           '';
       cover = _cleanUrl(cover);
-      if (cover.contains('dflazy.jpg') || cover.contains('blank.gif') || cover.startsWith('data:')) {
+      if (cover.contains('dflazy.jpg') ||
+          cover.contains('blank.gif') ||
+          cover.startsWith('data:') ||
+          !TextCleaner.isValidCoverUrl(cover)) {
         cover = '';
       }
     }
@@ -358,7 +362,10 @@ class MadaraExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
       throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
     }
@@ -387,6 +394,9 @@ class MadaraExtractor implements NovelSource {
 
     // 1. Try static chapter parsing
     List<Chapter> chapters = _parseChaptersFromDoc(document, novelId);
+    if (chapters.isNotEmpty) {
+      onBatchLoaded?.call(List.from(chapters));
+    }
 
     // 2. Try newer Madara AJAX chapter endpoint ($novelUrl/ajax/chapters/)
     final cleanUrl = novelUrl.endsWith('/') ? novelUrl : '$novelUrl/';
@@ -403,6 +413,7 @@ class MadaraExtractor implements NovelSource {
         final ajaxChapters = _parseChaptersFromDoc(ajaxDoc, novelId);
         if (ajaxChapters.length > chapters.length) {
           chapters = ajaxChapters;
+          onBatchLoaded?.call(List.from(chapters));
         }
       }
     } catch (_) {}
@@ -432,6 +443,7 @@ class MadaraExtractor implements NovelSource {
           final ajaxChapters = _parseChaptersFromDoc(ajaxDoc, novelId);
           if (ajaxChapters.length > chapters.length) {
             chapters = ajaxChapters;
+            onBatchLoaded?.call(List.from(chapters));
           }
         }
       } catch (_) {}

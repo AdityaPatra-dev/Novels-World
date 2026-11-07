@@ -311,24 +311,27 @@ class NovelFullExtractor implements NovelSource {
 
     String title = '';
     for (final cand in titleCandidates) {
-      if (cand != null && cand.isNotEmpty && TextCleaner.isValidNovelTitle(cand, novelUrl)) {
-        title = cand;
-        break;
+      if (cand != null && cand.isNotEmpty) {
+        final cleaned = TextCleaner.cleanNovelTitle(cand);
+        if (cleaned.isNotEmpty && TextCleaner.isValidNovelTitle(cleaned, novelUrl)) {
+          title = cleaned;
+          break;
+        }
       }
     }
 
     if (title.isEmpty) {
       final docTitle = document.querySelector('title')?.text.trim() ?? '';
-      final cleanDocTitle = docTitle.split(RegExp(r'[-–|]')).first.replaceAll(RegExp(r'^(?:Read|Novel)\s+', caseSensitive: false), '').trim();
-      if (cleanDocTitle.isNotEmpty && TextCleaner.isValidNovelTitle(cleanDocTitle, novelUrl)) {
-        title = cleanDocTitle;
+      final cleaned = TextCleaner.cleanNovelTitle(docTitle);
+      if (cleaned.isNotEmpty && TextCleaner.isValidNovelTitle(cleaned, novelUrl)) {
+        title = cleaned;
       } else {
         title = 'Unknown Novel';
       }
     }
 
     final imgEl = document.querySelector(
-      '.book img, .desc img, .col-info-desc img, .pic img, .novel-cover img, figure img',
+      '.book img, .col-info-desc img, .pic img, .novel-cover img, .book-thumb img, .thumb img',
     );
     String coverUrl = '';
     if (imgEl != null) {
@@ -337,6 +340,9 @@ class NovelFullExtractor implements NovelSource {
           imgEl.attributes['src'] ??
           '';
       coverUrl = _cleanUrl(coverUrl);
+      if (!TextCleaner.isValidCoverUrl(coverUrl)) {
+        coverUrl = '';
+      }
     }
 
     String author = 'Unknown Author';
@@ -418,7 +424,10 @@ class NovelFullExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
       throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
     }
@@ -453,6 +462,9 @@ class NovelFullExtractor implements NovelSource {
 
     var chapters = parseChapterList(novelUrl, body);
     final seenUrls = chapters.map((c) => c.url).toSet();
+    if (chapters.isNotEmpty) {
+      onBatchLoaded?.call(List.from(chapters));
+    }
 
     // 1. If ajaxNovelId is present, ALWAYS query /ajax/chapter-archive?novelId=$ajaxNovelId
     // Because static page only has 50 chapters, while ajax contains ALL chapters!
@@ -465,6 +477,7 @@ class NovelFullExtractor implements NovelSource {
           if (ajaxChapters.length > chapters.length) {
             chapters = ajaxChapters;
             seenUrls.addAll(chapters.map((c) => c.url));
+            onBatchLoaded?.call(List.from(chapters));
           }
         }
       } catch (_) {}
@@ -519,6 +532,7 @@ class NovelFullExtractor implements NovelSource {
                     chapters.add(c);
                   }
                 }
+                onBatchLoaded?.call(List.from(chapters));
               } else {
                 break;
               }
@@ -565,6 +579,7 @@ class NovelFullExtractor implements NovelSource {
               } catch (_) {}
             }
           }
+          onBatchLoaded?.call(List.from(chapters));
         } catch (_) {}
       }
     } else {
@@ -599,6 +614,7 @@ class NovelFullExtractor implements NovelSource {
                   }
                 }
               }
+              onBatchLoaded?.call(List.from(chapters));
             } else {
               break;
             }

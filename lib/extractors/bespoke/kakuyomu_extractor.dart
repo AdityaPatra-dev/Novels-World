@@ -300,9 +300,10 @@ class KakuyomuExtractor implements NovelSource {
     }
 
     // HTML fallback
-    final title = doc.querySelector('h1, meta[property="og:title"]')?.attributes['content'] ??
+    final rawTitle = doc.querySelector('h1, meta[property="og:title"]')?.attributes['content'] ??
         doc.querySelector('h1')?.text.trim() ??
         'Untitled';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
 
     final author = doc.querySelector('a[href*="/users/"]')?.text.trim() ?? 'Unknown Author';
     final description = doc.querySelector('meta[property="og:description"]')?.attributes['content'] ??
@@ -311,6 +312,7 @@ class KakuyomuExtractor implements NovelSource {
 
     final ogImage = doc.querySelector('meta[property="og:image"]')?.attributes['content'] ??
         'https://cdn-static.kakuyomu.jp/works/$workId/ogimage.png';
+    final cleanCover = TextCleaner.isValidCoverUrl(ogImage) ? ogImage : '';
 
     return Novel(
       id: '${id}_$workId',
@@ -318,14 +320,17 @@ class KakuyomuExtractor implements NovelSource {
       title: title,
       author: author,
       description: description,
-      coverUrl: ogImage,
+      coverUrl: cleanCover,
       status: 'ONGOING',
       sourceUrl: novelUrl,
     );
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     String body = '';
     try {
       final resp = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -424,6 +429,9 @@ class KakuyomuExtractor implements NovelSource {
       );
     }
 
+    if (chapters.isNotEmpty) {
+      onBatchLoaded?.call(chapters);
+    }
     return chapters;
   }
 

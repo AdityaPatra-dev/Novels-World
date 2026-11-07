@@ -167,14 +167,18 @@ class RoyalRoadExtractor implements NovelSource {
   Novel parseNovelDetails(String novelUrl, String htmlContent) {
     final document = html_parser.parse(htmlContent);
 
-    final title = document.querySelector('h1.font-white, .fic-title h1, h1')?.text.trim() ?? 'Unknown Fiction';
+    final rawTitle = document.querySelector('h1.font-white, .fic-title h1, h1')?.text.trim() ?? 'Unknown Fiction';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
     final author = document.querySelector('h4.font-white span a, h4 span a, .fic-header a')?.text.trim() ?? 'Unknown Author';
 
-    final imgEl = document.querySelector('.cover-art-container img, .fic-header img');
+    final imgEl = document.querySelector('.cover-art-container img, img.cover-art');
     String coverUrl = '';
     if (imgEl != null) {
       coverUrl = imgEl.attributes['src'] ?? '';
       coverUrl = _cleanUrl(coverUrl);
+      if (!TextCleaner.isValidCoverUrl(coverUrl)) {
+        coverUrl = '';
+      }
     }
 
     String status = 'ONGOING';
@@ -214,7 +218,10 @@ class RoyalRoadExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
       throw Exception('Invalid fiction URL: $novelUrl is a genre or category link.');
     }
@@ -223,7 +230,9 @@ class RoyalRoadExtractor implements NovelSource {
     if (response.statusCode != 200) {
       throw Exception('Failed to load Royal Road chapter list: HTTP ${response.statusCode}');
     }
-    return parseChapterList(novelUrl, response.body);
+    final chs = parseChapterList(novelUrl, response.body);
+    if (chs.isNotEmpty) onBatchLoaded?.call(chs);
+    return chs;
   }
 
   List<Chapter> parseChapterList(String novelUrl, String htmlContent) {

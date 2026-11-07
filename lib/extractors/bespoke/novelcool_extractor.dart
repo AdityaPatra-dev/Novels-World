@@ -198,9 +198,10 @@ class NovelCoolExtractor implements NovelSource {
 
     final doc = html_parser.parse(body);
 
-    final title = doc.querySelector('h1.bookinfo-title, .bookinfo-title')?.text.trim() ??
+    final rawTitle = doc.querySelector('h1.bookinfo-title, .bookinfo-title')?.text.trim() ??
         doc.querySelector('title')?.text.split('-').first.trim() ??
         'Untitled';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
 
     // Author
     var author = doc.querySelector('.bookinfo-author span[itemprop="creator"], .bookinfo-author a')?.text.trim() ??
@@ -224,10 +225,13 @@ class NovelCoolExtractor implements NovelSource {
           img.attributes['data-src'] ??
           img.attributes['src'] ??
           '';
-      if (cover.contains('default_pic.jpg') || cover.startsWith('data:')) {
+      if (cover.contains('default_pic.jpg') || cover.startsWith('data:') || !TextCleaner.isValidCoverUrl(cover)) {
         cover = '';
       } else if (cover.isNotEmpty) {
         cover = Uri.parse(baseUrl).resolve(cover).toString();
+        if (!TextCleaner.isValidCoverUrl(cover)) {
+          cover = '';
+        }
       }
     }
 
@@ -256,7 +260,10 @@ class NovelCoolExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     String body = '';
     try {
       final resp = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -307,7 +314,11 @@ class NovelCoolExtractor implements NovelSource {
 
     // NovelCool lists chapters in reverse order (newest to oldest).
     // Invert to chronological order (Chapter 1 first) for optimal reading experience.
-    return chapters.reversed.toList();
+    final sorted = chapters.reversed.toList();
+    if (sorted.isNotEmpty) {
+      onBatchLoaded?.call(sorted);
+    }
+    return sorted;
   }
 
   @override

@@ -173,7 +173,8 @@ class ScribbleHubExtractor implements NovelSource {
   Novel parseNovelDetails(String novelUrl, String htmlContent) {
     final document = html_parser.parse(htmlContent);
 
-    final title = document.querySelector('.fic_title')?.text.trim() ?? 'Unknown Fiction';
+    final rawTitle = document.querySelector('.fic_title')?.text.trim() ?? 'Unknown Fiction';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
     final author = document.querySelector('.auth_name_fic a, .auth_name_fic')?.text.trim() ?? 'Unknown Author';
 
     final imgEl = document.querySelector('.fic_image img');
@@ -181,6 +182,9 @@ class ScribbleHubExtractor implements NovelSource {
     if (imgEl != null) {
       coverUrl = imgEl.attributes['src'] ?? imgEl.attributes['data-src'] ?? '';
       coverUrl = _cleanUrl(coverUrl);
+      if (!TextCleaner.isValidCoverUrl(coverUrl)) {
+        coverUrl = '';
+      }
     }
 
     String status = 'ONGOING';
@@ -220,7 +224,10 @@ class ScribbleHubExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
       throw Exception('Invalid novel URL: $novelUrl is a genre or category link.');
     }
@@ -295,6 +302,9 @@ class ScribbleHubExtractor implements NovelSource {
       }
     }
 
+    if (chapters.isNotEmpty) {
+      onBatchLoaded?.call(chapters);
+    }
     return chapters;
   }
 

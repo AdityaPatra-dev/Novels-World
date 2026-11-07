@@ -266,7 +266,8 @@ class ReadWnExtractor implements NovelSource {
 
   Novel parseNovelDetails(String novelUrl, String html) {
     final doc = html_parser.parse(html);
-    final title = doc.querySelector('h1, .novel-title, .title')?.text.trim() ?? 'Unknown Novel';
+    final rawTitle = doc.querySelector('h1, .novel-title, .title')?.text.trim() ?? 'Unknown Novel';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
 
     final authorEl = doc.querySelector('.author, span[itemprop="author"]');
     var author = authorEl?.text.replaceAll('Author:', '').replaceAll('\n', '').trim() ?? 'Unknown Author';
@@ -274,7 +275,7 @@ class ReadWnExtractor implements NovelSource {
     final descEl = doc.querySelector('.desc, .description, .summary');
     final desc = descEl?.text.trim() ?? '';
 
-    final imgEl = doc.querySelector('.cover img, .novel-cover img, .thumb img, img[itemprop="image"], img');
+    final imgEl = doc.querySelector('.cover img, .novel-cover img, .thumb img, img[itemprop="image"], .book-img img, .detail-thumb img');
     String coverUrl = '';
     if (imgEl != null) {
       coverUrl = imgEl.attributes['data-src'] ??
@@ -285,7 +286,7 @@ class ReadWnExtractor implements NovelSource {
         coverUrl = imgEl.attributes['data-src'] ?? imgEl.attributes['data-original'] ?? '';
       }
       coverUrl = _cleanUrl(coverUrl);
-      if (coverUrl.contains('placeholder') || coverUrl.startsWith('data:')) {
+      if (!TextCleaner.isValidCoverUrl(coverUrl)) {
         coverUrl = '';
       }
     }
@@ -306,7 +307,10 @@ class ReadWnExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     if (TextCleaner.isGenreOrCategoryUrl(novelUrl)) {
       throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
     }
@@ -330,6 +334,9 @@ class ReadWnExtractor implements NovelSource {
 
     var chapters = parseChapterList(novelUrl, body);
     final seenUrls = chapters.map((c) => c.url).toSet();
+    if (chapters.isNotEmpty) {
+      onBatchLoaded?.call(List.from(chapters));
+    }
 
     // Check for pagination on ReadWn (e.g. .pagination a, #chpagedlist a, fy.php pages)
     final doc = html_parser.parse(body);
@@ -361,6 +368,7 @@ class ReadWnExtractor implements NovelSource {
               chapters.add(ch);
             }
           }
+          onBatchLoaded?.call(List.from(chapters));
         }
       } catch (_) {
         break;

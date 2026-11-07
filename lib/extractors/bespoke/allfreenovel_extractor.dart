@@ -195,7 +195,8 @@ class AllFreeNovelExtractor implements NovelSource {
 
     final doc = html_parser.parse(html);
 
-    final title = doc.querySelector('h1')?.text.trim() ?? 'Untitled';
+    final rawTitle = doc.querySelector('h1')?.text.trim() ?? 'Untitled';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
 
     // Author
     String author = 'Unknown Author';
@@ -212,6 +213,9 @@ class AllFreeNovelExtractor implements NovelSource {
       if (src != null && src.isNotEmpty) {
         coverUrl = _resolveUrl(src);
       }
+    }
+    if (!TextCleaner.isValidCoverUrl(coverUrl)) {
+      coverUrl = '';
     }
 
     // Synopsis
@@ -246,7 +250,10 @@ class AllFreeNovelExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     String html = '';
     try {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
@@ -296,6 +303,9 @@ class AllFreeNovelExtractor implements NovelSource {
       index++;
     }
 
+    if (chapters.isNotEmpty) {
+      onBatchLoaded?.call(chapters);
+    }
     return chapters;
   }
 

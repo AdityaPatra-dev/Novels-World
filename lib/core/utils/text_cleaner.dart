@@ -171,6 +171,86 @@ class TextCleaner {
     return true;
   }
 
+  /// Cleans, normalizes, and strips promotional/SEO clutter from novel titles.
+  /// Eliminates prefixes like "Read [Title] Online for Free", trailing watermarks
+  /// like "- NovelFull", leaked badges like "HOT", "NEW", "COMPLETED", and author suffixes.
+  static String cleanNovelTitle(String rawTitle) {
+    if (rawTitle.isEmpty) return '';
+
+    String t = rawTitle;
+
+    // Decode common HTML entities if leaked through
+    t = t
+        .replaceAll('&amp;', '&')
+        .replaceAll('&#039;', "'")
+        .replaceAll('&apos;', "'")
+        .replaceAll('&quot;', '"')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&nbsp;', ' ');
+
+    // Normalize unicode quotes and dashes
+    t = t
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('’', "'")
+        .replaceAll('‘', "'")
+        .replaceAll('—', ' - ')
+        .replaceAll('–', ' - ');
+
+    // Replace newlines and extra spaces with a single space
+    t = t.replaceAll(RegExp(r'[\r\n\t]+'), ' ').replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+
+    // 1. Strip leading promotional prefixes:
+    // e.g. "Read Novel Shadow Slave", "Read Shadow Slave", "Free Novel Shadow Slave", "[HOT] Shadow Slave"
+    t = t.replaceAll(RegExp(r'^(?:Read\s+)?Novel\s+', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'^Read\s+', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'^Free\s+(?:Web\s*)?Novel\s+', caseSensitive: false), '');
+    t = t.replaceAll(
+      RegExp(r'^\[(?:HOT|NEW|RAW|TRANSLATED|COMPLETED|ONGOING|WEB\s*NOVEL|LIGHT\s*NOVEL|WN|LN)\]\s*', caseSensitive: false),
+      '',
+    );
+
+    // 2. Strip trailing "Online for Free by [Author]" or "Online Free by [Author]" (AllFreeNovel / FreeWebNovel format)
+    t = t.replaceAll(RegExp(r'\s+Online\s+(?:for\s+)?Free(?:\s+by\s+.*)?$', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'\s+Free\s+Online(?:\s+by\s+.*)?$', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'\s+Novel\s+Online(?:\s+by\s+.*)?$', caseSensitive: false), '');
+    t = t.replaceAll(RegExp(r'\s+Online(?:\s+by\s+.*)?$', caseSensitive: false), '');
+
+    // 3. Strip trailing site watermarks, aggregator branding, and domain names:
+    // e.g. "Shadow Slave - NovelFull", "Solo Leveling | ReadNovelFull", "Lord of the Mysteries - Free Web Novel"
+    t = t.replaceAll(
+      RegExp(
+        r'\s*[-|~•]\s*(?:(?:Read|Free|All)\s*)?(?:Web\s*|Light\s*)?(?:Novel(?:Full|Bin|Cool|Read|Updates|Pub|Fire|Spot)?|BoxNovel|LibRead|WuxiaBox|ReadWN|KolNovel|KnoxT|MangaPeak|AsuraScans|RoyalRoad|ScribbleHub|Kakuyomu)(?:\.com|\.net|\.org)?\s*$',
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    // 4. Strip trailing bracketed format tags:
+    // e.g. "(Web Novel)", "(Light Novel)", "(WN)", "(LN)", "(Raw)", "(Translated)", "[Completed]"
+    t = t.replaceAll(
+      RegExp(
+        r'\s*[\(\[](?:Web\s*Novel|Light\s*Novel|WN|LN|Raw|Translated|Completed|Ongoing|Official)[\)\]]\s*$',
+        caseSensitive: false,
+      ),
+      '',
+    );
+
+    // 5. Strip trailing status words leaked from HTML badge spans:
+    // e.g. "Solo Leveling HOT", "Martial Peak COMPLETED"
+    t = t.replaceAll(RegExp(r'\s+(?:HOT|NEW|COMPLETED|ONGOING)$', caseSensitive: false), '');
+
+    // 6. Strip trailing chapter range in title:
+    // e.g. "Shadow Slave - Chapter 1 - 2500" or "Shadow Slave - 1 - 2500"
+    t = t.replaceAll(RegExp(r'\s*[-|]\s*(?:Chapter\s*)?\d+(?:\s*[-–]\s*\d+)?\s*$', caseSensitive: false), '');
+
+    // Clean any trailing or leading punctuation leftover from stripping
+    t = t.replaceAll(RegExp(r'^[-–|~:;\s]+'), '').replaceAll(RegExp(r'[-–|~:;\s]+$'), '').trim();
+
+    return t.isNotEmpty ? t : rawTitle.trim();
+  }
+
   /// Cleans, normalizes, and smooths a sentence specifically for high-quality TTS prosody.
   /// Expands abbreviations, eliminates awkward symbols, and ensures natural start/end cadence.
   static String prepareSentenceForSpeech(String rawSentence) {
@@ -238,6 +318,58 @@ class TextCleaner {
     }
 
     return s.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  }
+
+  /// Checks whether a cover URL is a valid, high-quality novel book cover
+  /// rather than a website logo, header banner, icon, avatar, or dummy placeholder.
+  static bool isValidCoverUrl(String? url) {
+    if (url == null) return false;
+    final u = url.trim().toLowerCase();
+    if (u.isEmpty || u == '#' || u == '/') return false;
+    if (u.startsWith('data:')) return false;
+
+    // Filter out common site logos, headers, favicons, avatars, banners, and placeholders
+    final badPatterns = [
+      'logo',
+      'favicon',
+      'avatar',
+      'dflazy',
+      'placeholder',
+      'blank.gif',
+      'dummy',
+      'default-cover',
+      'default_cover',
+      'no-cover',
+      'nocover',
+      'anon-art',
+      'site-icon',
+      'app-icon',
+      'header-banner',
+      'top-banner',
+      'banner.',
+      'banner-',
+      'badge',
+      'loading',
+      'spinner',
+      'icon-',
+      '-icon.',
+      'icon.',
+    ];
+
+    for (final pattern in badPatterns) {
+      if (u.contains(pattern)) return false;
+    }
+
+    // Must be a valid http/https or file URL or relative path
+    if (!u.startsWith('http://') &&
+        !u.startsWith('https://') &&
+        !u.startsWith('file://') &&
+        !u.startsWith('//') &&
+        !u.startsWith('/')) {
+      return false;
+    }
+
+    return true;
   }
 }
 

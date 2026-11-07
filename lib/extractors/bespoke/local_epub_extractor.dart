@@ -75,7 +75,10 @@ class LocalEpubExtractor implements NovelSource {
   }
 
   @override
-  Future<List<Chapter>> getChapterList(String novelUrl) async {
+  Future<List<Chapter>> getChapterList(
+    String novelUrl, {
+    void Function(List<Chapter> batch)? onBatchLoaded,
+  }) async {
     final uri = Uri.parse(novelUrl);
     final path = uri.scheme == 'file' ? uri.toFilePath() : novelUrl;
 
@@ -83,9 +86,13 @@ class LocalEpubExtractor implements NovelSource {
     if (await metaFile.exists()) {
       final json = jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
       final rawChapters = json['chapters'] as List;
-      return rawChapters
+      final chs = rawChapters
           .map((c) => Chapter.fromJson(c as Map<String, dynamic>))
           .toList();
+      if (chs.isNotEmpty) {
+        onBatchLoaded?.call(chs);
+      }
+      return chs;
     }
 
     return [];

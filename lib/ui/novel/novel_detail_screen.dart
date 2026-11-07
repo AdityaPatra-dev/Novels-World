@@ -18,6 +18,7 @@ import '../widgets/download_range_dialog.dart';
 import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/text_cleaner.dart';
 import '../../core/utils/chapter_range_parser.dart';
+import '../../core/utils/http_client_factory.dart';
 
 class NovelDetailScreen extends StatefulWidget {
   final Novel novel;
@@ -480,7 +481,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             errorBuilder: (context, error, stackTrace) => Container(color: Colors.black87),
                           )
                         : Image.network(
-                            _sanitizedCoverUrl,
+                            kIsWeb ? getWebProxiedImageUrl(_sanitizedCoverUrl) : _sanitizedCoverUrl,
                             headers: _imageHeaders,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) => Container(color: Colors.black87),
@@ -518,7 +519,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                         errorBuilder: (context, error, stackTrace) => _buildPlaceholderCover(),
                                       )
                                     : Image.network(
-                                        _sanitizedCoverUrl,
+                                        kIsWeb ? getWebProxiedImageUrl(_sanitizedCoverUrl) : _sanitizedCoverUrl,
                                         headers: _imageHeaders,
                                         fit: BoxFit.cover,
                                         errorBuilder: (context, error, stackTrace) => _buildPlaceholderCover(),

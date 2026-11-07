@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/novel.dart';
 import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/text_cleaner.dart';
+import '../../core/utils/http_client_factory.dart';
 
 import 'package:flutter/services.dart';
 import 'source_webview_screen.dart';
@@ -89,7 +90,7 @@ class NovelCard extends StatelessWidget {
                                 errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
                               )
                             : Image.network(
-                                cleanUrl,
+                                kIsWeb ? getWebProxiedImageUrl(cleanUrl) : cleanUrl,
                                 headers: _imageHeaders,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),

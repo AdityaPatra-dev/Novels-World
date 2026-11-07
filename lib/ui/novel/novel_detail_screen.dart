@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/novel.dart';
@@ -472,7 +473,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 fit: StackFit.expand,
                 children: [
                   if (_sanitizedCoverUrl.isNotEmpty)
-                    (_sanitizedCoverUrl.startsWith('file://')
+                    ((!kIsWeb && _sanitizedCoverUrl.startsWith('file://'))
                         ? Image.file(
                             File(Uri.parse(_sanitizedCoverUrl).toFilePath()),
                             fit: BoxFit.cover,
@@ -510,7 +511,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             width: 100,
                             height: 140,
                             child: _sanitizedCoverUrl.isNotEmpty
-                                ? (_sanitizedCoverUrl.startsWith('file://')
+                                ? ((!kIsWeb && _sanitizedCoverUrl.startsWith('file://'))
                                     ? Image.file(
                                         File(Uri.parse(_sanitizedCoverUrl).toFilePath()),
                                         fit: BoxFit.cover,
@@ -571,34 +572,37 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               ),
             ),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.folder_special_rounded, color: Color(0xFFA78BFA)),
-                tooltip: 'Storage Folder & Chapters',
-                onPressed: () => NovelStorageModal.show(context, _novel),
-              ),
-              IconButton(
-                icon: const Icon(Icons.public),
-                tooltip: 'Open in WebView / Bypass Cloudflare',
-                onPressed: () async {
-                  final res = await Navigator.push<bool>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => SourceWebViewScreen(
-                        initialUrl: _novel.sourceUrl,
-                        sourceName: _novel.title,
+              if (!kIsWeb)
+                IconButton(
+                  icon: const Icon(Icons.folder_special_rounded, color: Color(0xFFA78BFA)),
+                  tooltip: 'Storage Folder & Chapters',
+                  onPressed: () => NovelStorageModal.show(context, _novel),
+                ),
+              if (!kIsWeb)
+                IconButton(
+                  icon: const Icon(Icons.public),
+                  tooltip: 'Open in WebView / Bypass Cloudflare',
+                  onPressed: () async {
+                    final res = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SourceWebViewScreen(
+                          initialUrl: _novel.sourceUrl,
+                          sourceName: _novel.title,
+                        ),
                       ),
-                    ),
-                  );
-                  if (res == true && mounted) {
-                    _fetchDetails();
-                  }
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.download),
-                tooltip: 'Download Options',
-                onPressed: _chapters.isNotEmpty ? _showDownloadModal : null,
-              ),
+                    );
+                    if (res == true && mounted) {
+                      _fetchDetails();
+                    }
+                  },
+                ),
+              if (!kIsWeb)
+                IconButton(
+                  icon: const Icon(Icons.download),
+                  tooltip: 'Download Options',
+                  onPressed: _chapters.isNotEmpty ? _showDownloadModal : null,
+                ),
               IconButton(
                 icon: Icon(
                   isInLibrary ? Icons.bookmark : Icons.bookmark_border,
@@ -616,7 +620,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Active Download Progress Banner
-                  if (downloadService.isProcessing && downloadService.queue.any((t) => t.novel.id == _novel.id)) ...[
+                  if (!kIsWeb && downloadService.isProcessing && downloadService.queue.any((t) => t.novel.id == _novel.id)) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -685,19 +689,21 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: _chapters.isNotEmpty ? _showDownloadModal : null,
-                        icon: const Icon(Icons.download_rounded, size: 18),
-                        label: const Text('Download'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF28283C),
-                          foregroundColor: const Color(0xFFA78BFA),
-                          side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      if (!kIsWeb) ...[
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: _chapters.isNotEmpty ? _showDownloadModal : null,
+                          icon: const Icon(Icons.download_rounded, size: 18),
+                          label: const Text('Download'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF28283C),
+                            foregroundColor: const Color(0xFFA78BFA),
+                            side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
                         ),
-                      ),
+                      ],
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
                         onPressed: () => libraryProvider.toggleLibrary(_novel),
@@ -955,28 +961,29 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         runSpacing: 10,
                         alignment: WrapAlignment.center,
                         children: [
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              final res = await Navigator.push<bool>(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SourceWebViewScreen(
-                                    initialUrl: _novel.sourceUrl,
-                                    sourceName: _novel.title,
+                          if (!kIsWeb)
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final res = await Navigator.push<bool>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => SourceWebViewScreen(
+                                      initialUrl: _novel.sourceUrl,
+                                      sourceName: _novel.title,
+                                    ),
                                   ),
-                                ),
-                              );
-                              if (res == true && mounted) {
-                                _fetchDetails();
-                              }
-                            },
-                            icon: const Icon(Icons.security, size: 16),
-                            label: const Text('Solve in WebView'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF8B5CF6),
-                              foregroundColor: Colors.white,
+                                );
+                                if (res == true && mounted) {
+                                  _fetchDetails();
+                                }
+                              },
+                              icon: const Icon(Icons.security, size: 16),
+                              label: const Text('Solve in WebView'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6),
+                                foregroundColor: Colors.white,
+                              ),
                             ),
-                          ),
                           OutlinedButton(
                             onPressed: _fetchDetails,
                             child: const Text('Retry'),
@@ -1105,20 +1112,22 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (isDownloading)
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF8B5CF6)),
-                            )
-                          else if (isDownloaded)
-                            const Icon(Icons.check_circle, size: 18, color: Colors.greenAccent)
-                          else
-                            IconButton(
-                              icon: const Icon(Icons.download_outlined, size: 18, color: Colors.white38),
-                              tooltip: 'Download Chapter',
-                              onPressed: () => downloadService.enqueueChapters(_novel, [chapter]),
-                            ),
+                          if (!kIsWeb) ...[
+                            if (isDownloading)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF8B5CF6)),
+                              )
+                            else if (isDownloaded)
+                              const Icon(Icons.check_circle, size: 18, color: Colors.greenAccent)
+                            else
+                              IconButton(
+                                icon: const Icon(Icons.download_outlined, size: 18, color: Colors.white38),
+                                tooltip: 'Download Chapter',
+                                onPressed: () => downloadService.enqueueChapters(_novel, [chapter]),
+                              ),
+                          ],
                           PopupMenuButton<String>(
                             icon: const Icon(Icons.more_vert, size: 16, color: Colors.white30),
                             tooltip: 'Chapter Options',

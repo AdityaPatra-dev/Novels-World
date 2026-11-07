@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/reader_settings.dart';
@@ -61,11 +62,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.system_update_rounded, color: Color(0xFFA78BFA)),
-            tooltip: 'Check for Updates',
-            onPressed: () => showAppUpdateDialog(context),
-          ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.system_update_rounded, color: Color(0xFFA78BFA)),
+              tooltip: 'Check for Updates',
+              onPressed: () => showAppUpdateDialog(context),
+            ),
         ],
       ),
       body: ListView(
@@ -188,52 +190,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Section 3: Offline Storage & Cache (Phase 3 Deliverable)
-          _buildSectionHeader('Offline Storage & Chapter Cache'),
-          Card(
-            color: const Color(0xFF181822),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Cached Offline Chapters', style: TextStyle(fontSize: 14)),
-                      Text(
-                        _isLoadingCache ? '...' : '$_cachedChapters chapters',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Storage Space Used', style: TextStyle(fontSize: 14)),
-                      Text(
-                        _isLoadingCache ? '...' : '${_cacheSizeMb.toStringAsFixed(2)} MB',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6), fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: _cachedChapters > 0 ? _clearCache : null,
-                    icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
-                    label: const Text('Clear All Chapter Cache', style: TextStyle(color: Colors.redAccent)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.redAccent),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          // Section 3: Offline Storage & Cache (Mobile Only)
+          if (!kIsWeb) ...[
+            _buildSectionHeader('Offline Storage & Chapter Cache'),
+            Card(
+              color: const Color(0xFF181822),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Cached Offline Chapters', style: TextStyle(fontSize: 14)),
+                        Text(
+                          _isLoadingCache ? '...' : '$_cachedChapters chapters',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Storage Space Used', style: TextStyle(fontSize: 14)),
+                        Text(
+                          _isLoadingCache ? '...' : '${_cacheSizeMb.toStringAsFixed(2)} MB',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6), fontSize: 14),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: _cachedChapters > 0 ? _clearCache : null,
+                      icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+                      label: const Text('Clear All Chapter Cache', style: TextStyle(color: Colors.redAccent)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.redAccent),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
+          ],
 
           // Section 4: App Information
           _buildSectionHeader('About Novels-World'),
@@ -265,29 +269,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'High-performance offline-first novel reader with Universal Madara extractor, 5 neural TTS engines, and batch chapter downloader.',
                     style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
                   ),
-                  const Divider(color: Colors.white10, height: 24),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
+                  if (!kIsWeb) ...[
+                    const Divider(color: Colors.white10, height: 24),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.system_update_rounded, color: Color(0xFF8B5CF6), size: 20),
                       ),
-                      child: const Icon(Icons.system_update_rounded, color: Color(0xFF8B5CF6), size: 20),
-                    ),
-                    title: const Text('Check for Updates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    subtitle: const Text('Check GitHub Releases for new updates', style: TextStyle(fontSize: 12, color: Colors.white54)),
-                    trailing: OutlinedButton(
-                      onPressed: () => showAppUpdateDialog(context),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF8B5CF6)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      title: const Text('Check for Updates', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      subtitle: const Text('Check GitHub Releases for new updates', style: TextStyle(fontSize: 12, color: Colors.white54)),
+                      trailing: OutlinedButton(
+                        onPressed: () => showAppUpdateDialog(context),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF8B5CF6)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        ),
+                        child: const Text('Check', style: TextStyle(color: Color(0xFFA78BFA), fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
-                      child: const Text('Check', style: TextStyle(color: Color(0xFFA78BFA), fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

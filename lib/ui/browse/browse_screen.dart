@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -218,7 +219,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
       appBar: AppBar(
         title: const Text('Browse Novels', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          if (_currentSource.id == 'local_epub') ...[
+          if (!kIsWeb && _currentSource.id == 'local_epub') ...[
             IconButton(
               icon: const Icon(Icons.file_upload_outlined, color: Color(0xFFA78BFA)),
               tooltip: 'Import EPUB File',
@@ -242,16 +243,18 @@ class _BrowseScreenState extends State<BrowseScreen> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.system_update_rounded, size: 22, color: Color(0xFFA78BFA)),
-            tooltip: 'Check for Updates',
-            onPressed: () => showAppUpdateDialog(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.public, size: 22),
-            tooltip: 'Open in WebView / Bypass Cloudflare',
-            onPressed: _openSourceWebView,
-          ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.system_update_rounded, size: 22, color: Color(0xFFA78BFA)),
+              tooltip: 'Check for Updates',
+              onPressed: () => showAppUpdateDialog(context),
+            ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.public, size: 22),
+              tooltip: 'Open in WebView / Bypass Cloudflare',
+              onPressed: _openSourceWebView,
+            ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(115),
@@ -392,15 +395,16 @@ class _BrowseScreenState extends State<BrowseScreen> {
                 runSpacing: 10,
                 alignment: WrapAlignment.center,
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: _openSourceWebView,
-                    icon: const Icon(Icons.security, size: 16),
-                    label: Text(isCloudflare ? 'Solve Cloudflare Challenge' : 'Open in WebView'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B5CF6),
-                      foregroundColor: Colors.white,
+                  if (!kIsWeb)
+                    ElevatedButton.icon(
+                      onPressed: _openSourceWebView,
+                      icon: const Icon(Icons.security, size: 16),
+                      label: Text(isCloudflare ? 'Solve Cloudflare Challenge' : 'Open in WebView'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        foregroundColor: Colors.white,
+                      ),
                     ),
-                  ),
                   OutlinedButton.icon(
                     onPressed: _loadPopular,
                     icon: const Icon(Icons.refresh, size: 16),
@@ -463,30 +467,32 @@ class _BrowseScreenState extends State<BrowseScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, height: 1.4),
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: _importEpubFile,
-                  icon: const Icon(Icons.file_upload_outlined, size: 18),
-                  label: const Text('Import EPUB File', style: TextStyle(fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                if (!kIsWeb) ...[
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: _importEpubFile,
+                    icon: const Icon(Icons.file_upload_outlined, size: 18),
+                    label: const Text('Import EPUB File', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B5CF6),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _scanDeviceEpubs,
-                  icon: const Icon(Icons.folder_open_outlined, size: 18),
-                  label: const Text('Scan Downloads Folder'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFA78BFA),
-                    side: const BorderSide(color: Color(0xFF8B5CF6)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _scanDeviceEpubs,
+                    icon: const Icon(Icons.folder_open_outlined, size: 18),
+                    label: const Text('Scan Downloads Folder'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFA78BFA),
+                      side: const BorderSide(color: Color(0xFF8B5CF6)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

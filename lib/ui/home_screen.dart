@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../data/download_service.dart';
@@ -24,18 +25,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final List<Widget> pages = [
       LibraryScreen(onBrowseTap: () => setState(() => _currentIndex = 1)),
       const BrowseScreen(),
-      DownloadsScreen(onBrowseTap: () => setState(() => _currentIndex = 1)),
+      if (!kIsWeb) DownloadsScreen(onBrowseTap: () => setState(() => _currentIndex = 1)),
       const ProfileScreen(),
       const SettingsScreen(),
     ];
 
+    final safeIndex = _currentIndex.clamp(0, pages.length - 1);
+
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
+        index: safeIndex,
         children: pages,
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
+        selectedIndex: safeIndex,
         onDestinationSelected: (index) => setState(() => _currentIndex = index),
         destinations: [
           const NavigationDestination(
@@ -48,25 +51,26 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedIcon: Icon(Icons.explore),
             label: 'Browse',
           ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: downloadService.isProcessing || downloadService.queue.isNotEmpty,
-              label: Text(
-                '${downloadService.activeQueueCount}',
-                style: const TextStyle(fontSize: 10),
+          if (!kIsWeb)
+            NavigationDestination(
+              icon: Badge(
+                isLabelVisible: downloadService.isProcessing || downloadService.queue.isNotEmpty,
+                label: Text(
+                  '${downloadService.activeQueueCount}',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                child: const Icon(Icons.download_outlined),
               ),
-              child: const Icon(Icons.download_outlined),
-            ),
-            selectedIcon: Badge(
-              isLabelVisible: downloadService.isProcessing || downloadService.queue.isNotEmpty,
-              label: Text(
-                '${downloadService.activeQueueCount}',
-                style: const TextStyle(fontSize: 10),
+              selectedIcon: Badge(
+                isLabelVisible: downloadService.isProcessing || downloadService.queue.isNotEmpty,
+                label: Text(
+                  '${downloadService.activeQueueCount}',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                child: const Icon(Icons.download),
               ),
-              child: const Icon(Icons.download),
+              label: 'Downloads',
             ),
-            label: 'Downloads',
-          ),
           const NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),

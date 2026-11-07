@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/models/novel.dart';
 import '../../core/services/webview_session_manager.dart';
@@ -81,7 +82,7 @@ class NovelCard extends StatelessWidget {
                     width: double.infinity,
                     height: double.infinity,
                     child: cleanUrl.isNotEmpty
-                        ? (cleanUrl.startsWith('file://')
+                        ? ((!kIsWeb && cleanUrl.startsWith('file://'))
                             ? Image.file(
                                 File(Uri.parse(cleanUrl).toFilePath()),
                                 fit: BoxFit.cover,
@@ -96,11 +97,12 @@ class NovelCard extends StatelessWidget {
                         : _buildPlaceholder(),
                   ),
                 ),
-                // Top-Left: Novel Storage Folder Inspector
-                Positioned(
-                  top: 6,
-                  left: 6,
-                  child: Container(
+                // Top-Left: Novel Storage Folder Inspector (Mobile Only)
+                if (!kIsWeb)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.70),
                       borderRadius: BorderRadius.circular(6),

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/epub_service.dart';
@@ -50,16 +51,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.system_update_rounded, color: Color(0xFFA78BFA)),
-            tooltip: 'Check for Updates',
-            onPressed: () => showAppUpdateDialog(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.file_upload_outlined),
-            tooltip: 'Import EPUB Book',
-            onPressed: _importEpub,
-          ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.system_update_rounded, color: Color(0xFFA78BFA)),
+              tooltip: 'Check for Updates',
+              onPressed: () => showAppUpdateDialog(context),
+            ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined),
+              tooltip: 'Import EPUB Book',
+              onPressed: _importEpub,
+            ),
         ],
         bottom: allNovels.isNotEmpty
             ? PreferredSize(
@@ -73,8 +76,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         _buildFilterChip(0, 'All (${allNovels.length})'),
                         const SizedBox(width: 8),
                         _buildFilterChip(1, 'Reading (${allNovels.where((n) => n.lastReadChapterId != null).length})'),
-                        const SizedBox(width: 8),
-                        _buildFilterChip(2, 'Downloaded (${downloadedNovels.length})'),
+                        if (!kIsWeb) ...[
+                          const SizedBox(width: 8),
+                          _buildFilterChip(2, 'Downloaded (${downloadedNovels.length})'),
+                        ],
                         const SizedBox(width: 8),
                         _buildFilterChip(3, 'Completed (${allNovels.where((n) => n.status == 'COMPLETED').length})'),
                       ],
@@ -120,17 +125,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: _importEpub,
-                          icon: const Icon(Icons.file_upload_outlined),
-                          label: const Text('Import EPUB'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Color(0xFF8B5CF6)),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        if (!kIsWeb)
+                          OutlinedButton.icon(
+                            onPressed: _importEpub,
+                            icon: const Icon(Icons.file_upload_outlined),
+                            label: const Text('Import EPUB'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Color(0xFF8B5CF6)),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ],

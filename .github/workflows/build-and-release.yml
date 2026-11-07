@@ -244,7 +244,8 @@ jobs:
             * **🪟 Windows (x64):** `Novels-World-Windows-x64.zip`
             * **🍎 macOS (Universal):** `Novels-World-macOS-Universal.zip`
 
-            ### ✨ What's New in v1.5.0
+            ### ✨ What's New in v1.5.1
+            * **🔑 Permanent Release Keystore Signing:** Fixed package conflict (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) errors during in-app updates and manual APK installs by introducing a persistent project release certificate.
             * **📥 Advanced Batch Downloader & Range Syntax:** Download any custom range of chapters (e.g. `1-40`, `1-30,40-50`, `1,2`, or `30`) with dedicated Downloads tab, queue badge, pause/resume, and storage inspector.
             * **⚡ Progressive Chapter Batch Streaming:** Instant rendering for massive 3,000+ chapter novels—page 1 chapters stream in ~200ms without waiting for full catalog pagination.
             * **💾 Instant Return Loading (0ms):** Automatic disk caching of chapter lists and novel details in StorageService for instantaneous retrieval.

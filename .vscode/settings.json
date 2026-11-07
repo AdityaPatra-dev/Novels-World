@@ -1,0 +1,33 @@
+{
+  // Java & Gradle: Disable Java language server from treating Flutter android/ subproject as a pure Eclipse Java project
+  "java.import.gradle.enabled": false,
+  "java.import.maven.enabled": false,
+  "java.autobuild.enabled": false,
+  "java.server.launchMode": "LightWeight",
+  "java.completion.enabled": false,
+  "java.errors.incompleteClasspath.severity": "ignore",
+  "gradle.autoDetect": "off",
+  "gradle.nestedProjects": false,
+
+  // CMake Tools: Disable CMake automatic configure and prompts for linux/windows desktop folders
+  "cmake.configureOnOpen": false,
+  "cmake.autoSelectActiveFolder": false,
+  "cmake.ignoreCMakeListsMissing": true,
+  "cmake.showConfigureWithDebuggerNotification": false,
+
+  // C/C++: Disable intrusive error squiggles for native desktop runners
+  "C_Cpp.errorSquiggles": "disabled",
+
+  // Dart & Flutter optimizations
+  "dart.openDevTools": "never",
+  "dart.warnWhenScanningOncePerWorkspace": false,
+
+  // File watcher excludes
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/build/**": true,
+    "**/.dart_tool/**": true,
+    "**/.gradle/**": true
+  }
+}

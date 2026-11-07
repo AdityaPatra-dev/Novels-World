@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "novels-world-app",
     "public": "build/web",
     "ignore": [
       "firebase.json",

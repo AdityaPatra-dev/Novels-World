@@ -54,6 +54,10 @@ jobs:
           flutter test \
             test/extractors_test.dart \
             test/download_service_test.dart \
+            test/chapter_range_parser_test.dart \
+            test/cover_image_validation_test.dart \
+            test/text_cleaner_title_test.dart \
+            test/reading_progress_test.dart \
             test/epub_reader_test.dart \
             test/global_search_test.dart \
             test/literature_extractors_test.dart \
@@ -240,20 +244,16 @@ jobs:
             * **🪟 Windows (x64):** `Novels-World-Windows-x64.zip`
             * **🍎 macOS (Universal):** `Novels-World-macOS-Universal.zip`
 
-            ### ✨ What's New in v1.4.0
+            ### ✨ What's New in v1.5.0
+            * **📥 Advanced Batch Downloader & Range Syntax:** Download any custom range of chapters (e.g. `1-40`, `1-30,40-50`, `1,2`, or `30`) with dedicated Downloads tab, queue badge, pause/resume, and storage inspector.
+            * **⚡ Progressive Chapter Batch Streaming:** Instant rendering for massive 3,000+ chapter novels—page 1 chapters stream in ~200ms without waiting for full catalog pagination.
+            * **💾 Instant Return Loading (0ms):** Automatic disk caching of chapter lists and novel details in StorageService for instantaneous retrieval.
+            * **🎨 Clean Novel Titles & Covers:** Universal title sanitizer removing promotional SEO clutter ("Read Online for Free", watermarks) and preventing cards from loading website logos.
+            * **🔍 In-Place Chapter Search & Direct Jump:** Filter thousands of chapters in real-time or leap directly to any chapter number.
             * **🚀 In-App GitHub Auto-Updater:** Easily check for updates directly inside the app with real-time download progress and native one-tap Android APK installation.
             * **🎙️ Pure Dart Microsoft Edge Neural Engine (v2 DRM):** Direct WebSocket client with mathematical SHA-256 v2 DRM token generation, completely eliminating 403 Forbidden errors and robotic audio buzzing.
-            * **📖 Seamless Gapless Cross-Chapter Playback:** Continuous reading across chapter boundaries with smart 2-3 line prefetching and strict UI isolation.
-            * **⚡ Linear Deterministic Audio Pipeline:** Robust sequential audio pipeline eliminating Media3 shuffle order errors and duplicate paragraph replays.
-            * **🩺 Daily Automated Health Checks & GitHub Alerts:** Continuous monitoring workflow with automated GitHub issue reporting for web novel sources and TTS services.
+            * **📖 Seamless Gapless Cross-Chapter Playback:** Continuous reading across chapter boundaries with smart prefetching and strict UI isolation.
             * **📚 Offline Local EPUB Books:** Import any DRM-free `.epub` file into your library for full offline reading, chapter navigation, and font/theme customization.
-            * **📁 Folder Storage Inspector:** Deep-inspect disk storage, cached chapter files, and local paths directly from any novel card.
-            * **🎭 5 Specialized AI Vocal Engines:** 
-              - *Microsoft Neural HD (Studio AI)*
-              - *Kokoro-82M (Audiophile Literature Drama)*
-              - *Piper Fast Neural (Speed Reading 1.25x–2.5x)*
-              - *Sherpa-Matcha (Xianxia & Asian CJK Phonetics)*
-              - *Device Native (Offline Hardware)*
             * **🌐 40+ Web Novel Catalogs:** Support for WordPress Madara, Themesia LightNovelWP, NovelFull, ReadWN, Fictioneer, Project Gutenberg, AllFreeNovel, RoliaScan, and Asura Scans.
 
   publish-docker:

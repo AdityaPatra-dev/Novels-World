@@ -6,6 +6,7 @@ import 'core/services/auth_service.dart';
 import 'core/services/cloud_sync_service.dart';
 import 'core/services/webview_session_manager.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/url_strategy.dart';
 import 'data/storage_service.dart';
 import 'data/download_service.dart';
 import 'firebase_options.dart';
@@ -24,6 +25,7 @@ class AppHttpOverrides extends HttpOverrides {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  setPathUrlStrategy();
   HttpOverrides.global = AppHttpOverrides();
 
   try {

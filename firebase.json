@@ -1,1 +1,40 @@
-{"firestore":{"rules":"firestore.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"novels-world-cloud-85457","appId":"1:705215795092:android:34e67b0f438fcdacaf8981","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"novels-world-cloud-85457","configurations":{"android":"1:705215795092:android:34e67b0f438fcdacaf8981","web":"1:705215795092:web:a4731c348c024c8eaf8981"}}}}}}
+{
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "cleanUrls": true,
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "novels-world-cloud-85457",
+          "appId": "1:705215795092:android:34e67b0f438fcdacaf8981",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "novels-world-cloud-85457",
+          "configurations": {
+            "android": "1:705215795092:android:34e67b0f438fcdacaf8981",
+            "web": "1:705215795092:web:a4731c348c024c8eaf8981"
+          }
+        }
+      }
+    }
+  }
+}

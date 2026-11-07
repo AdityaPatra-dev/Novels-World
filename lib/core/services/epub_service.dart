@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
@@ -342,6 +343,9 @@ class EpubService {
     Map<String, String>? headers,
     void Function(double progress)? onProgress,
   }) async {
+    if (kIsWeb) {
+      throw 'EPUB URL import is not supported in browser environment';
+    }
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 20);
     try {

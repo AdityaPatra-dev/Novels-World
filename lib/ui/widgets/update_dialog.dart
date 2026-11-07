@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/app_update_service.dart';
 
@@ -120,7 +121,7 @@ class _UpdateModalContentState extends State<_UpdateModalContent> {
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(Platform.isAndroid
+          content: Text(!kIsWeb && Platform.isAndroid
               ? 'Please allow installation from unknown sources in settings.'
               : 'In-app installation is supported on Android devices.'),
           backgroundColor: Colors.orangeAccent,

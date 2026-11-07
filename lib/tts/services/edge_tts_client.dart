@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'edge_drm.dart';
 
 /// Direct high-performance WebSocket client for Microsoft Edge Neural TTS.
@@ -17,6 +18,7 @@ class EdgeTtsClient {
 
   /// Calibrates clock skew against Microsoft server Date header to prevent 403s.
   static Future<void> calibrateClock({bool force = false}) async {
+    if (kIsWeb) return;
     if (_clockCalibrated && !force) return;
     final client = HttpClient()..userAgent = null;
     try {

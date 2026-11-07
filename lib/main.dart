@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
@@ -26,7 +27,10 @@ class AppHttpOverrides extends HttpOverrides {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   setPathUrlStrategy();
-  HttpOverrides.global = AppHttpOverrides();
+
+  if (!kIsWeb) {
+    HttpOverrides.global = AppHttpOverrides();
+  }
 
   try {
     await Firebase.initializeApp(
@@ -38,7 +42,10 @@ void main() async {
 
   final storageService = StorageService();
   await storageService.init();
-  await WebViewSessionManager.instance.init();
+
+  if (!kIsWeb) {
+    await WebViewSessionManager.instance.init();
+  }
 
   // Initialize CloudSyncService with local storage and enable auto-sync on auth change
   CloudSyncService.instance.init(storageService);

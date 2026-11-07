@@ -20,10 +20,12 @@ class AuthService extends ChangeNotifier {
   static const String _webClientId =
       '705215795092-mbsfcb3il4grq6mnq42kh1nrh48fpsur.apps.googleusercontent.com';
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
-    serverClientId: _webClientId,
-  );
+  GoogleSignIn? _googleSignInInstance;
+  GoogleSignIn get _googleSignIn => _googleSignInInstance ??= GoogleSignIn(
+        clientId: kIsWeb ? _webClientId : null,
+        serverClientId: _webClientId,
+        scopes: ['email', 'profile'],
+      );
 
   bool _isSigningIn = false;
   String? _authError;

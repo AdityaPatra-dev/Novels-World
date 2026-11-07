@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
 import '../core/models/novel.dart';
 import '../core/models/chapter.dart';
 import '../core/models/chapter_content.dart';
 import '../core/services/webview_session_manager.dart';
+import '../core/utils/http_client_factory.dart';
 import '../core/utils/text_cleaner.dart';
 import 'novel_source.dart';
 
@@ -38,14 +38,7 @@ class LightNovelWpExtractor implements NovelSource {
     this.estimatedNovelCount = 1000,
     http.Client? client,
   }) {
-    if (client != null) {
-      _client = client;
-    } else {
-      final nativeHttpClient = HttpClient();
-      nativeHttpClient.badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-      nativeHttpClient.connectionTimeout = const Duration(seconds: 15);
-      _client = IOClient(nativeHttpClient);
-    }
+    _client = client ?? createPlatformHttpClient();
   }
 
   Map<String, String> get _headers {

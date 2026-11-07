@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -103,6 +104,7 @@ class WebViewSessionManager {
   /// this uses the underlying Chromium engine on mobile, or curl on desktop/CI environments
   /// to retrieve the fully rendered DOM.
   Future<String?> fetchHtmlViaWebView(String url, {Duration timeout = const Duration(seconds: 12)}) async {
+    if (kIsWeb) return null;
     // 1. Mobile WebViewController (Android / iOS)
     if (Platform.isAndroid || Platform.isIOS) {
       try {

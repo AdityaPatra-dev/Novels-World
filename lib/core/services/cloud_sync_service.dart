@@ -39,13 +39,15 @@ class CloudSyncService extends ChangeNotifier {
 
   void init(StorageService storage) {
     _storage = storage;
-    _authSubscription?.cancel();
-    _authSubscription = _auth?.authStateChanges().listen((user) async {
-      if (user != null && _storage != null) {
-        debugPrint('[CLOUD_SYNC] Authenticated user detected (${user.email}), starting automatic sync...');
-        await syncFull(_storage!);
-      }
-    });
+    try {
+      _authSubscription?.cancel();
+      _authSubscription = _auth?.authStateChanges().listen((user) async {
+        if (user != null && _storage != null) {
+          debugPrint('[CLOUD_SYNC] Authenticated user detected (${user.email}), starting automatic sync...');
+          await syncFull(_storage!);
+        }
+      });
+    } catch (_) {}
   }
 
   bool get isSyncing => _isSyncing;

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/models/novel.dart';
@@ -24,16 +25,18 @@ class StorageService {
   SharedPreferences get _safePrefs => _prefs!;
   Directory get _safeAppDir => _appDir!;
 
-  String get chaptersDirectoryPath => '${_safeAppDir.path}/chapters';
-  String get appDocumentsDirectoryPath => _safeAppDir.path;
+  String get chaptersDirectoryPath => kIsWeb ? 'Browser Storage' : '${_safeAppDir.path}/chapters';
+  String get appDocumentsDirectoryPath => kIsWeb ? 'Browser Storage' : _safeAppDir.path;
 
   Future<void> init({Directory? appDir}) async {
-    if (_prefs != null && _appDir != null && appDir == null) return;
+    if (_prefs != null && (kIsWeb || _appDir != null) && appDir == null) return;
     _prefs = await SharedPreferences.getInstance();
-    _appDir = appDir ?? _appDir ?? await getApplicationDocumentsDirectory();
-    final chaptersDir = Directory('${_safeAppDir.path}/chapters');
-    if (!await chaptersDir.exists()) {
-      await chaptersDir.create(recursive: true);
+    if (!kIsWeb) {
+      _appDir = appDir ?? _appDir ?? await getApplicationDocumentsDirectory();
+      final chaptersDir = Directory('${_safeAppDir.path}/chapters');
+      if (!await chaptersDir.exists()) {
+        await chaptersDir.create(recursive: true);
+      }
     }
   }
 
@@ -178,11 +181,24 @@ class StorageService {
   }
 
   Future<void> cacheChapterContent(ChapterContent content) async {
+    if (kIsWeb) {
+      await _safePrefs.setString('web_cache_chapter_${content.chapterId}', jsonEncode(content.toJson()));
+      return;
+    }
     final file = _getChapterFile(content.chapterId);
     await file.writeAsString(jsonEncode(content.toJson()));
   }
 
   Future<ChapterContent?> getCachedChapterContent(String chapterId) async {
+    if (kIsWeb) {
+      final raw = _safePrefs.getString('web_cache_chapter_$chapterId');
+      if (raw == null) return null;
+      try {
+        return ChapterContent.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      } catch (_) {
+        return null;
+      }
+    }
     final file = _getChapterFile(chapterId);
     if (!await file.exists()) return null;
     try {
@@ -194,11 +210,18 @@ class StorageService {
   }
 
   Future<bool> isChapterDownloaded(String chapterId) async {
+    if (kIsWeb) {
+      return _safePrefs.containsKey('web_cache_chapter_$chapterId');
+    }
     final file = _getChapterFile(chapterId);
     return file.exists();
   }
 
   Future<void> deleteDownloadedChapter(String chapterId) async {
+    if (kIsWeb) {
+      await _safePrefs.remove('web_cache_chapter_$chapterId');
+      return;
+    }
     final file = _getChapterFile(chapterId);
     if (await file.exists()) {
       await file.delete();
@@ -212,6 +235,7 @@ class StorageService {
   }
 
   Future<double> getCacheSizeMb() async {
+    if (kIsWeb) return 0.0;
     final chaptersDir = Directory('${_safeAppDir.path}/chapters');
     if (!await chaptersDir.exists()) return 0.0;
     int totalBytes = 0;
@@ -225,6 +249,9 @@ class StorageService {
   }
 
   Future<int> getTotalCachedChapterCount() async {
+    if (kIsWeb) {
+      return _safePrefs.getKeys().where((k) => k.startsWith('web_cache_chapter_')).length;
+    }
     final chaptersDir = Directory('${_safeAppDir.path}/chapters');
     if (!await chaptersDir.exists()) return 0;
     try {
@@ -235,6 +262,13 @@ class StorageService {
   }
 
   Future<void> clearAllChapterCache() async {
+    if (kIsWeb) {
+      final keys = _safePrefs.getKeys().where((k) => k.startsWith('web_cache_chapter_') || k.startsWith('web_cache_')).toList();
+      for (final k in keys) {
+        await _safePrefs.remove(k);
+      }
+      return;
+    }
     final chaptersDir = Directory('${_safeAppDir.path}/chapters');
     if (await chaptersDir.exists()) {
       final files = chaptersDir.listSync().whereType<File>();
@@ -266,6 +300,15 @@ class StorageService {
 
   Future<NovelStorageInfo> getNovelStorageInfo(Novel novel) async {
     await init();
+    if (kIsWeb) {
+      return const NovelStorageInfo(
+        directoryPath: 'Browser Storage',
+        storageType: 'Web Local Cache',
+        chapterCount: 0,
+        totalSizeBytes: 0,
+        fileNames: [],
+      );
+    }
     if (novel.sourceId == 'local_epub') {
       String path = '';
       if (novel.sourceUrl.isNotEmpty) {
@@ -352,6 +395,7 @@ class StorageService {
 
   Future<void> deleteNovelStorage(Novel novel) async {
     await init();
+    if (kIsWeb) return;
     if (novel.sourceId == 'local_epub') {
       String path = '';
       if (novel.sourceUrl.isNotEmpty) {
@@ -398,6 +442,11 @@ class StorageService {
 
   Future<void> cacheChapterList(String novelId, List<Chapter> chapters) async {
     await init();
+    if (kIsWeb) {
+      final rawList = chapters.map((c) => c.toJson()).toList();
+      await _safePrefs.setString('web_cache_chapters_$novelId', jsonEncode(rawList));
+      return;
+    }
     try {
       final dir = Directory('${_safeAppDir.path}/novel_cache');
       if (!await dir.exists()) {
@@ -411,6 +460,18 @@ class StorageService {
 
   Future<List<Chapter>?> getCachedChapters(String novelId) async {
     await init();
+    if (kIsWeb) {
+      final raw = _safePrefs.getString('web_cache_chapters_$novelId');
+      if (raw == null) return null;
+      try {
+        final list = jsonDecode(raw) as List;
+        return list
+            .map((item) => Chapter.fromJson(item as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        return null;
+      }
+    }
     final file = _getNovelChaptersCacheFile(novelId);
     if (!await file.exists()) return null;
     try {
@@ -431,6 +492,10 @@ class StorageService {
 
   Future<void> cacheNovelDetails(Novel novel) async {
     await init();
+    if (kIsWeb) {
+      await _safePrefs.setString('web_cache_novel_${novel.id}', jsonEncode(novel.toJson()));
+      return;
+    }
     try {
       final dir = Directory('${_safeAppDir.path}/novel_cache');
       if (!await dir.exists()) {
@@ -443,6 +508,15 @@ class StorageService {
 
   Future<Novel?> getCachedNovelDetails(String novelId) async {
     await init();
+    if (kIsWeb) {
+      final raw = _safePrefs.getString('web_cache_novel_$novelId');
+      if (raw == null) return null;
+      try {
+        return Novel.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      } catch (_) {
+        return null;
+      }
+    }
     final file = _getNovelDetailsCacheFile(novelId);
     if (!await file.exists()) return null;
     try {

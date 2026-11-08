@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../../core/utils/text_cleaner.dart';
+import '../services/web_speech_interop.dart';
 import '../tts_engine_interface.dart';
 import '../tts_model_registry.dart';
 import '../voice_calibration.dart';
@@ -41,16 +42,16 @@ class SystemFallbackEngine implements TtsEngineInterface {
   @override
   Future<void> initialize() async {
     if (_isInitialized) return;
+    if (kIsWeb) {
+      _isInitialized = true;
+      return;
+    }
     try {
       await _flutterTts.setLanguage('en-US');
-      if (kIsWeb) {
-        await _flutterTts.setSpeechRate(1.0);
-      } else {
-        await _flutterTts.setSpeechRate(0.48);
-        try {
-          await _flutterTts.awaitSynthCompletion(false); // Non-blocking synthesis for rapid streaming on native
-        } catch (_) {}
-      }
+      await _flutterTts.setSpeechRate(0.48);
+      try {
+        await _flutterTts.awaitSynthCompletion(false); // Non-blocking synthesis for rapid streaming on native
+      } catch (_) {}
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setPitch(1.0);
 
@@ -67,7 +68,7 @@ class SystemFallbackEngine implements TtsEngineInterface {
         cb?.call();
       });
 
-      // Query available voices safely from OS / Browser Web Speech API
+      // Query available voices safely from OS
       final dynamic voices = await _flutterTts.getVoices;
       if (voices is List) {
         _availableSystemVoices = voices;
@@ -140,57 +141,40 @@ class SystemFallbackEngine implements TtsEngineInterface {
     required double pitch,
     required Function() onDone,
   }) async {
-    await initialize();
-
     final cleanText = TextCleaner.prepareSentenceForSpeech(sentence);
     if (cleanText.isEmpty) {
       onDone();
       return;
     }
 
+    // On Web, use direct native browser Speech Synthesis API for instant, glitch-free audio
+    if (kIsWeb) {
+      playWebSpeech(
+        cleanText,
+        voice: voice,
+        rate: speed,
+        pitch: pitch,
+        onDone: onDone,
+      );
+      return;
+    }
+
+    await initialize();
+
     try {
       final profile = VoiceCalibration.getProfile(voice);
 
-      // Voice resolution: On web, match browser voices; on native, match device voice packs
-      if (kIsWeb) {
-        if (_availableSystemVoices.isNotEmpty && _appliedVoiceName == null) {
-          for (final v in _availableSystemVoices) {
-            String? name;
-            String? locale;
-            if (v is Map) {
-              name = v['name']?.toString();
-              locale = v['locale']?.toString();
-            } else if (v is String) {
-              name = v;
-              locale = 'en-US';
-            }
-            if (name != null) {
-              final lower = name.toLowerCase();
-              if (lower.contains('natural') || lower.contains('english') || lower.contains('en-us') || lower.contains('google')) {
-                try {
-                  await _flutterTts.setVoice({'name': name, 'locale': locale ?? 'en-US'});
-                  _appliedVoiceName = name;
-                  break;
-                } catch (_) {}
-              }
-            }
-          }
-        }
-      } else {
-        // ONLY reload voice if it actually changed — avoiding Android voice pack reset delay!
-        final matchedVoice = _resolveBestVoice(profile);
-        if (matchedVoice != null && matchedVoice['name'] != _appliedVoiceName) {
-          try {
-            await _flutterTts.setVoice(matchedVoice);
-            _appliedVoiceName = matchedVoice['name'];
-          } catch (_) {}
-        }
+      // ONLY reload voice if it actually changed — avoiding Android voice pack reset delay!
+      final matchedVoice = _resolveBestVoice(profile);
+      if (matchedVoice != null && matchedVoice['name'] != _appliedVoiceName) {
+        try {
+          await _flutterTts.setVoice(matchedVoice);
+          _appliedVoiceName = matchedVoice['name'];
+        } catch (_) {}
       }
 
-      // ONLY reload speech rate if changed (Web normal speed is 1.0; Android normal speed is ~0.48)
-      final effectiveSpeed = kIsWeb
-          ? (speed * 1.0).clamp(0.5, 2.5)
-          : (profile.baseSpeed * speed * 0.48).clamp(0.15, 1.0);
+      // ONLY reload speech rate if changed (Android normal speed is ~0.48)
+      final effectiveSpeed = (profile.baseSpeed * speed * 0.48).clamp(0.15, 1.0);
       if (_appliedSpeed != effectiveSpeed) {
         await _flutterTts.setSpeechRate(effectiveSpeed);
         _appliedSpeed = effectiveSpeed;
@@ -217,6 +201,10 @@ class SystemFallbackEngine implements TtsEngineInterface {
 
   @override
   Future<void> stop() async {
+    if (kIsWeb) {
+      stopWebSpeech();
+      return;
+    }
     _currentCompletion = null;
     try {
       await _flutterTts.stop();

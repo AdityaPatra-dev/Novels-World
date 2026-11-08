@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -346,7 +347,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                       : 'Preparing audio...',
                                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                                 ),
-                                if (ttsManager.isBuffering)
+                                if (!kIsWeb && ttsManager.isBuffering)
                                   const Text(
                                     'Synthesizing next sentence...',
                                     style: TextStyle(fontSize: 10, color: Color(0xFF06B6D4)),

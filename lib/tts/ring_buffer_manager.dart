@@ -217,7 +217,7 @@ class RingBufferManager extends ChangeNotifier {
 
     _currentIndex = index.clamp(0, _sentences.length - 1);
     _isPlaying = true;
-    _isBuffering = true;
+    _isBuffering = !kIsWeb;
     notifyListeners();
     onSentenceStarted?.call(_currentIndex);
 

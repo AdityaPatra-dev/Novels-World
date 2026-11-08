@@ -50,6 +50,194 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+
+  <!-- Native Web Speech API Bridge for Novels World TTS -->
+  <script>
+    (function() {
+      var voicesList = [];
+
+      function populateVoices() {
+        if ('speechSynthesis' in window) {
+          try {
+            voicesList = window.speechSynthesis.getVoices() || [];
+          } catch(e) {}
+        }
+      }
+
+      if ('speechSynthesis' in window) {
+        populateVoices();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = populateVoices;
+        }
+      }
+
+      var resumeTimer = null;
+
+      window.novelsWorldTts = {
+        isSpeaking: false,
+        isPaused: false,
+
+        speak: function(text, voiceName, rate, pitch, onDone) {
+          if (!('speechSynthesis' in window)) {
+            console.warn('[NovelsWorld TTS] Web Speech API not supported.');
+            if (typeof onDone === 'function') onDone();
+            return;
+          }
+
+          if (resumeTimer) {
+            clearInterval(resumeTimer);
+            resumeTimer = null;
+          }
+
+          // Always cancel any prior speech
+          try {
+            window.speechSynthesis.cancel();
+          } catch(e) {}
+
+          var clean = (text || '').trim();
+          if (!clean) {
+            if (typeof onDone === 'function') onDone();
+            return;
+          }
+
+          var u = new SpeechSynthesisUtterance(clean);
+          u.rate = Math.max(0.5, Math.min(2.5, rate || 1.0));
+          u.pitch = Math.max(0.5, Math.min(2.0, pitch || 1.0));
+
+          if (!voicesList || voicesList.length === 0) {
+            populateVoices();
+          }
+
+          if (voicesList && voicesList.length > 0) {
+            var selectedVoice = null;
+            if (voiceName) {
+              var target = voiceName.toLowerCase();
+              selectedVoice = voicesList.find(function(v) {
+                return v.name && v.name.toLowerCase().indexOf(target) !== -1;
+              });
+            }
+            if (!selectedVoice) {
+              // Priority 1: Natural / Google English voices
+              selectedVoice = voicesList.find(function(v) {
+                var lang = (v.lang || '').toLowerCase();
+                var name = (v.name || '').toLowerCase();
+                return lang.indexOf('en') === 0 && (name.indexOf('natural') !== -1 || name.indexOf('google') !== -1 || name.indexOf('samantha') !== -1);
+              });
+            }
+            if (!selectedVoice) {
+              // Priority 2: Any English voice
+              selectedVoice = voicesList.find(function(v) {
+                return (v.lang || '').toLowerCase().indexOf('en') === 0;
+              });
+            }
+            if (!selectedVoice) {
+              selectedVoice = voicesList[0];
+            }
+            if (selectedVoice) {
+              u.voice = selectedVoice;
+              u.lang = selectedVoice.lang || 'en-US';
+            }
+          }
+
+          var finished = false;
+          function complete() {
+            if (finished) return;
+            finished = true;
+            window.novelsWorldTts.isSpeaking = false;
+            if (resumeTimer) {
+              clearInterval(resumeTimer);
+              resumeTimer = null;
+            }
+            if (typeof onDone === 'function') {
+              try {
+                onDone();
+              } catch(err) {
+                console.error('[NovelsWorld TTS] onDone error:', err);
+              }
+            }
+          }
+
+          u.onend = complete;
+          u.onerror = function(ev) {
+            console.warn('[NovelsWorld TTS] utterance error/cancel:', ev);
+            complete();
+          };
+
+          // Chrome speech synthesis stall watchdog
+          var wordCount = clean.split(/\s+/).length;
+          var safeTimeoutMs = Math.max(6000, wordCount * 1200);
+          var watchdog = setTimeout(complete, safeTimeoutMs);
+
+          var originalEnd = u.onend;
+          u.onend = function() {
+            clearTimeout(watchdog);
+            originalEnd();
+          };
+          var originalErr = u.onerror;
+          u.onerror = function(ev) {
+            clearTimeout(watchdog);
+            originalErr(ev);
+          };
+
+          window.novelsWorldTts.isSpeaking = true;
+          window.novelsWorldTts.isPaused = false;
+
+          try {
+            window.speechSynthesis.speak(u);
+            if (window.speechSynthesis.paused) {
+              window.speechSynthesis.resume();
+            }
+          } catch(e) {
+            console.error('[NovelsWorld TTS] speak exception:', e);
+            complete();
+            return;
+          }
+
+          // Keep-alive for long speeches in Chrome
+          resumeTimer = setInterval(function() {
+            if (window.speechSynthesis.speaking && !window.novelsWorldTts.isPaused) {
+              window.speechSynthesis.resume();
+            } else if (!window.speechSynthesis.speaking) {
+              clearInterval(resumeTimer);
+              resumeTimer = null;
+            }
+          }, 10000);
+        },
+
+        pause: function() {
+          window.novelsWorldTts.isPaused = true;
+          if ('speechSynthesis' in window) {
+            try {
+              window.speechSynthesis.pause();
+            } catch(e) {}
+          }
+        },
+
+        resume: function() {
+          window.novelsWorldTts.isPaused = false;
+          if ('speechSynthesis' in window) {
+            try {
+              window.speechSynthesis.resume();
+            } catch(e) {}
+          }
+        },
+
+        stop: function() {
+          window.novelsWorldTts.isSpeaking = false;
+          window.novelsWorldTts.isPaused = false;
+          if (resumeTimer) {
+            clearInterval(resumeTimer);
+            resumeTimer = null;
+          }
+          if ('speechSynthesis' in window) {
+            try {
+              window.speechSynthesis.cancel();
+            } catch(e) {}
+          }
+        }
+      };
+    })();
+  </script>
 </head>
 <body>
   <!--

@@ -85,6 +85,7 @@ class PiperEngine implements TtsEngineInterface {
     required double speed,
     required double pitch,
     required Function() onDone,
+    bool isSequential = false,
   }) async {
     await initialize();
 
@@ -99,6 +100,7 @@ class PiperEngine implements TtsEngineInterface {
         speed: piperSpeed,
         pitch: piperPitch,
         onDone: onDone,
+        isSequential: isSequential,
       );
     } catch (_) {
       await _fallback.speakSentenceDirect(
@@ -107,6 +109,7 @@ class PiperEngine implements TtsEngineInterface {
         speed: piperSpeed,
         pitch: piperPitch,
         onDone: onDone,
+        isSequential: isSequential,
       );
     }
   }

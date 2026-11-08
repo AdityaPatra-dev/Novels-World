@@ -22,6 +22,7 @@ abstract class TtsEngineInterface {
     required String voice,
     required double speed,
     required double pitch,
+    bool isSequential = false,
     required Function() onDone,
   });
 

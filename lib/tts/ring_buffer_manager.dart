@@ -385,7 +385,7 @@ class RingBufferManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _playWithDirectFallback() async {
+  Future<void> _playWithDirectFallback({bool isSequential = false}) async {
     if (!_isPlaying || _sentences.isEmpty) return;
     if (_currentIndex >= _sentences.length) {
       _isPlaying = false;
@@ -398,7 +398,7 @@ class RingBufferManager extends ChangeNotifier {
     final sentence = _sentences[_currentIndex].trim();
     if (sentence.isEmpty) {
       _currentIndex++;
-      _playWithDirectFallback();
+      _playWithDirectFallback(isSequential: isSequential);
       return;
     }
 
@@ -410,6 +410,7 @@ class RingBufferManager extends ChangeNotifier {
       voice: _activeVoice,
       speed: _speed,
       pitch: _pitch,
+      isSequential: isSequential,
       onDone: () async {
         if (!_isPlaying || epoch != _sessionEpoch) return;
         if (_sentencePauseMs > 0) {
@@ -421,7 +422,7 @@ class RingBufferManager extends ChangeNotifier {
             onSentenceStarted?.call(_currentIndex);
             notifyListeners();
             checkApproachingEnd(_currentIndex);
-            _playWithDirectFallback();
+            _playWithDirectFallback(isSequential: true);
           } else {
             // Reached the end of current chapter's sentences
             if (sleepTimer.mode == SleepTimerMode.endOfChapter) {
@@ -439,7 +440,7 @@ class RingBufferManager extends ChangeNotifier {
               onCrossChapterTransition?.call();
               onSentenceStarted?.call(_currentIndex);
               notifyListeners();
-              _playWithDirectFallback();
+              _playWithDirectFallback(isSequential: true);
             } else {
               _isPlaying = false;
               notifyListeners();

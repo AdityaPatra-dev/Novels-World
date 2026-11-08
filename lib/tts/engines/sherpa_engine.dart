@@ -129,6 +129,7 @@ class SherpaEngine implements TtsEngineInterface {
     required double speed,
     required double pitch,
     required Function() onDone,
+    bool isSequential = false,
   }) async {
     await initialize();
 
@@ -142,6 +143,7 @@ class SherpaEngine implements TtsEngineInterface {
         speed: speed * 0.95,
         pitch: pitch,
         onDone: onDone,
+        isSequential: isSequential,
       );
     } catch (_) {
       await _fallback.speakSentenceDirect(
@@ -150,6 +152,7 @@ class SherpaEngine implements TtsEngineInterface {
         speed: speed * 0.95,
         pitch: pitch,
         onDone: onDone,
+        isSequential: isSequential,
       );
     }
   }

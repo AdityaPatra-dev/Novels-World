@@ -90,6 +90,7 @@ class KokoroEngine implements TtsEngineInterface {
     required double speed,
     required double pitch,
     required Function() onDone,
+    bool isSequential = false,
   }) async {
     await initialize();
 
@@ -108,6 +109,7 @@ class KokoroEngine implements TtsEngineInterface {
         speed: kokoroSpeed,
         pitch: kokoroPitch,
         onDone: onDone,
+        isSequential: isSequential,
       );
     } catch (_) {
       await _fallback.speakSentenceDirect(
@@ -116,6 +118,7 @@ class KokoroEngine implements TtsEngineInterface {
         speed: kokoroSpeed,
         pitch: kokoroPitch,
         onDone: onDone,
+        isSequential: isSequential,
       );
     }
   }

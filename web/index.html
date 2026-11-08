@@ -124,7 +124,7 @@
           return JSON.stringify(mapped);
         },
 
-        speak: function(text, voiceName, rate, pitch, onDone) {
+        speak: function(text, voiceName, rate, pitch, onDone, isSequential) {
           if (!('speechSynthesis' in window)) {
             console.warn('[NovelsWorld TTS] Web Speech API not supported.');
             if (typeof onDone === 'function') onDone();
@@ -136,10 +136,13 @@
             resumeTimer = null;
           }
 
-          // Always cancel any prior speech
-          try {
-            window.speechSynthesis.cancel();
-          } catch(e) {}
+          // Do NOT cancel during seamless line-to-line transitions!
+          // Canceling tears down the browser audio pipeline and causes a 1-second delay.
+          if (!isSequential) {
+            try {
+              window.speechSynthesis.cancel();
+            } catch(e) {}
+          }
 
           var clean = (text || '').trim();
           if (!clean) {

@@ -13,6 +13,7 @@ void playWebSpeech(
   String? voice,
   double rate = 1.0,
   double pitch = 1.0,
+  bool isSequential = false,
   required void Function() onDone,
 }) {
   try {
@@ -31,6 +32,7 @@ void playWebSpeech(
           rate.toJS,
           pitch.toJS,
           jsCallback,
+          isSequential.toJS,
         ],
       );
     } else {

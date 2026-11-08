@@ -203,6 +203,7 @@ class EdgeNeuralEngine implements TtsEngineInterface {
     required double speed,
     required double pitch,
     required Function() onDone,
+    bool isSequential = false,
   }) async {
     await initialize();
 
@@ -252,6 +253,7 @@ class EdgeNeuralEngine implements TtsEngineInterface {
       speed: speed,
       pitch: pitch,
       onDone: onDone,
+      isSequential: isSequential,
     );
   }
 

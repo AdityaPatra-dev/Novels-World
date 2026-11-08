@@ -139,6 +139,7 @@ class SystemFallbackEngine implements TtsEngineInterface {
     required String voice,
     required double speed,
     required double pitch,
+    bool isSequential = false,
     required Function() onDone,
   }) async {
     final cleanText = TextCleaner.prepareSentenceForSpeech(sentence);
@@ -154,6 +155,7 @@ class SystemFallbackEngine implements TtsEngineInterface {
         voice: voice,
         rate: speed,
         pitch: pitch,
+        isSequential: isSequential,
         onDone: onDone,
       );
       return;

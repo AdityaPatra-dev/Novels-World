@@ -53,6 +53,42 @@ void stopWebSpeech() {
   } catch (_) {}
 }
 
+void queueNextWebSpeech(
+  String text, {
+  String? voice,
+  double rate = 1.0,
+  double pitch = 1.0,
+  required void Function() onStarted,
+  required void Function() onDone,
+}) {
+  try {
+    final win = globalContext;
+    final tts = win.getProperty('novelsWorldTts'.toJS) as JSObject?;
+    if (tts != null) {
+      final jsOnStarted = (() {
+        onStarted();
+      }).toJS;
+      final jsOnDone = (() {
+        onDone();
+      }).toJS;
+
+      tts.callMethodVarArgs(
+        'queueNext'.toJS,
+        [
+          text.toJS,
+          (voice ?? '').toJS,
+          rate.toJS,
+          pitch.toJS,
+          jsOnStarted,
+          jsOnDone,
+        ],
+      );
+    }
+  } catch (e) {
+    debugPrint('[WebSpeech] queueNextWebSpeech error: $e');
+  }
+}
+
 void pauseWebSpeech() {
   try {
     final win = globalContext;

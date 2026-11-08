@@ -16,6 +16,15 @@ void playWebSpeech(
 
 void stopWebSpeech() {}
 
+void queueNextWebSpeech(
+  String text, {
+  String? voice,
+  double rate = 1.0,
+  double pitch = 1.0,
+  required void Function() onStarted,
+  required void Function() onDone,
+}) {}
+
 void pauseWebSpeech() {}
 
 void resumeWebSpeech() {}

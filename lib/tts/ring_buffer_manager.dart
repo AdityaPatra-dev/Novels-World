@@ -10,6 +10,7 @@ import 'engines/piper_engine.dart';
 import 'engines/sherpa_engine.dart';
 import 'engines/system_fallback_engine.dart';
 import 'sleep_timer_service.dart';
+import 'services/web_speech_interop.dart';
 
 /// Rock-solid sequential audio playback manager with aggressive background pre-fetching,
 /// zero DSP pitch artifacts, and seamless cross-chapter continuity.
@@ -352,6 +353,9 @@ class RingBufferManager extends ChangeNotifier {
     try {
       await _player.pause();
     } catch (_) {}
+    if (kIsWeb) {
+      pauseWebSpeech();
+    }
     await _activeEngine.stop();
     notifyListeners();
   }
@@ -365,6 +369,9 @@ class RingBufferManager extends ChangeNotifier {
     try {
       await _player.stop();
     } catch (_) {}
+    if (kIsWeb) {
+      stopWebSpeech();
+    }
     await _activeEngine.stop();
     notifyListeners();
   }
@@ -409,6 +416,7 @@ class RingBufferManager extends ChangeNotifier {
 
     onSentenceStarted?.call(_currentIndex);
     final epoch = _sessionEpoch;
+    final currentIdx = _currentIndex;
 
     await _activeEngine.speakSentenceDirect(
       sentence,
@@ -418,6 +426,9 @@ class RingBufferManager extends ChangeNotifier {
       isSequential: isSequential,
       onDone: () async {
         if (!_isPlaying || epoch != _sessionEpoch) return;
+        // If web pre-queue already advanced past this sentence, do not double-advance
+        if (kIsWeb && _currentIndex > currentIdx) return;
+
         if (_sentencePauseMs > 0) {
           await Future.delayed(Duration(milliseconds: _sentencePauseMs));
         }
@@ -455,6 +466,46 @@ class RingBufferManager extends ChangeNotifier {
               onChapterFinished?.call();
             }
           }
+        }
+      },
+    );
+
+    // On Web, immediately PRE-QUEUE the next sentence into the browser speech queue!
+    // This allows Chrome to pre-synthesize the audio so that sentence i -> i+1 transitions
+    // with EXACT 0ms gapless playback!
+    if (kIsWeb && _currentIndex + 1 < _sentences.length) {
+      _queueNextOnWeb(epoch);
+    }
+  }
+
+  void _queueNextOnWeb(int epoch) {
+    if (!kIsWeb || !_isPlaying || epoch != _sessionEpoch) return;
+    final nextIdx = _currentIndex + 1;
+    if (nextIdx >= _sentences.length) return;
+    final nextText = _sentences[nextIdx].trim();
+    if (nextText.isEmpty) return;
+
+    queueNextWebSpeech(
+      nextText,
+      voice: _activeVoice,
+      rate: _speed,
+      pitch: _pitch,
+      onStarted: () {
+        if (!_isPlaying || epoch != _sessionEpoch) return;
+        _currentIndex = nextIdx;
+        onSentenceStarted?.call(_currentIndex);
+        notifyListeners();
+        checkApproachingEnd(_currentIndex);
+        // Pre-queue the NEXT upcoming sentence in Chrome's queue
+        _queueNextOnWeb(epoch);
+      },
+      onDone: () {
+        if (!_isPlaying || epoch != _sessionEpoch) return;
+        if (_currentIndex >= _sentences.length - 1) {
+          _isPlaying = false;
+          notifyListeners();
+          sleepTimer.triggerEndOfChapter();
+          onChapterFinished?.call();
         }
       },
     );

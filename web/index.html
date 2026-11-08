@@ -260,6 +260,49 @@
           }, 10000);
         },
 
+        queueNext: function(text, voiceName, rate, pitch, onStarted, onDone) {
+          if (!('speechSynthesis' in window)) return;
+          var clean = (text || '').trim();
+          if (!clean) return;
+
+          var uNext = new SpeechSynthesisUtterance(clean);
+          uNext.rate = Math.max(0.5, Math.min(2.5, rate || 1.0));
+          uNext.pitch = Math.max(0.5, Math.min(2.0, pitch || 1.0));
+
+          if (window._nwCachedVoice) {
+            uNext.voice = window._nwCachedVoice;
+            uNext.lang = window._nwCachedVoice.lang || 'en-US';
+          }
+
+          var started = false;
+          uNext.onstart = function() {
+            if (started) return;
+            started = true;
+            window.novelsWorldTts.isSpeaking = true;
+            window.novelsWorldTts.isPaused = false;
+            if (typeof onStarted === 'function') {
+              try { onStarted(); } catch(e) {}
+            }
+          };
+
+          var ended = false;
+          function completeNext() {
+            if (ended) return;
+            ended = true;
+            if (typeof onDone === 'function') {
+              try { onDone(); } catch(e) {}
+            }
+          }
+          uNext.onend = completeNext;
+          uNext.onerror = completeNext;
+
+          try {
+            window.speechSynthesis.speak(uNext);
+          } catch(e) {
+            console.error('[NovelsWorld TTS] queueNext exception:', e);
+          }
+        },
+
         pause: function() {
           window.novelsWorldTts.isPaused = true;
           if ('speechSynthesis' in window) {

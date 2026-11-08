@@ -6,7 +6,7 @@ import 'package:http/io_client.dart';
 /// Configurable Cloudflare Worker Edge Proxy URL for web clients.
 /// Set to your deployed Cloudflare Worker endpoint, e.g.:
 /// 'https://novels-world-proxy.`<your-subdomain>`.workers.dev'
-String webProxyEndpoint = 'https://novels-world-proxy.workers.dev';
+String webProxyEndpoint = 'https://novels-world-proxy.adityapatraraj.workers.dev';
 
 /// Configures or updates the web CORS proxy endpoint dynamically.
 void setWebProxyEndpoint(String endpoint) {

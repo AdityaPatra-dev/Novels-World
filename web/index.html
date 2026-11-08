@@ -321,8 +321,12 @@
             }
           }
 
+          var maxQueuedIndex = -1;
           function queueUtterance(index) {
             if (!isPlaying || index >= sentences.length) return;
+            if (index <= maxQueuedIndex) return; // Prevent duplicate queueing
+            maxQueuedIndex = index;
+
             var text = (sentences[index] || '').trim();
             if (!text) {
               queueUtterance(index + 1);
@@ -338,13 +342,6 @@
             }
 
             var started = false;
-            var nextQueued = false;
-            function ensureNextQueued() {
-              if (nextQueued) return;
-              nextQueued = true;
-              queueUtterance(index + 1);
-            }
-
             u.onstart = function() {
               if (!isPlaying || started) return;
               started = true;
@@ -353,13 +350,14 @@
               if (typeof onSentenceChanged === 'function') {
                 try { onSentenceChanged(index); } catch(err) {}
               }
-              // Pre-queue the NEXT sentence in the browser audio pipeline for 0ms transition!
-              ensureNextQueued();
+              // Keep pipeline primed 1-2 steps ahead for 0ms transition
+              queueUtterance(index + 1);
+              queueUtterance(index + 2);
             };
 
             u.onend = function() {
               if (!isPlaying) return;
-              ensureNextQueued();
+              queueUtterance(index + 1);
               if (index >= sentences.length - 1) {
                 isPlaying = false;
                 window.novelsWorldTts.isSpeaking = false;
@@ -371,7 +369,7 @@
 
             u.onerror = function(ev) {
               if (!isPlaying) return;
-              ensureNextQueued();
+              queueUtterance(index + 1);
               if (index >= sentences.length - 1) {
                 isPlaying = false;
                 window.novelsWorldTts.isSpeaking = false;
@@ -388,8 +386,11 @@
             }
           }
 
-          // Start from requested index
+          // Start from requested index and immediately prime the next section
           queueUtterance(currentIndex);
+          if (currentIndex + 1 < sentences.length) {
+            queueUtterance(currentIndex + 1);
+          }
 
           // Keep-alive for long speeches in Chrome
           resumeTimer = setInterval(function() {

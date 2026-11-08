@@ -13,72 +13,65 @@ class ChapterContent {
     required this.paragraphs,
   });
 
-  /// Extracts narrative units for continuous, fluid audiobook playback.
-  /// Preserves paragraphs intact and groups consecutive short lines into natural
-  /// continuous narrative blocks, eliminating stop-and-start delays between short lines
-  /// and delivering seamless audiobook playback across both mobile and web.
+  /// Extracts flowing narrative units for continuous, fluid audiobook playback.
+  /// Combines paragraphs into natural narrative sections (~600-800 characters)
+  /// separated by '\n\n', so the TTS engine reads paragraphs and lines continuously
+  /// in one breath with zero pause, exactly like reading from line to line within a paragraph,
+  /// while preserving standard novel book typography and layout.
   List<String> toSentences() {
-    final List<String> rawUnits = [];
+    final List<String> rawParagraphs = [];
     for (final paragraph in paragraphs) {
       final trimmed = paragraph.trim();
       if (trimmed.isEmpty) continue;
 
-      // Keep standard paragraphs intact for continuous speech
+      // If a single paragraph is unusually massive (>600 chars), break it at sentence boundaries
       if (trimmed.length <= 600) {
-        rawUnits.add(trimmed);
+        rawParagraphs.add(trimmed);
       } else {
-        // Chunk unusually massive mega-paragraphs at major sentence boundaries into ~400 char segments
         final RegExp sentenceRegex = RegExp(r'[^.!?]+(?:[.!?]+["' r"'\s]*)");
         final matches = sentenceRegex.allMatches(trimmed);
         if (matches.isEmpty) {
-          rawUnits.add(trimmed);
+          rawParagraphs.add(trimmed);
         } else {
           final StringBuffer chunk = StringBuffer();
           for (final m in matches) {
             final s = m.group(0)?.trim() ?? '';
             if (s.isEmpty) continue;
             if (chunk.isNotEmpty && (chunk.length + s.length > 450)) {
-              rawUnits.add(chunk.toString().trim());
+              rawParagraphs.add(chunk.toString().trim());
               chunk.clear();
             }
             if (chunk.isNotEmpty) chunk.write(' ');
             chunk.write(s);
           }
           if (chunk.isNotEmpty) {
-            rawUnits.add(chunk.toString().trim());
+            rawParagraphs.add(chunk.toString().trim());
           }
         }
       }
     }
 
-    // Merge consecutive short lines (e.g. dialogue, short beats < 180 chars)
-    // into continuous narrative blocks so they read continuously without stopping.
+    // Group paragraphs into natural flowing reading blocks (~650-800 characters)
+    // joined by '\n\n' so the TTS reads continuously from paragraph to paragraph
+    // with ZERO delay, exactly like lines inside a paragraph!
     final List<String> units = [];
     final StringBuffer buffer = StringBuffer();
 
-    for (final unit in rawUnits) {
-      if (unit.length >= 180) {
-        if (buffer.isNotEmpty) {
-          units.add(buffer.toString().trim());
-          buffer.clear();
-        }
-        units.add(unit);
-      } else {
-        if (buffer.isNotEmpty && (buffer.length + unit.length + 1 > 360)) {
-          units.add(buffer.toString().trim());
-          buffer.clear();
-        }
-        if (buffer.isNotEmpty) {
-          buffer.write('\n');
-        }
-        buffer.write(unit);
+    for (final p in rawParagraphs) {
+      if (buffer.isNotEmpty && (buffer.length + p.length + 2 > 700)) {
+        units.add(buffer.toString().trim());
+        buffer.clear();
       }
+      if (buffer.isNotEmpty) {
+        buffer.write('\n\n');
+      }
+      buffer.write(p);
     }
     if (buffer.isNotEmpty) {
       units.add(buffer.toString().trim());
     }
 
-    return units;
+    return units.isNotEmpty ? units : rawParagraphs;
   }
 
   Map<String, dynamic> toJson() {

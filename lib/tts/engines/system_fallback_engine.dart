@@ -26,7 +26,7 @@ class SystemFallbackEngine implements TtsEngineInterface {
   String get id => TtsModelRegistry.systemId;
 
   @override
-  String get name => 'Device Native (Offline Hardware)';
+  String get name => kIsWeb ? 'Browser Voice' : 'Device Native (Offline Hardware)';
 
   @override
   String get description => 'Direct hardware voice synthesizer on your device';

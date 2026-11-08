@@ -301,7 +301,8 @@ class TtsSheet {
                           final vLang = v['lang'] ?? 'en-US';
                           final vGender = v['gender'] ?? 'Neutral';
                           final isSelected = activeVoice == vName ||
-                              (activeVoice.isEmpty && vName == displayedWebVoices.first['name']);
+                              (activeVoice.isEmpty && vName == displayedWebVoices.first['name']) ||
+                              (!displayedWebVoices.any((dv) => dv['name'] == activeVoice) && vName == displayedWebVoices.first['name']);
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),

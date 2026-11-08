@@ -252,10 +252,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.psychology, size: 14, color: Color(0xFF8B5CF6)),
+                                  Icon(kIsWeb ? Icons.record_voice_over : Icons.psychology, size: 14, color: const Color(0xFF8B5CF6)),
                                   const SizedBox(width: 6),
                                   Text(
-                                    ttsManager.activeEngine.name.split(' ').first,
+                                    kIsWeb ? 'Voice' : ttsManager.activeEngine.name.split(' ').first,
                                     style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,

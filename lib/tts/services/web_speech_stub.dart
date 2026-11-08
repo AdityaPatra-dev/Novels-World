@@ -18,3 +18,5 @@ void stopWebSpeech() {}
 void pauseWebSpeech() {}
 
 void resumeWebSpeech() {}
+
+List<Map<String, String>> getWebVoices() => const [];

@@ -77,6 +77,34 @@
         isSpeaking: false,
         isPaused: false,
 
+        getVoicesJson: function() {
+          if (!('speechSynthesis' in window)) return '[]';
+          if (!voicesList || voicesList.length === 0) {
+            populateVoices();
+          }
+          var v = voicesList || [];
+          var en = v.filter(function(item) {
+            return item.lang && item.lang.toLowerCase().indexOf('en') === 0;
+          });
+          var other = v.filter(function(item) {
+            return !item.lang || item.lang.toLowerCase().indexOf('en') !== 0;
+          });
+          var combined = en.length > 0 ? en.concat(other) : v;
+          var mapped = combined.map(function(item) {
+            var n = (item.name || '').toLowerCase();
+            var isFemale = /female|woman|girl|samantha|zira|jenny|aria|sonia|karen|victoria|luna|emma|michelle|libby|neerja/i.test(n);
+            var isMale = /male|man|boy|david|guy|christopher|george|daniel|andrew|eric|roger|thomas|steffan|liam|wayne|prabhat|brian|ryan/i.test(n);
+            var gender = isFemale ? 'Female' : (isMale ? 'Male' : 'Neutral');
+            return {
+              name: item.name || 'System Voice',
+              lang: item.lang || 'en-US',
+              gender: gender,
+              default: item.default || false
+            };
+          });
+          return JSON.stringify(mapped);
+        },
+
         speak: function(text, voiceName, rate, pitch, onDone) {
           if (!('speechSynthesis' in window)) {
             console.warn('[NovelsWorld TTS] Web Speech API not supported.');

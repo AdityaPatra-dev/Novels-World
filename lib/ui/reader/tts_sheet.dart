@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../tts/sleep_timer_service.dart';
 import '../../tts/ring_buffer_manager.dart';
 import '../../tts/tts_model_registry.dart';
 import '../../tts/voice_calibration.dart';
+import '../../tts/services/web_speech_interop.dart';
 import '../../providers/settings_provider.dart';
 
 class TtsSheet {
@@ -120,6 +122,16 @@ class TtsSheet {
               return modelInfo.voices.any((v) => v.startsWith(p.id));
             }).toList();
 
+            final webVoices = kIsWeb ? getWebVoices() : const <Map<String, String>>[];
+            final displayedWebVoices = webVoices.isNotEmpty
+                ? webVoices
+                : const [
+                    {'name': 'Google US English', 'lang': 'en-US', 'gender': 'Female'},
+                    {'name': 'Google UK English Female', 'lang': 'en-GB', 'gender': 'Female'},
+                    {'name': 'Google UK English Male', 'lang': 'en-GB', 'gender': 'Male'},
+                    {'name': 'Default System Voice', 'lang': 'en-US', 'gender': 'Neutral'},
+                  ];
+
             return DraggableScrollableSheet(
               initialChildSize: 0.82,
               minChildSize: 0.5,
@@ -153,84 +165,122 @@ class TtsSheet {
                       ),
                       const SizedBox(height: 18),
 
-                      // Engine Pills
-                      const Text(
-                        'AI Audio Model',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70),
-                      ),
-                      const SizedBox(height: 8),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: TtsModelRegistry.models.map((m) {
-                            final isSelected = activeEngine.id == m.id;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ChoiceChip(
-                                label: Text(m.name.split(' ').first),
-                                selected: isSelected,
-                                selectedColor: const Color(0xFF8B5CF6),
-                                backgroundColor: const Color(0xFF1E1E28),
-                                labelStyle: TextStyle(
-                                  color: isSelected ? Colors.white : Colors.white70,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                  fontSize: 12,
+                      // Engine Section (Mobile: full engine selector; Web: browser audio banner)
+                      if (!kIsWeb) ...[
+                        const Text(
+                          'AI Audio Model',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70),
+                        ),
+                        const SizedBox(height: 8),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: TtsModelRegistry.models.map((m) {
+                              final isSelected = activeEngine.id == m.id;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  label: Text(m.name.split(' ').first),
+                                  selected: isSelected,
+                                  selectedColor: const Color(0xFF8B5CF6),
+                                  backgroundColor: const Color(0xFF1E1E28),
+                                  labelStyle: TextStyle(
+                                    color: isSelected ? Colors.white : Colors.white70,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 12,
+                                  ),
+                                  onSelected: (sel) {
+                                    if (sel) {
+                                      ttsManager.switchEngine(m.id);
+                                      ttsManager.setVoice(m.defaultVoice);
+                                      settingsProvider.updateTtsVoice(m.id, m.defaultVoice);
+                                      setState(() {});
+                                    }
+                                  },
                                 ),
-                                onSelected: (sel) {
-                                  if (sel) {
-                                    ttsManager.switchEngine(m.id);
-                                    ttsManager.setVoice(m.defaultVoice);
-                                    settingsProvider.updateTtsVoice(m.id, m.defaultVoice);
-                                    setState(() {});
-                                  }
-                                },
-                              ),
-                            );
-                          }).toList(),
+                              );
+                            }).toList(),
+                          ),
                         ),
-                      ),
 
-                      // Model explanation banner
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.auto_awesome, color: Color(0xFF8B5CF6), size: 18),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    modelInfo.category,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: Color(0xFFA78BFA),
+                        // Model explanation banner
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.auto_awesome, color: Color(0xFF8B5CF6), size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      modelInfo.category,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: Color(0xFFA78BFA),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    modelInfo.description,
-                                    style: const TextStyle(fontSize: 11, color: Colors.white70, height: 1.3),
-                                  ),
-                                ],
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      modelInfo.description,
+                                      style: const TextStyle(fontSize: 11, color: Colors.white70, height: 1.3),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
+                      ] else ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.record_voice_over, color: Color(0xFF8B5CF6), size: 20),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Browser AI & System Audio',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: Color(0xFFA78BFA),
+                                      ),
+                                    ),
+                                    SizedBox(height: 3),
+                                    Text(
+                                      'Select from the full library of high-speed natural and system voices provided by your browser and operating system.',
+                                      style: TextStyle(fontSize: 11, color: Colors.white70, height: 1.3),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
 
                       const SizedBox(height: 18),
 
-                      // Voice Profiles List for current model
+                      // Voice Profiles List
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -239,13 +289,110 @@ class TtsSheet {
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white70),
                           ),
                           Text(
-                            '${relevantProfiles.length} Voices',
+                            kIsWeb ? '${displayedWebVoices.length} Voices' : '${relevantProfiles.length} Voices',
                             style: const TextStyle(fontSize: 11, color: Colors.white38),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      ...relevantProfiles.map((profile) {
+                      if (kIsWeb)
+                        ...displayedWebVoices.map((v) {
+                          final vName = v['name'] ?? '';
+                          final vLang = v['lang'] ?? 'en-US';
+                          final vGender = v['gender'] ?? 'Neutral';
+                          final isSelected = activeVoice == vName ||
+                              (activeVoice.isEmpty && vName == displayedWebVoices.first['name']);
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
+                                  : const Color(0xFF1E1E28),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF8B5CF6) : Colors.white10,
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                              leading: CircleAvatar(
+                                radius: 18,
+                                backgroundColor: vGender == 'Female'
+                                    ? const Color(0xFFEC4899).withValues(alpha: 0.2)
+                                    : vGender == 'Male'
+                                        ? const Color(0xFF3B82F6).withValues(alpha: 0.2)
+                                        : const Color(0xFF10B981).withValues(alpha: 0.2),
+                                child: Icon(
+                                  vGender == 'Female'
+                                      ? Icons.female
+                                      : vGender == 'Male'
+                                          ? Icons.male
+                                          : Icons.record_voice_over,
+                                  size: 18,
+                                  color: vGender == 'Female'
+                                      ? const Color(0xFFEC4899)
+                                      : vGender == 'Male'
+                                          ? const Color(0xFF3B82F6)
+                                          : const Color(0xFF10B981),
+                                ),
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      vName,
+                                      style: TextStyle(
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                        fontSize: 13,
+                                        color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white10,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      vLang,
+                                      style: const TextStyle(fontSize: 10, color: Colors.white70),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  vName.toLowerCase().contains('natural') || vName.toLowerCase().contains('online')
+                                      ? 'Natural cloud voice'
+                                      : 'Native system voice',
+                                  style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.55)),
+                                ),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.volume_up, color: Color(0xFF8B5CF6)),
+                                tooltip: 'Preview Voice',
+                                onPressed: () {
+                                  playWebSpeech(
+                                    'This is a preview of the $vName reading voice.',
+                                    voice: vName,
+                                    onDone: () {},
+                                  );
+                                },
+                              ),
+                              onTap: () {
+                                ttsManager.setVoice(vName);
+                                settingsProvider.updateTtsVoice(TtsModelRegistry.systemId, vName);
+                                setState(() {});
+                              },
+                            ),
+                          );
+                        })
+                      else
+                        ...relevantProfiles.map((profile) {
                         final isSelected = activeVoice.contains(profile.id) ||
                             profile.displayName.contains(activeVoice) ||
                             activeVoice == profile.id;

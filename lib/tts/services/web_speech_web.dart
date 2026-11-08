@@ -1,5 +1,6 @@
 library;
 
+import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'package:flutter/foundation.dart';
@@ -64,4 +65,28 @@ void resumeWebSpeech() {
     final tts = win.getProperty('novelsWorldTts'.toJS) as JSObject?;
     tts?.callMethod('resume'.toJS);
   } catch (_) {}
+}
+
+List<Map<String, String>> getWebVoices() {
+  try {
+    final win = globalContext;
+    final tts = win.getProperty('novelsWorldTts'.toJS) as JSObject?;
+    if (tts != null) {
+      final jsStr = tts.callMethod('getVoicesJson'.toJS) as JSString?;
+      if (jsStr != null) {
+        final raw = jsonDecode(jsStr.toDart) as List<dynamic>;
+        return raw.map((item) {
+          final map = item as Map<String, dynamic>;
+          return {
+            'name': map['name']?.toString() ?? '',
+            'lang': map['lang']?.toString() ?? 'en-US',
+            'gender': map['gender']?.toString() ?? 'Neutral',
+          };
+        }).where((v) => v['name']!.isNotEmpty).toList();
+      }
+    }
+  } catch (e) {
+    debugPrint('[WebSpeech] getWebVoices error: $e');
+  }
+  return const [];
 }

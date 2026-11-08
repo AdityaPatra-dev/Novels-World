@@ -295,6 +295,37 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    {{flutter_js}}
+    {{flutter_build_config}}
+
+    // Purge any stale service workers from prior deployments
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (var r of regs) { r.unregister(); }
+      }).catch(function() {});
+    }
+
+    // Purge any stale cache storage
+    if ('caches' in window) {
+      caches.keys().then(function(names) {
+        for (var n of names) { caches.delete(n); }
+      }).catch(function() {});
+    }
+
+    // Force cache-busting timestamp on main.dart.js so browsers never serve a cached script
+    var cacheBuster = 't=' + new Date().getTime();
+    if (window._flutter && window._flutter.buildConfig && window._flutter.buildConfig.builds) {
+      window._flutter.buildConfig.builds.forEach(function(b) {
+        if (b.mainJsPath) {
+          b.mainJsPath = b.mainJsPath + '?' + cacheBuster;
+        }
+      });
+    }
+
+    _flutter.loader.load({
+      serviceWorkerSettings: null
+    });
+  </script>
 </body>
 </html>

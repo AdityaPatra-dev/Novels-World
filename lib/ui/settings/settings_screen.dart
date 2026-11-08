@@ -90,7 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const Text('Active TTS Engine', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    initialValue: settings.ttsEngine,
+                    initialValue: kIsWeb ? 'system' : settings.ttsEngine,
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: const Color(0xFF1E1E28),
@@ -98,30 +98,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                     dropdownColor: const Color(0xFF1E1E28),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'edge_neural',
-                        child: Text('Microsoft Neural HD (Studio AI)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'kokoro',
-                        child: Text('Kokoro-82M (Expressive Storyteller)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'piper',
-                        child: Text('Piper Fast (Ultra-Fast VITS)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'sherpa',
-                        child: Text('Sherpa-Matcha (CJK Specialist)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'system',
-                        child: Text('Device Native (Offline Hardware)'),
-                      ),
-                    ],
+                    items: kIsWeb
+                        ? const [
+                            DropdownMenuItem(
+                              value: 'system',
+                              child: Text('Browser Speech API (Native Web Voices)'),
+                            ),
+                          ]
+                        : const [
+                            DropdownMenuItem(
+                              value: 'edge_neural',
+                              child: Text('Microsoft Neural HD (Studio AI)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'kokoro',
+                              child: Text('Kokoro-82M (Expressive Storyteller)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'piper',
+                              child: Text('Piper Fast (Ultra-Fast VITS)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'sherpa',
+                              child: Text('Sherpa-Matcha (CJK Specialist)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'system',
+                              child: Text('Device Native (Offline Hardware)'),
+                            ),
+                          ],
                     onChanged: (val) {
-                      if (val != null) {
+                      if (!kIsWeb && val != null) {
                         String defaultVoice = 'en-US-ChristopherNeural';
                         if (val == 'kokoro') defaultVoice = 'af_bella';
                         if (val == 'piper') defaultVoice = 'en_US-lessac-high';

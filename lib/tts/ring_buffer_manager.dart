@@ -57,7 +57,7 @@ class RingBufferManager extends ChangeNotifier {
     if (customEngines != null) {
       _engines.addAll(customEngines);
     }
-    _activeEngine = _engines[TtsModelRegistry.edgeNeuralId]!;
+    _activeEngine = _engines[kIsWeb ? TtsModelRegistry.systemId : TtsModelRegistry.edgeNeuralId]!;
     this.sleepTimer.onTimerExpired = () {
       pause();
     };
@@ -176,6 +176,7 @@ class RingBufferManager extends ChangeNotifier {
   /// Aggressively prefetches upcoming sentences in the background
   /// to ensure 0ms network latency and instant line-to-line transitions.
   void _prefetchUpcoming() {
+    if (kIsWeb) return; // Web uses direct streaming speech synthesis, skipping local file prefetching
     for (int offset = 1; offset <= 5; offset++) {
       final targetIdx = _currentIndex + offset;
       if (targetIdx < _sentences.length) {
@@ -237,6 +238,14 @@ class RingBufferManager extends ChangeNotifier {
       return;
     }
 
+    // On web, immediately use browser speech synthesis fallback without local filesystem calls
+    if (kIsWeb) {
+      _isBuffering = false;
+      notifyListeners();
+      await _playWithDirectFallback();
+      return;
+    }
+
     // Prefetch next 5 sentences in parallel into disk cache
     _prefetchUpcoming();
 
@@ -252,7 +261,7 @@ class RingBufferManager extends ChangeNotifier {
 
     if (epoch != _sessionEpoch || !_isPlaying) return;
 
-    if (audioPath != null && await File(audioPath).exists()) {
+    if (!kIsWeb && audioPath != null && await File(audioPath).exists()) {
       _isBuffering = false;
       notifyListeners();
       try {
@@ -326,7 +335,7 @@ class RingBufferManager extends ChangeNotifier {
     if (_sentences.isEmpty || _isPlaying) return;
     _isPlaying = true;
     notifyListeners();
-    if (_player.processingState == ProcessingState.ready) {
+    if (!kIsWeb && _player.processingState == ProcessingState.ready) {
       await _player.play();
     } else {
       await playFrom(_currentIndex);
@@ -407,8 +416,37 @@ class RingBufferManager extends ChangeNotifier {
           await Future.delayed(Duration(milliseconds: _sentencePauseMs));
         }
         if (_isPlaying && epoch == _sessionEpoch) {
-          _currentIndex++;
-          _playWithDirectFallback();
+          if (_currentIndex < _sentences.length - 1) {
+            _currentIndex++;
+            onSentenceStarted?.call(_currentIndex);
+            notifyListeners();
+            checkApproachingEnd(_currentIndex);
+            _playWithDirectFallback();
+          } else {
+            // Reached the end of current chapter's sentences
+            if (sleepTimer.mode == SleepTimerMode.endOfChapter) {
+              _isPlaying = false;
+              notifyListeners();
+              sleepTimer.triggerEndOfChapter();
+              return;
+            }
+
+            if (_nextChapterSentences.isNotEmpty) {
+              _sentences = List<String>.from(_nextChapterSentences);
+              _nextChapterSentences.clear();
+              _currentIndex = 0;
+              _hasTriggeredApproachingEnd = false;
+              onCrossChapterTransition?.call();
+              onSentenceStarted?.call(_currentIndex);
+              notifyListeners();
+              _playWithDirectFallback();
+            } else {
+              _isPlaying = false;
+              notifyListeners();
+              sleepTimer.triggerEndOfChapter();
+              onChapterFinished?.call();
+            }
+          }
         }
       },
     );

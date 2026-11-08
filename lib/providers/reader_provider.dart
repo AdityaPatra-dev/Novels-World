@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../core/models/novel.dart';
 import '../core/models/chapter.dart';
 import '../core/models/chapter_content.dart';
@@ -6,6 +6,7 @@ import '../core/models/reading_progress.dart';
 import '../data/storage_service.dart';
 import '../extractors/source_registry.dart';
 import '../tts/ring_buffer_manager.dart';
+import '../tts/tts_model_registry.dart';
 
 class ReaderProvider extends ChangeNotifier {
   final StorageService _storage;
@@ -27,7 +28,8 @@ class ReaderProvider extends ChangeNotifier {
 
   ReaderProvider(this._storage) {
     final saved = _storage.getSettings();
-    ttsManager.switchEngine(saved.ttsEngine);
+    final defaultEngine = kIsWeb ? TtsModelRegistry.systemId : saved.ttsEngine;
+    ttsManager.switchEngine(defaultEngine);
     ttsManager.setVoice(saved.ttsVoice);
     ttsManager.setSpeed(saved.ttsSpeed);
 
@@ -77,8 +79,9 @@ class ReaderProvider extends ChangeNotifier {
 
   void syncSettings(dynamic settings) {
     if (settings == null) return;
-    if (ttsManager.activeEngine.id != settings.ttsEngine) {
-      ttsManager.switchEngine(settings.ttsEngine);
+    final targetEngine = kIsWeb ? TtsModelRegistry.systemId : settings.ttsEngine;
+    if (ttsManager.activeEngine.id != targetEngine) {
+      ttsManager.switchEngine(targetEngine);
     }
     if (ttsManager.activeVoice != settings.ttsVoice) {
       ttsManager.setVoice(settings.ttsVoice);

@@ -160,28 +160,34 @@
 
           if (voicesList && voicesList.length > 0) {
             var selectedVoice = null;
-            if (voiceName) {
-              var target = voiceName.toLowerCase();
-              selectedVoice = voicesList.find(function(v) {
-                return v.name && v.name.toLowerCase().indexOf(target) !== -1;
-              });
-            }
-            if (!selectedVoice) {
-              // Priority 1: Natural / Google English voices
-              selectedVoice = voicesList.find(function(v) {
-                var lang = (v.lang || '').toLowerCase();
-                var name = (v.name || '').toLowerCase();
-                return lang.indexOf('en') === 0 && (name.indexOf('natural') !== -1 || name.indexOf('google') !== -1 || name.indexOf('samantha') !== -1);
-              });
-            }
-            if (!selectedVoice) {
-              // Priority 2: Any English voice
-              selectedVoice = voicesList.find(function(v) {
-                return (v.lang || '').toLowerCase().indexOf('en') === 0;
-              });
-            }
-            if (!selectedVoice) {
-              selectedVoice = voicesList[0];
+            if (voiceName && window._nwCachedTargetName === voiceName && window._nwCachedVoice) {
+              selectedVoice = window._nwCachedVoice;
+            } else {
+              if (voiceName) {
+                var target = voiceName.toLowerCase();
+                selectedVoice = voicesList.find(function(v) {
+                  return v.name && v.name.toLowerCase().indexOf(target) !== -1;
+                });
+              }
+              if (!selectedVoice) {
+                // Priority 1: Natural / Google English voices
+                selectedVoice = voicesList.find(function(v) {
+                  var lang = (v.lang || '').toLowerCase();
+                  var name = (v.name || '').toLowerCase();
+                  return lang.indexOf('en') === 0 && (name.indexOf('natural') !== -1 || name.indexOf('google') !== -1 || name.indexOf('samantha') !== -1);
+                });
+              }
+              if (!selectedVoice) {
+                // Priority 2: Any English voice
+                selectedVoice = voicesList.find(function(v) {
+                  return (v.lang || '').toLowerCase().indexOf('en') === 0;
+                });
+              }
+              if (!selectedVoice) {
+                selectedVoice = voicesList[0];
+              }
+              window._nwCachedTargetName = voiceName;
+              window._nwCachedVoice = selectedVoice;
             }
             if (selectedVoice) {
               u.voice = selectedVoice;

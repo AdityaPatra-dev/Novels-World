@@ -14,39 +14,70 @@ class ChapterContent {
   });
 
   /// Extracts narrative units for continuous, fluid audiobook playback.
-  /// Preserves paragraphs intact so the TTS engine speaks multi-sentence thoughts
-  /// with natural human prosody, emotional inflection, and zero audio gaps between lines.
+  /// Preserves paragraphs intact and groups consecutive short lines into natural
+  /// continuous narrative blocks, eliminating stop-and-start delays between short lines
+  /// and delivering seamless audiobook playback across both mobile and web.
   List<String> toSentences() {
-    final List<String> units = [];
+    final List<String> rawUnits = [];
     for (final paragraph in paragraphs) {
       final trimmed = paragraph.trim();
       if (trimmed.isEmpty) continue;
 
-      // Keep standard paragraphs (under 600 characters) completely intact for continuous speech
+      // Keep standard paragraphs intact for continuous speech
       if (trimmed.length <= 600) {
-        units.add(trimmed);
+        rawUnits.add(trimmed);
       } else {
-        // Only break up unusually massive mega-paragraphs at major sentence boundaries
+        // Chunk unusually massive mega-paragraphs at major sentence boundaries into ~400 char segments
         final RegExp sentenceRegex = RegExp(r'[^.!?]+(?:[.!?]+["' r"'\s]*)");
         final matches = sentenceRegex.allMatches(trimmed);
         if (matches.isEmpty) {
-          units.add(trimmed);
+          rawUnits.add(trimmed);
         } else {
-          int lastIndex = 0;
-          for (final match in matches) {
-            final s = match.group(0)?.trim();
-            if (s != null && s.isNotEmpty) {
-              units.add(s);
+          final StringBuffer chunk = StringBuffer();
+          for (final m in matches) {
+            final s = m.group(0)?.trim() ?? '';
+            if (s.isEmpty) continue;
+            if (chunk.isNotEmpty && (chunk.length + s.length > 450)) {
+              rawUnits.add(chunk.toString().trim());
+              chunk.clear();
             }
-            lastIndex = match.end;
+            if (chunk.isNotEmpty) chunk.write(' ');
+            chunk.write(s);
           }
-          if (lastIndex < trimmed.length) {
-            final rem = trimmed.substring(lastIndex).trim();
-            if (rem.isNotEmpty) units.add(rem);
+          if (chunk.isNotEmpty) {
+            rawUnits.add(chunk.toString().trim());
           }
         }
       }
     }
+
+    // Merge consecutive short lines (e.g. dialogue, short beats < 180 chars)
+    // into continuous narrative blocks so they read continuously without stopping.
+    final List<String> units = [];
+    final StringBuffer buffer = StringBuffer();
+
+    for (final unit in rawUnits) {
+      if (unit.length >= 180) {
+        if (buffer.isNotEmpty) {
+          units.add(buffer.toString().trim());
+          buffer.clear();
+        }
+        units.add(unit);
+      } else {
+        if (buffer.isNotEmpty && (buffer.length + unit.length + 1 > 360)) {
+          units.add(buffer.toString().trim());
+          buffer.clear();
+        }
+        if (buffer.isNotEmpty) {
+          buffer.write('\n');
+        }
+        buffer.write(unit);
+      }
+    }
+    if (buffer.isNotEmpty) {
+      units.add(buffer.toString().trim());
+    }
+
     return units;
   }
 

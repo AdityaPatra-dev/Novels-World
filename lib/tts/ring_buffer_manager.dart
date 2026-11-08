@@ -262,15 +262,17 @@ class RingBufferManager extends ChangeNotifier {
     if (epoch != _sessionEpoch || !_isPlaying) return;
 
     if (!kIsWeb && audioPath != null && await File(audioPath).exists()) {
-      _isBuffering = false;
-      notifyListeners();
       try {
         await _player.setFilePath(audioPath);
         await _player.setSpeed(_speed);
         await _player.setPitch(1.0); // Clean native playback without DSP artifacts
         await _player.play();
+        _isBuffering = false;
+        notifyListeners();
       } catch (e) {
         debugPrint('[RingBufferManager] Playback error: $e');
+        _isBuffering = false;
+        notifyListeners();
         _playWithDirectFallback();
       }
     } else {
@@ -294,12 +296,14 @@ class RingBufferManager extends ChangeNotifier {
     }
 
     if (_currentIndex < _sentences.length - 1) {
-      // Normal sentence progression within the current chapter
+      // Normal sentence progression within the current chapter:
+      // Dispatch audio playback FIRST with 0 latency, then update UI on the event loop
       _currentIndex++;
+      final playFuture = _playCurrentSentence(epoch);
       onSentenceStarted?.call(_currentIndex);
       notifyListeners();
       checkApproachingEnd(_currentIndex);
-      await _playCurrentSentence(epoch);
+      await playFuture;
     } else {
       // Reached the end of current chapter's sentences
       if (sleepTimer.mode == SleepTimerMode.endOfChapter) {
@@ -316,10 +320,11 @@ class RingBufferManager extends ChangeNotifier {
         _nextChapterSentences.clear();
         _currentIndex = 0;
         _hasTriggeredApproachingEnd = false;
+        final playFuture = _playCurrentSentence(epoch);
         onCrossChapterTransition?.call();
         onSentenceStarted?.call(_currentIndex);
         notifyListeners();
-        await _playCurrentSentence(epoch);
+        await playFuture;
       } else {
         // Entire novel completed or no next chapter available
         _isPlaying = false;
@@ -419,10 +424,11 @@ class RingBufferManager extends ChangeNotifier {
         if (_isPlaying && epoch == _sessionEpoch) {
           if (_currentIndex < _sentences.length - 1) {
             _currentIndex++;
+            final playFuture = _playWithDirectFallback(isSequential: true);
             onSentenceStarted?.call(_currentIndex);
             notifyListeners();
             checkApproachingEnd(_currentIndex);
-            _playWithDirectFallback(isSequential: true);
+            await playFuture;
           } else {
             // Reached the end of current chapter's sentences
             if (sleepTimer.mode == SleepTimerMode.endOfChapter) {
@@ -437,10 +443,11 @@ class RingBufferManager extends ChangeNotifier {
               _nextChapterSentences.clear();
               _currentIndex = 0;
               _hasTriggeredApproachingEnd = false;
+              final playFuture = _playWithDirectFallback(isSequential: true);
               onCrossChapterTransition?.call();
               onSentenceStarted?.call(_currentIndex);
               notifyListeners();
-              _playWithDirectFallback(isSequential: true);
+              await playFuture;
             } else {
               _isPlaying = false;
               notifyListeners();

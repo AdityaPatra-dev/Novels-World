@@ -14,16 +14,19 @@ void playWebSpeech(
   onDone();
 }
 
-void stopWebSpeech() {}
-
-void queueNextWebSpeech(
-  String text, {
+void playWebChapter(
+  List<String> sentences,
+  int startIndex, {
   String? voice,
   double rate = 1.0,
   double pitch = 1.0,
-  required void Function() onStarted,
+  required void Function(int index) onSentenceChanged,
   required void Function() onDone,
-}) {}
+}) {
+  onDone();
+}
+
+void stopWebSpeech() {}
 
 void pauseWebSpeech() {}
 

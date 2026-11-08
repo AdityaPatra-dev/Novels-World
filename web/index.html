@@ -260,47 +260,146 @@
           }, 10000);
         },
 
-        queueNext: function(text, voiceName, rate, pitch, onStarted, onDone) {
-          if (!('speechSynthesis' in window)) return;
-          var clean = (text || '').trim();
-          if (!clean) return;
-
-          var uNext = new SpeechSynthesisUtterance(clean);
-          uNext.rate = Math.max(0.5, Math.min(2.5, rate || 1.0));
-          uNext.pitch = Math.max(0.5, Math.min(2.0, pitch || 1.0));
-
-          if (window._nwCachedVoice) {
-            uNext.voice = window._nwCachedVoice;
-            uNext.lang = window._nwCachedVoice.lang || 'en-US';
+        playChapter: function(sentencesJson, startIndex, voiceName, rate, pitch, onSentenceChanged, onDone) {
+          if (!('speechSynthesis' in window)) {
+            if (typeof onDone === 'function') onDone();
+            return;
           }
+          try { window.speechSynthesis.cancel(); } catch(e) {}
 
-          var started = false;
-          uNext.onstart = function() {
-            if (started) return;
-            started = true;
-            window.novelsWorldTts.isSpeaking = true;
-            window.novelsWorldTts.isPaused = false;
-            if (typeof onStarted === 'function') {
-              try { onStarted(); } catch(e) {}
-            }
-          };
-
-          var ended = false;
-          function completeNext() {
-            if (ended) return;
-            ended = true;
-            if (typeof onDone === 'function') {
-              try { onDone(); } catch(e) {}
-            }
-          }
-          uNext.onend = completeNext;
-          uNext.onerror = completeNext;
-
+          var sentences = [];
           try {
-            window.speechSynthesis.speak(uNext);
+            sentences = typeof sentencesJson === 'string' ? JSON.parse(sentencesJson) : sentencesJson;
           } catch(e) {
-            console.error('[NovelsWorld TTS] queueNext exception:', e);
+            sentences = [];
           }
+          if (!sentences || sentences.length === 0) {
+            if (typeof onDone === 'function') onDone();
+            return;
+          }
+
+          var currentIndex = Math.max(0, Math.min(startIndex || 0, sentences.length - 1));
+          var isPlaying = true;
+          window.novelsWorldTts.isSpeaking = true;
+          window.novelsWorldTts.isPaused = false;
+
+          if (resumeTimer) {
+            clearInterval(resumeTimer);
+            resumeTimer = null;
+          }
+
+          if (!voicesList || voicesList.length === 0) {
+            populateVoices();
+          }
+
+          var activeVoice = null;
+          if (voicesList && voicesList.length > 0) {
+            if (voiceName && window._nwCachedTargetName === voiceName && window._nwCachedVoice) {
+              activeVoice = window._nwCachedVoice;
+            } else {
+              if (voiceName) {
+                var target = voiceName.toLowerCase();
+                activeVoice = voicesList.find(function(v) {
+                  return v.name && v.name.toLowerCase().indexOf(target) !== -1;
+                });
+              }
+              if (!activeVoice) {
+                activeVoice = voicesList.find(function(v) {
+                  var lang = (v.lang || '').toLowerCase();
+                  var name = (v.name || '').toLowerCase();
+                  return lang.indexOf('en') === 0 && (name.indexOf('natural') !== -1 || name.indexOf('google') !== -1);
+                });
+              }
+              if (!activeVoice) {
+                activeVoice = voicesList.find(function(v) {
+                  return (v.lang || '').toLowerCase().indexOf('en') === 0;
+                });
+              }
+              if (!activeVoice) activeVoice = voicesList[0];
+              window._nwCachedTargetName = voiceName;
+              window._nwCachedVoice = activeVoice;
+            }
+          }
+
+          function queueUtterance(index) {
+            if (!isPlaying || index >= sentences.length) return;
+            var text = (sentences[index] || '').trim();
+            if (!text) {
+              queueUtterance(index + 1);
+              return;
+            }
+
+            var u = new SpeechSynthesisUtterance(text);
+            u.rate = Math.max(0.5, Math.min(2.5, rate || 1.0));
+            u.pitch = Math.max(0.5, Math.min(2.0, pitch || 1.0));
+            if (activeVoice) {
+              u.voice = activeVoice;
+              u.lang = activeVoice.lang || 'en-US';
+            }
+
+            var started = false;
+            var nextQueued = false;
+            function ensureNextQueued() {
+              if (nextQueued) return;
+              nextQueued = true;
+              queueUtterance(index + 1);
+            }
+
+            u.onstart = function() {
+              if (!isPlaying || started) return;
+              started = true;
+              window.novelsWorldTts.isSpeaking = true;
+              window.novelsWorldTts.isPaused = false;
+              if (typeof onSentenceChanged === 'function') {
+                try { onSentenceChanged(index); } catch(err) {}
+              }
+              // Pre-queue the NEXT sentence in the browser audio pipeline for 0ms transition!
+              ensureNextQueued();
+            };
+
+            u.onend = function() {
+              if (!isPlaying) return;
+              ensureNextQueued();
+              if (index >= sentences.length - 1) {
+                isPlaying = false;
+                window.novelsWorldTts.isSpeaking = false;
+                if (typeof onDone === 'function') {
+                  try { onDone(); } catch(err) {}
+                }
+              }
+            };
+
+            u.onerror = function(ev) {
+              if (!isPlaying) return;
+              ensureNextQueued();
+              if (index >= sentences.length - 1) {
+                isPlaying = false;
+                window.novelsWorldTts.isSpeaking = false;
+                if (typeof onDone === 'function') {
+                  try { onDone(); } catch(err) {}
+                }
+              }
+            };
+
+            try {
+              window.speechSynthesis.speak(u);
+            } catch(e) {
+              console.error('[NovelsWorld TTS] speak exception:', e);
+            }
+          }
+
+          // Start from requested index
+          queueUtterance(currentIndex);
+
+          // Keep-alive for long speeches in Chrome
+          resumeTimer = setInterval(function() {
+            if (window.speechSynthesis.speaking && !window.novelsWorldTts.isPaused) {
+              window.speechSynthesis.resume();
+            } else if (!window.speechSynthesis.speaking) {
+              clearInterval(resumeTimer);
+              resumeTimer = null;
+            }
+          }, 10000);
         },
 
         pause: function() {

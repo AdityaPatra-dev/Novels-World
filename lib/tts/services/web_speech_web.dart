@@ -45,48 +45,50 @@ void playWebSpeech(
   }
 }
 
-void stopWebSpeech() {
-  try {
-    final win = globalContext;
-    final tts = win.getProperty('novelsWorldTts'.toJS) as JSObject?;
-    tts?.callMethod('stop'.toJS);
-  } catch (_) {}
-}
-
-void queueNextWebSpeech(
-  String text, {
+void playWebChapter(
+  List<String> sentences,
+  int startIndex, {
   String? voice,
   double rate = 1.0,
   double pitch = 1.0,
-  required void Function() onStarted,
+  required void Function(int index) onSentenceChanged,
   required void Function() onDone,
 }) {
   try {
     final win = globalContext;
     final tts = win.getProperty('novelsWorldTts'.toJS) as JSObject?;
     if (tts != null) {
-      final jsOnStarted = (() {
-        onStarted();
+      final jsOnChanged = ((JSNumber idx) {
+        onSentenceChanged(idx.toDartInt);
       }).toJS;
       final jsOnDone = (() {
         onDone();
       }).toJS;
 
       tts.callMethodVarArgs(
-        'queueNext'.toJS,
+        'playChapter'.toJS,
         [
-          text.toJS,
+          jsonEncode(sentences).toJS,
+          startIndex.toJS,
           (voice ?? '').toJS,
           rate.toJS,
           pitch.toJS,
-          jsOnStarted,
+          jsOnChanged,
           jsOnDone,
         ],
       );
     }
   } catch (e) {
-    debugPrint('[WebSpeech] queueNextWebSpeech error: $e');
+    debugPrint('[WebSpeech] playWebChapter error: $e');
   }
+}
+
+void stopWebSpeech() {
+  try {
+    final win = globalContext;
+    final tts = win.getProperty('novelsWorldTts'.toJS) as JSObject?;
+    tts?.callMethod('stop'.toJS);
+  } catch (_) {}
 }
 
 void pauseWebSpeech() {

@@ -239,11 +239,40 @@ class RingBufferManager extends ChangeNotifier {
       return;
     }
 
-    // On web, immediately use browser speech synthesis fallback without local filesystem calls
+    // On web, use the seamless streaming Web Speech pipeline with 0ms gapless native queuing
     if (kIsWeb) {
       _isBuffering = false;
       notifyListeners();
-      await _playWithDirectFallback();
+      playWebChapter(
+        _sentences,
+        _currentIndex,
+        voice: _activeVoice,
+        rate: _speed,
+        pitch: _pitch,
+        onSentenceChanged: (newIdx) {
+          if (!_isPlaying || epoch != _sessionEpoch) return;
+          _currentIndex = newIdx;
+          onSentenceStarted?.call(_currentIndex);
+          notifyListeners();
+          checkApproachingEnd(_currentIndex);
+        },
+        onDone: () {
+          if (!_isPlaying || epoch != _sessionEpoch) return;
+          if (_nextChapterSentences.isNotEmpty) {
+            _sentences = List<String>.from(_nextChapterSentences);
+            _nextChapterSentences.clear();
+            _currentIndex = 0;
+            _hasTriggeredApproachingEnd = false;
+            onCrossChapterTransition?.call();
+            _playCurrentSentence(epoch);
+          } else {
+            _isPlaying = false;
+            notifyListeners();
+            sleepTimer.triggerEndOfChapter();
+            onChapterFinished?.call();
+          }
+        },
+      );
       return;
     }
 
@@ -341,7 +370,9 @@ class RingBufferManager extends ChangeNotifier {
     if (_sentences.isEmpty || _isPlaying) return;
     _isPlaying = true;
     notifyListeners();
-    if (!kIsWeb && _player.processingState == ProcessingState.ready) {
+    if (kIsWeb) {
+      resumeWebSpeech();
+    } else if (_player.processingState == ProcessingState.ready) {
       await _player.play();
     } else {
       await playFrom(_currentIndex);
@@ -416,7 +447,6 @@ class RingBufferManager extends ChangeNotifier {
 
     onSentenceStarted?.call(_currentIndex);
     final epoch = _sessionEpoch;
-    final currentIdx = _currentIndex;
 
     await _activeEngine.speakSentenceDirect(
       sentence,
@@ -426,8 +456,6 @@ class RingBufferManager extends ChangeNotifier {
       isSequential: isSequential,
       onDone: () async {
         if (!_isPlaying || epoch != _sessionEpoch) return;
-        // If web pre-queue already advanced past this sentence, do not double-advance
-        if (kIsWeb && _currentIndex > currentIdx) return;
 
         if (_sentencePauseMs > 0) {
           await Future.delayed(Duration(milliseconds: _sentencePauseMs));
@@ -466,46 +494,6 @@ class RingBufferManager extends ChangeNotifier {
               onChapterFinished?.call();
             }
           }
-        }
-      },
-    );
-
-    // On Web, immediately PRE-QUEUE the next sentence into the browser speech queue!
-    // This allows Chrome to pre-synthesize the audio so that sentence i -> i+1 transitions
-    // with EXACT 0ms gapless playback!
-    if (kIsWeb && _currentIndex + 1 < _sentences.length) {
-      _queueNextOnWeb(epoch);
-    }
-  }
-
-  void _queueNextOnWeb(int epoch) {
-    if (!kIsWeb || !_isPlaying || epoch != _sessionEpoch) return;
-    final nextIdx = _currentIndex + 1;
-    if (nextIdx >= _sentences.length) return;
-    final nextText = _sentences[nextIdx].trim();
-    if (nextText.isEmpty) return;
-
-    queueNextWebSpeech(
-      nextText,
-      voice: _activeVoice,
-      rate: _speed,
-      pitch: _pitch,
-      onStarted: () {
-        if (!_isPlaying || epoch != _sessionEpoch) return;
-        _currentIndex = nextIdx;
-        onSentenceStarted?.call(_currentIndex);
-        notifyListeners();
-        checkApproachingEnd(_currentIndex);
-        // Pre-queue the NEXT upcoming sentence in Chrome's queue
-        _queueNextOnWeb(epoch);
-      },
-      onDone: () {
-        if (!_isPlaying || epoch != _sessionEpoch) return;
-        if (_currentIndex >= _sentences.length - 1) {
-          _isPlaying = false;
-          notifyListeners();
-          sleepTimer.triggerEndOfChapter();
-          onChapterFinished?.call();
         }
       },
     );

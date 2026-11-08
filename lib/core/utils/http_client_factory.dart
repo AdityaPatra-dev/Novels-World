@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
@@ -31,7 +32,7 @@ String getWebProxiedImageUrl(String originalUrl) {
 }
 
 /// Creates a platform-optimized HTTP client:
-/// - On Web (`kIsWeb`): Routes external scraping through Cloudflare Edge proxy
+/// - On Web (`kIsWeb`): Routes external scraping through Cloudflare Edge proxy with in-memory caching & deduplication
 /// - On Mobile (`!kIsWeb`): Direct raw OS sockets via native IOClient (zero overhead, 100% native)
 http.Client createPlatformHttpClient({Duration timeout = const Duration(seconds: 15)}) {
   if (kIsWeb) {
@@ -43,14 +44,35 @@ http.Client createPlatformHttpClient({Duration timeout = const Duration(seconds:
   return IOClient(native);
 }
 
+class _CachedResponse {
+  final int statusCode;
+  final Map<String, String> headers;
+  final List<int> bodyBytes;
+  final DateTime expiresAt;
+
+  _CachedResponse({
+    required this.statusCode,
+    required this.headers,
+    required this.bodyBytes,
+    required this.expiresAt,
+  });
+
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
+}
+
 class _WebCorsProxyClient extends http.BaseClient {
   final http.Client _inner = http.Client();
   final String proxyUrl;
 
+  // Shared in-memory cache across all extractor requests on web to minimize requests
+  static final Map<String, _CachedResponse> _responseCache = {};
+  static final Map<String, Future<List<int>>> _inFlightRequests = {};
+  static const int _maxCacheSize = 200;
+
   _WebCorsProxyClient(this.proxyUrl);
 
   @override
-  Future<http.StreamedResponse> send(http.BaseRequest request) {
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final originalUri = request.url;
     final urlStr = originalUri.toString();
 
@@ -66,14 +88,94 @@ class _WebCorsProxyClient extends http.BaseClient {
       return _inner.send(request);
     }
 
-    // Proxy the external request through Cloudflare Edge
+    // 1. Check in-memory cache for GET requests (0ms latency, 0 network requests)
+    if (request.method == 'GET') {
+      final cached = _responseCache[urlStr];
+      if (cached != null && !cached.isExpired) {
+        return http.StreamedResponse(
+          Stream.value(cached.bodyBytes),
+          cached.statusCode,
+          headers: cached.headers,
+          reasonPhrase: 'OK (Memory Cache)',
+        );
+      }
+    }
+
+    // 2. Proxy the external request through Cloudflare Edge
     final proxiedUri = Uri.parse('$proxyUrl?url=${Uri.encodeComponent(urlStr)}');
     final proxiedRequest = http.Request(request.method, proxiedUri);
     proxiedRequest.headers.addAll(request.headers);
     if (request is http.Request) {
       proxiedRequest.bodyBytes = request.bodyBytes;
     }
-    return _inner.send(proxiedRequest);
+
+    // For non-GET requests, forward directly without caching
+    if (request.method != 'GET') {
+      return _inner.send(proxiedRequest);
+    }
+
+    // 3. Request deduplication: if identical URL is already in-flight, await the same future
+    final existingFuture = _inFlightRequests[urlStr];
+    if (existingFuture != null) {
+      final bodyBytes = await existingFuture;
+      final cached = _responseCache[urlStr];
+      return http.StreamedResponse(
+        Stream.value(bodyBytes),
+        cached?.statusCode ?? 200,
+        headers: cached?.headers ?? {},
+        reasonPhrase: 'OK (Deduplicated)',
+      );
+    }
+
+    final completer = Completer<List<int>>();
+    _inFlightRequests[urlStr] = completer.future;
+
+    try {
+      final streamedResponse = await _inner.send(proxiedRequest);
+
+      if (streamedResponse.statusCode == 200) {
+        final bodyBytes = await streamedResponse.stream.toBytes();
+
+        // Dynamic TTL: 24h for chapters, 1h for novel details, 15m for listings/searches
+        final isChapter = urlStr.toLowerCase().contains('chapter');
+        final isListing = urlStr.contains('page') || urlStr.contains('search') || urlStr.contains('popular');
+        final ttl = isChapter
+            ? const Duration(hours: 24)
+            : (isListing ? const Duration(minutes: 15) : const Duration(hours: 1));
+
+        // Evict oldest if cache limit reached
+        if (_responseCache.length >= _maxCacheSize) {
+          _responseCache.remove(_responseCache.keys.first);
+        }
+
+        _responseCache[urlStr] = _CachedResponse(
+          statusCode: streamedResponse.statusCode,
+          headers: streamedResponse.headers,
+          bodyBytes: bodyBytes,
+          expiresAt: DateTime.now().add(ttl),
+        );
+
+        completer.complete(bodyBytes);
+
+        return http.StreamedResponse(
+          Stream.value(bodyBytes),
+          streamedResponse.statusCode,
+          headers: streamedResponse.headers,
+          contentLength: bodyBytes.length,
+          request: streamedResponse.request,
+          isRedirect: streamedResponse.isRedirect,
+          reasonPhrase: streamedResponse.reasonPhrase,
+        );
+      } else {
+        completer.complete([]);
+        return streamedResponse;
+      }
+    } catch (e) {
+      completer.completeError(e);
+      rethrow;
+    } finally {
+      _inFlightRequests.remove(urlStr);
+    }
   }
 
   @override

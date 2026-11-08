@@ -69,6 +69,18 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (kIsWeb) {
+        final GoogleAuthProvider googleProvider = GoogleAuthProvider();
+        googleProvider.addScope('email');
+        googleProvider.addScope('profile');
+        final UserCredential userCredential =
+            await auth.signInWithPopup(googleProvider);
+        _isSigningIn = false;
+        _authError = null;
+        notifyListeners();
+        return userCredential;
+      }
+
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         // User cancelled the sign-in flow

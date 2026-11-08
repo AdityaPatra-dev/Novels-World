@@ -11,6 +11,7 @@ import 'core/utils/url_strategy.dart';
 import 'data/storage_service.dart';
 import 'data/download_service.dart';
 import 'firebase_options.dart';
+import 'core/services/firebase_web_plugins.dart';
 import 'providers/library_provider.dart';
 import 'providers/reader_provider.dart';
 import 'providers/settings_provider.dart';
@@ -30,6 +31,8 @@ void main() async {
 
   if (!kIsWeb) {
     HttpOverrides.global = AppHttpOverrides();
+  } else {
+    initFirebaseWebPlugins();
   }
 
   try {

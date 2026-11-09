@@ -37,21 +37,52 @@ class WebViewSessionManager {
     _initialized = true;
   }
 
+  Map<String, String> _parseCookieString(String cookies) {
+    final map = <String, String>{};
+    for (final pair in cookies.split(';')) {
+      final trimmed = pair.trim();
+      if (trimmed.isEmpty) continue;
+      final eq = trimmed.indexOf('=');
+      if (eq > 0) {
+        final name = trimmed.substring(0, eq).trim();
+        final value = trimmed.substring(eq + 1).trim();
+        if (name.isNotEmpty) {
+          map[name] = value;
+        }
+      }
+    }
+    return map;
+  }
+
   String? getCookieHeader(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return null;
     final host = uri.host.toLowerCase();
 
-    // Check exact host
-    if (_cookieCache.containsKey(host)) {
+    // 1. Check exact host
+    if (_cookieCache.containsKey(host) && _cookieCache[host]!.trim().isNotEmpty) {
       return _cookieCache[host];
     }
 
-    // Check root domain (e.g. .novelbin.com for www.novelbin.com)
+    // 2. Check without 'www.'
+    if (host.startsWith('www.')) {
+      final noWww = host.substring(4);
+      if (_cookieCache.containsKey(noWww) && _cookieCache[noWww]!.trim().isNotEmpty) {
+        return _cookieCache[noWww];
+      }
+    } else {
+      // Check with 'www.'
+      final withWww = 'www.$host';
+      if (_cookieCache.containsKey(withWww) && _cookieCache[withWww]!.trim().isNotEmpty) {
+        return _cookieCache[withWww];
+      }
+    }
+
+    // 3. Check root domain (e.g. novelbin.com for api.novelbin.com)
     final parts = host.split('.');
     if (parts.length > 2) {
       final rootHost = parts.sublist(parts.length - 2).join('.');
-      if (_cookieCache.containsKey(rootHost)) {
+      if (_cookieCache.containsKey(rootHost) && _cookieCache[rootHost]!.trim().isNotEmpty) {
         return _cookieCache[rootHost];
       }
     }
@@ -59,17 +90,44 @@ class WebViewSessionManager {
     return null;
   }
 
+  bool hasClearanceCookie(String url) {
+    final cookie = getCookieHeader(url);
+    if (cookie == null) return false;
+    return cookie.contains('cf_clearance');
+  }
+
   Future<void> saveCookies(String url, String cookieString) async {
     final uri = Uri.tryParse(url);
     if (uri == null || cookieString.trim().isEmpty) return;
     final host = uri.host.toLowerCase();
 
-    _cookieCache[host] = cookieString.trim();
+    final existing = _cookieCache[host] ?? '';
+    final existingMap = _parseCookieString(existing);
+    final newMap = _parseCookieString(cookieString);
+
+    existingMap.addAll(newMap);
+
+    final merged = existingMap.entries.map((e) => '${e.key}=${e.value}').join('; ');
+    _cookieCache[host] = merged;
 
     try {
       _prefs ??= await SharedPreferences.getInstance();
-      await _prefs?.setString('cookie_host_$host', cookieString.trim());
+      await _prefs?.setString('cookie_host_$host', merged);
     } catch (_) {}
+
+    // Also mirror to root domain if host has subdomains (e.g. www.oceanofpdf.com -> oceanofpdf.com)
+    final parts = host.split('.');
+    if (parts.length > 2) {
+      final rootHost = parts.sublist(parts.length - 2).join('.');
+      final rootExisting = _cookieCache[rootHost] ?? '';
+      final rootExistingMap = _parseCookieString(rootExisting);
+      rootExistingMap.addAll(newMap);
+      final rootMerged = rootExistingMap.entries.map((e) => '${e.key}=${e.value}').join('; ');
+      _cookieCache[rootHost] = rootMerged;
+      try {
+        await _prefs?.setString('cookie_host_$rootHost', rootMerged);
+      } catch (_) {}
+    }
   }
 
   Future<void> clearCookies(String url) async {
@@ -80,6 +138,15 @@ class WebViewSessionManager {
     try {
       await _prefs?.remove('cookie_host_$host');
     } catch (_) {}
+
+    final parts = host.split('.');
+    if (parts.length > 2) {
+      final rootHost = parts.sublist(parts.length - 2).join('.');
+      _cookieCache.remove(rootHost);
+      try {
+        await _prefs?.remove('cookie_host_$rootHost');
+      } catch (_) {}
+    }
   }
 
   /// Extracts cookies for the given URL directly from the WebView cookie storage
@@ -90,8 +157,26 @@ class WebViewSessionManager {
     try {
       final cookieManager = WebViewCookieManager();
       final cookies = await cookieManager.getCookies(domain: uri);
-      if (cookies.isNotEmpty) {
-        final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+      final combinedMap = <String, String>{};
+      for (final c in cookies) {
+        combinedMap[c.name] = c.value;
+      }
+
+      final host = uri.host.toLowerCase();
+      final parts = host.split('.');
+      if (parts.length > 2) {
+        final rootHost = parts.sublist(parts.length - 2).join('.');
+        final rootUri = Uri(scheme: uri.scheme, host: rootHost);
+        try {
+          final rootCookies = await cookieManager.getCookies(domain: rootUri);
+          for (final c in rootCookies) {
+            combinedMap[c.name] = c.value;
+          }
+        } catch (_) {}
+      }
+
+      if (combinedMap.isNotEmpty) {
+        final cookieStr = combinedMap.entries.map((e) => '${e.key}=${e.value}').join('; ');
         await saveCookies(url, cookieStr);
         return cookieStr;
       }

@@ -140,13 +140,46 @@ class LibGenExtractor implements NovelSource {
       final md5Hash = md5Match?.group(1);
       if (md5Hash == null || md5Hash.isEmpty) continue;
 
+      // Extract edition ID if present (e.g. edition.php?id=137287439)
+      final rowHtml = row.innerHtml;
+      final editionMatch = RegExp(r'edition\.php\?id=(\d+)').firstMatch(rowHtml);
+      final editionId = editionMatch?.group(1);
+
+      // Extract library database ID badge (e.g. <span class="badge badge-secondary">l 1510172</span>)
+      final libMatch = RegExp(r'>\s*l\s*(\d+)\s*<').firstMatch(rowHtml) ??
+          RegExp(r'l\s*(\d+)').firstMatch(rowHtml);
+      final libId = libMatch?.group(1);
+
+      // Extract ISBN if available in row (e.g. 0786430575; 9780786430574)
+      final isbnMatch = RegExp(r'(?:97[89][-\s]*)?[0-9]{9}[0-9xX]', caseSensitive: false).firstMatch(rowHtml);
+      final isbn = isbnMatch?.group(0)?.replaceAll(RegExp(r'[-\s]'), '');
+
+      // Check for inline img tag
+      final imgTag = row.querySelector('img[src*="cover"], img[src*="edition"]');
+      var coverUrl = '';
+      if (imgTag != null) {
+        final src = imgTag.attributes['src'] ?? '';
+        if (src.isNotEmpty) {
+          coverUrl = src.startsWith('http') ? src : '$currentBase$src';
+        }
+      }
+
+      // Compute standard LibGen library cover path or edition cover
+      if (coverUrl.isEmpty && libId != null && int.tryParse(libId) != null) {
+        final lNum = int.parse(libId);
+        final bucket = (lNum ~/ 1000) * 1000;
+        coverUrl = '$currentBase/covers/$bucket/$md5Hash.jpg';
+      } else if (coverUrl.isEmpty && editionId != null && int.tryParse(editionId) != null) {
+        final edNum = int.parse(editionId);
+        final bucket = (edNum ~/ 1000) * 1000;
+        coverUrl = '$currentBase/editioncovers/$bucket/$editionId.jpg';
+      } else if (coverUrl.isEmpty && isbn != null && isbn.length >= 10) {
+        coverUrl = 'https://covers.openlibrary.org/b/isbn/$isbn-M.jpg?default=false';
+      }
+
       // Real book page with direct download key and cover
       final bookPageUrl = '$currentBase/ads.php?md5=$md5Hash';
       final downloadUrl = '$currentBase/get.php?md5=$md5Hash';
-
-      // LibGen standardized cover image path
-      final coverPrefix = md5Hash.length >= 3 ? md5Hash.substring(0, 3) : '000';
-      final coverUrl = '$currentBase/covers/${coverPrefix}000/$md5Hash.jpg';
 
       if (results.any((n) => n.id == '${id}_$md5Hash')) continue;
 
@@ -208,6 +241,26 @@ class LibGenExtractor implements NovelSource {
     if (downloadAnchor != null) {
       final relHref = downloadAnchor.attributes['href'] ?? '';
       downloadUrl = relHref.startsWith('http') ? relHref : '$_activeMirror/$relHref';
+    } else {
+      // If landed on edition.php, resolve underlying ads.php page to extract keyed get.php link
+      final adsAnchor = doc.querySelector('a[href*="ads.php?md5="]');
+      if (adsAnchor != null) {
+        final relAds = adsAnchor.attributes['href'] ?? '';
+        final adsUrl = relAds.startsWith('http') ? relAds : '$_activeMirror/$relAds';
+        try {
+          final adsRes = await _client
+              .get(Uri.parse(adsUrl), headers: _getHeaders(_activeMirror))
+              .timeout(const Duration(seconds: 8));
+          if (adsRes.statusCode == 200) {
+            final adsDoc = html_parser.parse(adsRes.body);
+            final dlInAds = adsDoc.querySelector('a[href*="get.php?md5="]');
+            if (dlInAds != null) {
+              final relHref = dlInAds.attributes['href'] ?? '';
+              downloadUrl = relHref.startsWith('http') ? relHref : '$_activeMirror/$relHref';
+            }
+          }
+        } catch (_) {}
+      }
     }
 
     // Cover image extraction
@@ -217,6 +270,25 @@ class LibGenExtractor implements NovelSource {
       final src = coverImg.attributes['src'] ?? '';
       if (src.isNotEmpty) {
         coverUrl = src.startsWith('http') ? src : '$_activeMirror$src';
+      }
+    }
+
+    // Fallback: extract editioncover or lib cover path or ISBN from page HTML
+    if (coverUrl.isEmpty) {
+      final edMatch = RegExp(r'/editioncovers/(\d+)/(\d+)\.jpg').firstMatch(response.body);
+      if (edMatch != null) {
+        coverUrl = '$_activeMirror/editioncovers/${edMatch.group(1)}/${edMatch.group(2)}.jpg';
+      } else {
+        final covMatch = RegExp(r'/covers/(\d+)/([a-zA-Z0-9]+)\.jpg').firstMatch(response.body);
+        if (covMatch != null) {
+          coverUrl = '$_activeMirror/covers/${covMatch.group(1)}/${covMatch.group(2)}.jpg';
+        } else {
+          final isbnMatch = RegExp(r'isbn\s*=\s*\{([^}]+)\}', caseSensitive: false).firstMatch(response.body);
+          final isbn = isbnMatch?.group(1)?.replaceAll(RegExp(r'[-\s]'), '');
+          if (isbn != null && isbn.length >= 10) {
+            coverUrl = 'https://covers.openlibrary.org/b/isbn/$isbn-M.jpg?default=false';
+          }
+        }
       }
     }
 

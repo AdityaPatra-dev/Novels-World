@@ -16,7 +16,6 @@ import '../reader/reader_screen.dart';
 import '../widgets/source_webview_screen.dart';
 import '../widgets/novel_storage_modal.dart';
 import '../widgets/download_range_dialog.dart';
-import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/text_cleaner.dart';
 import '../../core/utils/chapter_range_parser.dart';
 import '../../core/utils/http_client_factory.dart';
@@ -81,23 +80,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     return url;
   }
 
-  Map<String, String> get _imageHeaders {
-    final headers = <String, String>{
-      'User-Agent': WebViewSessionManager.defaultUserAgent,
-      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-    };
-    if (_novel.sourceUrl.isNotEmpty) {
-      final origin = Uri.tryParse(_novel.sourceUrl)?.origin;
-      if (origin != null && origin.isNotEmpty) {
-        headers['Referer'] = '$origin/';
-      }
-    }
-    final cookie = WebViewSessionManager.instance.getCookieHeader(_novel.sourceUrl);
-    if (cookie != null && cookie.isNotEmpty) {
-      headers['Cookie'] = cookie;
-    }
-    return headers;
-  }
+  Map<String, String> get _imageHeaders => getCoverImageHeaders(_sanitizedCoverUrl, _novel.sourceUrl);
 
   Widget _buildPlaceholderCover() {
     return Container(
@@ -493,6 +476,22 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           SnackBar(
             content: Text('Download failed: $e'),
             backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(
+              label: 'Open Browser',
+              textColor: Colors.white,
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SourceWebViewScreen(
+                      initialUrl: _novel.sourceUrl,
+                      sourceName: _novel.title,
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         );
       }

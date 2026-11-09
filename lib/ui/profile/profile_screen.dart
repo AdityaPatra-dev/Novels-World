@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/novel.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/cloud_sync_service.dart';
+import '../../core/utils/http_client_factory.dart';
 import '../../data/storage_service.dart';
 import '../../providers/library_provider.dart';
 import '../novel/novel_detail_screen.dart';
@@ -479,6 +480,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: novel.coverUrl.isNotEmpty
                             ? Image.network(
                                 novel.coverUrl,
+                                headers: getCoverImageHeaders(novel.coverUrl),
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
                                     const Icon(Icons.menu_book, color: Colors.white30),

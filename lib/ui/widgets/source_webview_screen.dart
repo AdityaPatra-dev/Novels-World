@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -30,6 +32,8 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
   String _pageTitle = '';
   int _cookieCount = 0;
   bool _hasSyncedCookies = false;
+  Timer? _clearancePollTimer;
+  bool _autoDismissed = false;
 
   @override
   void initState() {
@@ -37,6 +41,20 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setUserAgent(WebViewSessionManager.defaultUserAgent)
+      ..addJavaScriptChannel(
+        'NovelsWorldDownload',
+        onMessageReceived: (JavaScriptMessage msg) {
+          try {
+            final data = jsonDecode(msg.message) as Map<String, dynamic>;
+            final action = data['action']?.toString() ?? '';
+            final method = data['method']?.toString().toUpperCase() ?? 'GET';
+            final body = data['body']?.toString();
+            if (action.isNotEmpty) {
+              _handleEpubDownload(action, method: method, postBody: body);
+            }
+          } catch (_) {}
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (progress) {
@@ -69,6 +87,37 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                 });
               }
             } catch (_) {}
+
+            // Inject form download interception for OceanofPDF and vdoc.pub
+            try {
+              await _controller.runJavaScript('''
+                (function() {
+                  document.querySelectorAll('form').forEach(function(f) {
+                    if (f.__nw_bound) return;
+                    f.__nw_bound = true;
+                    var act = (f.getAttribute('action') || '').toLowerCase();
+                    if (act.includes('epub') || act.includes('download')) {
+                      f.addEventListener('submit', function(e) {
+                        try {
+                          var formData = new FormData(f);
+                          var parts = [];
+                          for (var pair of formData.entries()) {
+                            parts.push(encodeURIComponent(pair[0]) + '=' + encodeURIComponent(pair[1]));
+                          }
+                          var bodyStr = parts.join('&');
+                          var fullAction = f.action || window.location.href;
+                          NovelsWorldDownload.postMessage(JSON.stringify({
+                            action: fullAction,
+                            method: (f.method || 'POST').toUpperCase(),
+                            body: bodyStr
+                          }));
+                        } catch (err) {}
+                      });
+                    }
+                  });
+                })();
+              ''');
+            } catch (_) {}
           },
           onWebResourceError: (error) {
             // Silently handle non-fatal web resource errors
@@ -77,7 +126,9 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
             final urlLower = request.url.toLowerCase();
             if (urlLower.endsWith('.epub') ||
                 urlLower.contains('.epub?') ||
-                urlLower.contains('/download/epub')) {
+                urlLower.contains('/download/epub') ||
+                urlLower.contains('epub-download') ||
+                urlLower.contains('/get.php?md5=')) {
               _handleEpubDownload(request.url);
               return NavigationDecision.prevent;
             }
@@ -86,9 +137,63 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
         ),
       )
       ..loadRequest(Uri.parse(widget.initialUrl));
+
+    // Monitor for clearance resolution so user doesn't have to manually press 'Save & Return'
+    _clearancePollTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) async {
+      if (!mounted || _autoDismissed) return;
+      try {
+        final currentUrl = await _controller.currentUrl();
+        if (currentUrl == null || currentUrl.isEmpty) return;
+        await _syncCookies(currentUrl);
+
+        final title = await _controller.getTitle() ?? '';
+        final titleLower = title.toLowerCase();
+        final isStillChallenged = titleLower.contains('just a moment') ||
+            titleLower.contains('attention required') ||
+            titleLower.contains('cloudflare');
+
+        final hasClearance = WebViewSessionManager.instance.hasClearanceCookie(currentUrl);
+
+        if (mounted && title.isNotEmpty && title != _pageTitle) {
+          setState(() {
+            _pageTitle = title;
+          });
+        }
+
+        if ((hasClearance || (!isStillChallenged && _cookieCount > 0)) && !_autoDismissed) {
+          _autoDismissed = true;
+          _clearancePollTimer?.cancel();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text('Verification cleared! Session saved for ${widget.sourceName}.'),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF10B981),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+            await Future.delayed(const Duration(milliseconds: 700));
+            if (mounted) {
+              Navigator.pop(context, true);
+            }
+          }
+        }
+      } catch (_) {}
+    });
   }
 
-  Future<void> _handleEpubDownload(String url) async {
+  @override
+  void dispose() {
+    _clearancePollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleEpubDownload(String url, {String method = 'GET', String? postBody}) async {
     final scaffold = ScaffoldMessenger.of(context);
     scaffold.showSnackBar(
       const SnackBar(
@@ -116,7 +221,12 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
         headers['Cookie'] = cookies;
       }
 
-      final novel = await EpubService().importEpubFromUrl(url, headers: headers);
+      final novel = await EpubService().importEpubFromUrl(
+        url,
+        method: method,
+        body: postBody,
+        headers: headers,
+      );
       if (mounted) {
         await context.read<LibraryProvider>().saveToLibrary(novel);
         scaffold.hideCurrentSnackBar();
@@ -203,6 +313,8 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
+        final currentUrl = await _controller.currentUrl() ?? widget.initialUrl;
+        await _syncCookies(currentUrl);
         if (await _controller.canGoBack()) {
           await _controller.goBack();
         } else {
@@ -213,6 +325,16 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () async {
+              final currentUrl = await _controller.currentUrl() ?? widget.initialUrl;
+              await _syncCookies(currentUrl);
+              if (context.mounted) {
+                Navigator.pop(context, _hasSyncedCookies);
+              }
+            },
+          ),
           titleSpacing: 0,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

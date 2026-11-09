@@ -96,5 +96,26 @@ void main() {
       expect(doc.first.author, equals('Frank Herbert'));
       expect(doc.first.bookFormat, equals('epub'));
     });
+
+    test('LibGen parseHtmlTable computes valid edition and library cover paths', () {
+      final extractor = LibGenExtractor();
+      final doc = extractor.parseHtmlTable('''
+<table id="tablelibgen">
+<tr>
+<td><a href="edition.php?id=137287439">Fantasy Fiction into Film: Essays</a><br><a href="edition.php?id=137287439"><i><font color="green"> 9780786430574</font></a></i> <nobr><span class="badge badge-secondary">l 1510172</span></nobr></td>
+<td>Leslie Stratyner</td>
+<td>McFarland</td>
+<td>2007</td>
+<td>English</td>
+<td>205</td>
+<td>1 MB</td>
+<td>pdf</td>
+<td><a href="/ads.php?md5=6e2c8664443ad0a6c8d539a0fd3dcf1b">Libgen</a></td>
+</tr>
+</table>
+''');
+      expect(doc.isNotEmpty, isTrue);
+      expect(doc.first.coverUrl, contains('1510000/6e2c8664443ad0a6c8d539a0fd3dcf1b.jpg'));
+    });
   });
 }

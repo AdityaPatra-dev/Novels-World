@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+import '../services/webview_session_manager.dart';
 
 /// Configurable Cloudflare Worker Edge Proxy URL for web clients.
 /// Set to your deployed Cloudflare Worker endpoint, e.g.:
@@ -12,6 +13,30 @@ String webProxyEndpoint = 'https://novels-world-proxy.adityapatraraj.workers.dev
 /// Configures or updates the web CORS proxy endpoint dynamically.
 void setWebProxyEndpoint(String endpoint) {
   webProxyEndpoint = endpoint.trim().replaceAll(RegExp(r'/+$'), '');
+}
+
+/// Returns the HTTP request headers for fetching cover images safely without hotlink/CORS rejection.
+Map<String, String> getCoverImageHeaders(String coverUrl, [String? sourceUrl]) {
+  final headers = <String, String>{
+    'User-Agent': WebViewSessionManager.defaultUserAgent,
+    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  };
+  final coverUri = Uri.tryParse(coverUrl);
+  if (coverUri != null && coverUri.origin.isNotEmpty && !coverUri.scheme.startsWith('file')) {
+    headers['Referer'] = '${coverUri.origin}/';
+  } else if (sourceUrl != null && sourceUrl.isNotEmpty) {
+    final origin = Uri.tryParse(sourceUrl)?.origin;
+    if (origin != null && origin.isNotEmpty) {
+      headers['Referer'] = '$origin/';
+    }
+  }
+  if (sourceUrl != null && sourceUrl.isNotEmpty) {
+    final cookie = WebViewSessionManager.instance.getCookieHeader(sourceUrl);
+    if (cookie != null && cookie.isNotEmpty) {
+      headers['Cookie'] = cookie;
+    }
+  }
+  return headers;
 }
 
 /// Returns the proxied URL for web image covers to avoid hotlinking/CORS blocks.
@@ -39,6 +64,7 @@ http.Client createPlatformHttpClient({Duration timeout = const Duration(seconds:
     return _WebCorsProxyClient(webProxyEndpoint);
   }
   final native = HttpClient();
+  native.userAgent = WebViewSessionManager.defaultUserAgent;
   native.badCertificateCallback = (cert, host, port) => true;
   native.connectionTimeout = timeout;
   return IOClient(native);

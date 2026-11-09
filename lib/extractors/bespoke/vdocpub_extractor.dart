@@ -84,9 +84,19 @@ class VdocPubExtractor implements NovelSource {
       htmlBody = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrl);
     }
 
-    if (htmlBody == null || htmlBody.isEmpty) return [];
+    if (htmlBody == null || htmlBody.isEmpty) {
+      if (!WebViewSessionManager.instance.hasClearanceCookie(baseUrl)) {
+        throw Exception('Cloudflare Turnstile challenge requires in-app WebView session. Open in WebView to solve.');
+      }
+      return [];
+    }
 
-    return parseHtml(htmlBody);
+    final novels = parseHtml(htmlBody);
+    if (novels.isEmpty && !WebViewSessionManager.instance.hasClearanceCookie(baseUrl)) {
+      throw Exception('Cloudflare Turnstile challenge requires in-app WebView session. Open in WebView to solve.');
+    }
+
+    return novels;
   }
 
   /// Parses vdoc.pub search results HTML

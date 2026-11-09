@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/models/novel.dart';
-import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/text_cleaner.dart';
 import '../../core/utils/http_client_factory.dart';
 
@@ -45,23 +44,7 @@ class NovelCard extends StatelessWidget {
     return url;
   }
 
-  Map<String, String> get _imageHeaders {
-    final headers = <String, String>{
-      'User-Agent': WebViewSessionManager.defaultUserAgent,
-      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-    };
-    if (novel.sourceUrl.isNotEmpty) {
-      final origin = Uri.tryParse(novel.sourceUrl)?.origin;
-      if (origin != null && origin.isNotEmpty) {
-        headers['Referer'] = '$origin/';
-      }
-    }
-    final cookie = WebViewSessionManager.instance.getCookieHeader(novel.sourceUrl);
-    if (cookie != null && cookie.isNotEmpty) {
-      headers['Cookie'] = cookie;
-    }
-    return headers;
-  }
+  Map<String, String> get _imageHeaders => getCoverImageHeaders(_sanitizedCoverUrl, novel.sourceUrl);
 
   @override
   Widget build(BuildContext context) {

@@ -460,10 +460,35 @@ class ReadWnExtractor implements NovelSource {
 
     final List<String> rawParagraphs = [];
     if (container != null) {
-      for (final p in container.querySelectorAll('p')) {
+      container
+          .querySelectorAll(
+            'script, style, ins, iframe, .ads, .ads-holder, div[align="center"], .watermark, .alert, [id^="pf-"]',
+          )
+          .forEach((e) => e.remove());
+
+      final pElements = container.querySelectorAll('p');
+      for (final p in pElements) {
         final text = p.text.trim();
         if (text.isNotEmpty) {
           rawParagraphs.add(text);
+        }
+      }
+
+      // If chapter text uses <br> tags rather than <p> elements (common on WuxiaBox / ReadWN mirrors)
+      if (rawParagraphs.length < 2) {
+        rawParagraphs.clear();
+        final innerHtml = container.innerHtml;
+        final withNewlines = innerHtml
+            .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+            .replaceAll(RegExp(r'</?p[^>]*>', caseSensitive: false), '\n');
+        final textDoc = html_parser.parse(withNewlines);
+        final fullText = textDoc.body?.text ?? '';
+        final lines = fullText.split('\n');
+        for (final line in lines) {
+          final trimmed = line.trim();
+          if (trimmed.isNotEmpty) {
+            rawParagraphs.add(trimmed);
+          }
         }
       }
     }

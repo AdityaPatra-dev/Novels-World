@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/models/novel.dart';
 import '../../core/services/epub_service.dart';
 import '../../core/services/global_search_controller.dart';
-import '../../core/services/webview_session_manager.dart';
+import '../../core/utils/http_client_factory.dart';
 import '../../data/download_service.dart';
 import '../../providers/library_provider.dart';
 import '../novel/novel_detail_screen.dart';
@@ -797,10 +797,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                       child: match.coverUrl.isNotEmpty
                           ? Image.network(
                               match.coverUrl,
-                              headers: {
-                                'User-Agent': WebViewSessionManager.defaultUserAgent,
-                                'Accept': 'image/*,*/*;q=0.8',
-                              },
+                              headers: getCoverImageHeaders(match.coverUrl),
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) => const Center(
                                 child: Icon(Icons.book_rounded, color: Colors.white24, size: 28),
@@ -1188,6 +1185,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                                   child: novel.coverUrl.isNotEmpty
                                       ? Image.network(
                                           novel.coverUrl,
+                                          headers: getCoverImageHeaders(novel.coverUrl),
                                           fit: BoxFit.cover,
                                           errorBuilder: (context, error, stackTrace) => const Center(
                                             child: Icon(Icons.book, color: Colors.white24, size: 30),

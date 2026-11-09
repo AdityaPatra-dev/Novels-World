@@ -138,6 +138,9 @@ class ReaderProvider extends ChangeNotifier {
     try {
       // 1. Check local offline cache
       ChapterContent? loadedContent = await _storage.getCachedChapterContent(chapter.id);
+      if (loadedContent != null && loadedContent.paragraphs.isEmpty && !_novel!.isFullBook) {
+        loadedContent = null;
+      }
 
       if (loadedContent == null) {
         ChapterContent fetched;
@@ -158,7 +161,9 @@ class ReaderProvider extends ChangeNotifier {
           paragraphs: fetched.paragraphs,
         );
         loadedContent = populated;
-        await _storage.cacheChapterContent(populated);
+        if (populated.paragraphs.isNotEmpty) {
+          await _storage.cacheChapterContent(populated);
+        }
       }
 
       _content = loadedContent;
@@ -206,6 +211,9 @@ class ReaderProvider extends ChangeNotifier {
     try {
       final nextChapterObj = _chapters[_currentChapterIndex + 1];
       ChapterContent? loadedContent = await _storage.getCachedChapterContent(nextChapterObj.id);
+      if (loadedContent != null && loadedContent.paragraphs.isEmpty && !_novel!.isFullBook) {
+        loadedContent = null;
+      }
 
       if (loadedContent == null) {
         ChapterContent fetched;
@@ -226,7 +234,9 @@ class ReaderProvider extends ChangeNotifier {
           paragraphs: fetched.paragraphs,
         );
         loadedContent = populated;
-        await _storage.cacheChapterContent(populated);
+        if (populated.paragraphs.isNotEmpty) {
+          await _storage.cacheChapterContent(populated);
+        }
       }
 
       _preloadedNextContent = loadedContent;

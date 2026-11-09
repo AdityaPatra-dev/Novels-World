@@ -101,9 +101,14 @@ class OpenLibraryExtractor implements NovelSource {
 
       final iaList = doc['ia'] as List<dynamic>? ?? [];
       String? iaId;
+      // Prioritize unrestricted public-domain scans over restricted digital lending (skip 0000, _lcp, isbn_, bwb_)
       for (final candidate in iaList) {
         final idStr = candidate.toString();
-        if (idStr.isNotEmpty && !idStr.startsWith('isbn_') && !idStr.contains('_lcp')) {
+        if (idStr.isNotEmpty &&
+            !idStr.startsWith('isbn_') &&
+            !idStr.contains('_lcp') &&
+            !idStr.contains('0000') &&
+            !idStr.startsWith('bwb_')) {
           iaId = idStr;
           break;
         }
@@ -196,13 +201,13 @@ class OpenLibraryExtractor implements NovelSource {
     // Resolve unencrypted EPUB download URL from editions or OCAID
     String? resolvedDownloadUrl;
     final ocaid = data['ocaid']?.toString();
-    if (ocaid != null && ocaid.isNotEmpty && !ocaid.startsWith('isbn_')) {
+    if (ocaid != null && ocaid.isNotEmpty && !ocaid.startsWith('isbn_') && !ocaid.contains('0000')) {
       resolvedDownloadUrl = await resolveArchiveOrgEpub(ocaid, client: _client);
     }
 
     if (resolvedDownloadUrl == null && cleanUrl.contains('/works/')) {
       try {
-        final editionsUrl = '${cleanUrl.replaceAll('.json', '')}/editions.json?limit=10';
+        final editionsUrl = '${cleanUrl.replaceAll('.json', '')}/editions.json?limit=15';
         final edRes = await _client.get(Uri.parse(editionsUrl), headers: _headers);
         if (edRes.statusCode == 200) {
           final edData = jsonDecode(edRes.body) as Map<String, dynamic>;
@@ -210,7 +215,11 @@ class OpenLibraryExtractor implements NovelSource {
           for (final entry in entries) {
             if (entry is! Map<String, dynamic>) continue;
             final edOcaid = entry['ocaid']?.toString();
-            if (edOcaid != null && edOcaid.isNotEmpty && !edOcaid.startsWith('isbn_')) {
+            if (edOcaid != null &&
+                edOcaid.isNotEmpty &&
+                !edOcaid.startsWith('isbn_') &&
+                !edOcaid.contains('0000') &&
+                !edOcaid.startsWith('bwb_')) {
               final dl = await resolveArchiveOrgEpub(edOcaid, client: _client);
               if (dl != null) {
                 resolvedDownloadUrl = dl;

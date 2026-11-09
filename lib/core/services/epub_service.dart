@@ -479,9 +479,11 @@ class EpubService {
   }
 
   /// Downloads an EPUB from a remote URL, unpacks it into app storage,
-  /// and returns a fully initialized [Novel].
+  /// and returns a fully initialized [Novel]. Supports both GET and POST downloads.
   Future<Novel> importEpubFromUrl(
     String url, {
+    String method = 'GET',
+    String? body,
     Map<String, String>? headers,
     void Function(double progress, String stage)? onProgress,
     Novel? originalNovel,
@@ -502,7 +504,18 @@ class EpubService {
 
       // Handle redirects manually to preserve and forward User-Agent, Referer, and Cookies
       for (int redirect = 0; redirect < 10; redirect++) {
-        final request = await client.getUrl(currentUri);
+        final HttpClientRequest request;
+        if (redirect == 0 && method.toUpperCase() == 'POST') {
+          request = await client.postUrl(currentUri);
+          if (body != null && body.isNotEmpty) {
+            final bodyBytes = utf8.encode(body);
+            request.headers.set(HttpHeaders.contentTypeHeader, 'application/x-www-form-urlencoded');
+            request.headers.set(HttpHeaders.contentLengthHeader, bodyBytes.length.toString());
+            request.add(bodyBytes);
+          }
+        } else {
+          request = await client.getUrl(currentUri);
+        }
         request.followRedirects = false;
 
         // Apply caller headers (except cookie/referer which we manage dynamically)
@@ -594,6 +607,18 @@ class EpubService {
           headerBytes[1] != 0x4B ||
           headerBytes[2] != 0x03 ||
           headerBytes[3] != 0x04) {
+        try {
+          final previewBytes = await tempTmpFile.openRead(0, 300).first;
+          final previewStr = String.fromCharCodes(previewBytes).toLowerCase();
+          if (previewStr.contains('<!doctype') || previewStr.contains('<html') || previewStr.contains('just a moment')) {
+            throw const FormatException(
+              'The source returned an HTML verification or protection page instead of a book file. '
+              'Please open in the In-App Browser to solve the challenge or verify session.',
+            );
+          }
+        } catch (e) {
+          if (e is FormatException) rethrow;
+        }
         throw const FormatException('Downloaded file is not a valid EPUB archive (corrupted or blocked download).');
       }
 

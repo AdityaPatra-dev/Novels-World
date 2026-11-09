@@ -197,7 +197,9 @@ class DownloadService extends ChangeNotifier {
     }
 
     // Auto-resolve exact file URLs and session tokens for whole-book sources
-    if ((novel.sourceId == 'internet_archive' || novel.sourceId == 'open_library') &&
+    if ((novel.sourceId == 'internet_archive' ||
+            novel.sourceId == 'openlibrary' ||
+            novel.sourceId == 'open_library') &&
         (effectiveUrl.contains('archive.org') || !effectiveUrl.endsWith('.epub'))) {
       try {
         final extractor = SourceRegistry.getSource(novel.sourceId);
@@ -218,6 +220,13 @@ class DownloadService extends ChangeNotifier {
             effectiveUrl = resolved;
           }
         }
+      }
+
+      if (!effectiveUrl.endsWith('.epub') && effectiveUrl.contains('archive.org')) {
+        throw StateError(
+          'This book edition is only available via Internet Archive digital lending (borrowing loan required). '
+          'Please choose another edition or a public domain scan from Project Gutenberg or Standard Ebooks.',
+        );
       }
     } else if (novel.sourceId == 'libgen' && !effectiveUrl.contains('key=')) {
       try {

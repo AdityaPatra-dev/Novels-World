@@ -59,18 +59,30 @@ class OpenLibraryExtractor implements NovelSource {
     if (cleanQuery.isEmpty) return [];
 
     final encoded = Uri.encodeComponent(cleanQuery);
-    final url = '$baseUrl/search.json?q=$encoded&page=$page&limit=25&has_fulltext=true';
+    // Prioritize public domain and unencrypted full scans
+    final url = '$baseUrl/search.json?q=$encoded&page=$page&limit=25&has_fulltext=true&public_scan_b=true';
 
     try {
       final response = await _client.get(Uri.parse(url), headers: _headers);
-      if (response.statusCode != 200) return [];
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final docs = data['docs'] as List<dynamic>? ?? [];
+        if (docs.isNotEmpty) {
+          return parseDocs(docs);
+        }
+      }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final docs = data['docs'] as List<dynamic>? ?? [];
-      return parseDocs(docs);
-    } catch (_) {
-      return [];
-    }
+      // Fallback without public_scan_b if specific title query yielded 0 results
+      final fallbackUrl = '$baseUrl/search.json?q=$encoded&page=$page&limit=25&has_fulltext=true';
+      final fbResponse = await _client.get(Uri.parse(fallbackUrl), headers: _headers);
+      if (fbResponse.statusCode == 200) {
+        final fbData = jsonDecode(fbResponse.body) as Map<String, dynamic>;
+        final fbDocs = fbData['docs'] as List<dynamic>? ?? [];
+        return parseDocs(fbDocs);
+      }
+    } catch (_) {}
+
+    return [];
   }
 
   /// Parses Open Library JSON search documents into Novel models
@@ -116,7 +128,7 @@ class OpenLibraryExtractor implements NovelSource {
       iaId ??= iaList.isNotEmpty ? iaList.first.toString() : null;
 
       final novelUrl = '$baseUrl$key';
-      final downloadUrl = iaId != null ? 'https://archive.org/download/$iaId' : null;
+      final downloadUrl = iaId != null ? 'https://archive.org/download/$iaId/$iaId.epub' : null;
 
       results.add(Novel(
         id: '${id}_${key.replaceAll('/', '_')}',
@@ -167,6 +179,42 @@ class OpenLibraryExtractor implements NovelSource {
     return null;
   }
 
+  /// Resolves the public Internet Archive identifier for an Open Library work key (e.g. /works/OL15437W)
+  static Future<String?> resolveIaIdForWork(String workKey, {http.Client? client}) async {
+    final c = client ?? createPlatformHttpClient();
+    try {
+      final cleanKey = workKey.startsWith('/') ? workKey : '/$workKey';
+      final searchUrl = 'https://openlibrary.org/search.json?q=key:%22$cleanKey%22&fields=key,ia,public_scan_b';
+      final res = await c.get(
+        Uri.parse(searchUrl),
+        headers: {'User-Agent': WebViewSessionManager.defaultUserAgent},
+      ).timeout(const Duration(seconds: 8));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final docs = data['docs'] as List<dynamic>? ?? [];
+        if (docs.isNotEmpty) {
+          final doc = docs.first as Map<String, dynamic>;
+          final iaList = doc['ia'] as List<dynamic>? ?? [];
+          for (final candidate in iaList) {
+            final idStr = candidate.toString();
+            if (idStr.isNotEmpty &&
+                !idStr.startsWith('isbn_') &&
+                !idStr.contains('_lcp') &&
+                !idStr.contains('0000') &&
+                !idStr.startsWith('bwb_')) {
+              return idStr;
+            }
+          }
+          if (iaList.isNotEmpty) {
+            return iaList.first.toString();
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
     if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
@@ -198,16 +246,26 @@ class OpenLibraryExtractor implements NovelSource {
 
     final key = data['key']?.toString() ?? novelUrl;
 
-    // Resolve unencrypted EPUB download URL from editions or OCAID
+    // Resolve unencrypted EPUB download URL from editions, ocaid, or work search
     String? resolvedDownloadUrl;
     final ocaid = data['ocaid']?.toString();
     if (ocaid != null && ocaid.isNotEmpty && !ocaid.startsWith('isbn_') && !ocaid.contains('0000')) {
       resolvedDownloadUrl = await resolveArchiveOrgEpub(ocaid, client: _client);
     }
 
+    // Try finding IA id from search API by work key
+    if (resolvedDownloadUrl == null) {
+      final workKey = data['key']?.toString() ?? key;
+      final iaId = await resolveIaIdForWork(workKey, client: _client);
+      if (iaId != null) {
+        final dl = await resolveArchiveOrgEpub(iaId, client: _client);
+        resolvedDownloadUrl = dl ?? 'https://archive.org/download/$iaId/$iaId.epub';
+      }
+    }
+
     if (resolvedDownloadUrl == null && cleanUrl.contains('/works/')) {
       try {
-        final editionsUrl = '${cleanUrl.replaceAll('.json', '')}/editions.json?limit=15';
+        final editionsUrl = '${cleanUrl.replaceAll('.json', '')}/editions.json?limit=20';
         final edRes = await _client.get(Uri.parse(editionsUrl), headers: _headers);
         if (edRes.statusCode == 200) {
           final edData = jsonDecode(edRes.body) as Map<String, dynamic>;

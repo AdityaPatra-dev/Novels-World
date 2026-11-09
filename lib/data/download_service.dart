@@ -200,7 +200,9 @@ class DownloadService extends ChangeNotifier {
     if ((novel.sourceId == 'internet_archive' ||
             novel.sourceId == 'openlibrary' ||
             novel.sourceId == 'open_library') &&
-        (effectiveUrl.contains('archive.org') || !effectiveUrl.endsWith('.epub'))) {
+        (effectiveUrl.contains('archive.org') ||
+            effectiveUrl.contains('openlibrary.org') ||
+            !effectiveUrl.endsWith('.epub'))) {
       try {
         final extractor = SourceRegistry.getSource(novel.sourceId);
         if (extractor != null) {
@@ -212,6 +214,18 @@ class DownloadService extends ChangeNotifier {
         }
       } catch (_) {}
 
+      // If effectiveUrl is still an openlibrary URL, resolve IA id via search API
+      if (effectiveUrl.contains('openlibrary.org')) {
+        final keyMatch = RegExp(r'/(works|books)/([A-Za-z0-9]+)').firstMatch(effectiveUrl);
+        if (keyMatch != null) {
+          final workKey = '/${keyMatch.group(1)}/${keyMatch.group(2)}';
+          final iaId = await OpenLibraryExtractor.resolveIaIdForWork(workKey);
+          if (iaId != null) {
+            effectiveUrl = 'https://archive.org/download/$iaId';
+          }
+        }
+      }
+
       if (!effectiveUrl.endsWith('.epub')) {
         final iaMatch = RegExp(r'archive\.org/(?:download|metadata)/([^/?#]+)').firstMatch(effectiveUrl);
         if (iaMatch != null) {
@@ -222,7 +236,7 @@ class DownloadService extends ChangeNotifier {
         }
       }
 
-      if (!effectiveUrl.endsWith('.epub') && effectiveUrl.contains('archive.org')) {
+      if (!effectiveUrl.endsWith('.epub') && (effectiveUrl.contains('archive.org') || effectiveUrl.contains('openlibrary.org'))) {
         throw StateError(
           'This book edition is only available via Internet Archive digital lending (borrowing loan required). '
           'Please choose another edition or a public domain scan from Project Gutenberg or Standard Ebooks.',

@@ -3,6 +3,7 @@ import '../core/models/novel.dart';
 import '../core/models/chapter.dart';
 import '../core/models/chapter_content.dart';
 import '../core/models/reading_progress.dart';
+import '../core/services/epub_service.dart';
 import '../data/storage_service.dart';
 import '../extractors/source_registry.dart';
 import '../tts/ring_buffer_manager.dart';
@@ -139,8 +140,16 @@ class ReaderProvider extends ChangeNotifier {
       ChapterContent? loadedContent = await _storage.getCachedChapterContent(chapter.id);
 
       if (loadedContent == null) {
-        final source = SourceRegistry.getSource(_novel!.sourceId) ?? SourceRegistry.getDefaultSource();
-        final fetched = await source.getChapterContent(chapter.url);
+        ChapterContent fetched;
+        if (chapter.url.startsWith('file:') ||
+            chapter.url.startsWith('/') ||
+            _novel!.isFullBook ||
+            _novel!.sourceId == 'local_epub') {
+          fetched = await EpubService().loadChapterContent(chapter.url);
+        } else {
+          final source = SourceRegistry.getSource(_novel!.sourceId) ?? SourceRegistry.getDefaultSource();
+          fetched = await source.getChapterContent(chapter.url);
+        }
         final populated = ChapterContent(
           chapterId: chapter.id,
           novelId: _novel!.id,
@@ -199,8 +208,16 @@ class ReaderProvider extends ChangeNotifier {
       ChapterContent? loadedContent = await _storage.getCachedChapterContent(nextChapterObj.id);
 
       if (loadedContent == null) {
-        final source = SourceRegistry.getSource(_novel!.sourceId) ?? SourceRegistry.getDefaultSource();
-        final fetched = await source.getChapterContent(nextChapterObj.url);
+        ChapterContent fetched;
+        if (nextChapterObj.url.startsWith('file:') ||
+            nextChapterObj.url.startsWith('/') ||
+            _novel!.isFullBook ||
+            _novel!.sourceId == 'local_epub') {
+          fetched = await EpubService().loadChapterContent(nextChapterObj.url);
+        } else {
+          final source = SourceRegistry.getSource(_novel!.sourceId) ?? SourceRegistry.getDefaultSource();
+          fetched = await source.getChapterContent(nextChapterObj.url);
+        }
         final populated = ChapterContent(
           chapterId: nextChapterObj.id,
           novelId: _novel!.id,

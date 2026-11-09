@@ -1,10 +1,8 @@
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novels_world/core/models/chapter.dart';
 import 'package:novels_world/core/models/chapter_content.dart';
 import 'package:novels_world/core/services/epub_service.dart';
 import 'package:novels_world/core/utils/text_cleaner.dart';
-import 'package:novels_world/extractors/bespoke/openlibrary_extractor.dart';
 import 'package:novels_world/extractors/bespoke/libgen_extractor.dart';
 
 void main() {
@@ -78,22 +76,6 @@ void main() {
   group('LibGen & Open Library Parsing Tests', () {
     test('LibGen getNovelDetails does not replace title with Library Genesis', () {
       final extractor = LibGenExtractor();
-      const mockAdsHtml = '''
-<!DOCTYPE html>
-<html>
-<head><title>Library Genesis</title></head>
-<body>
-<table width=700>
-<tr><td>Title: Dune - The Novel<br>
-Author(s): Frank Herbert<br></td></tr>
-<tr><td><textarea id='bibtext'>@book{123, title = {Dune - The Novel}, author = {Frank Herbert}}</textarea></td></tr>
-</table>
-<a href="get.php?md5=abcdef123456&key=XYZ"><h2>GET</h2></a>
-</body>
-</html>
-''';
-
-      // We can test the parsing logic directly
       final doc = extractor.parseHtmlTable('''
 <table id="tablelibgen">
 <tr>

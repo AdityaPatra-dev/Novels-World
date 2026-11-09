@@ -6,6 +6,8 @@ import '../../core/models/chapter_content.dart';
 import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/http_client_factory.dart';
 import '../../core/utils/text_cleaner.dart';
+import '../../core/services/epub_service.dart';
+import 'local_epub_extractor.dart';
 import '../novel_source.dart';
 
 /// Bespoke extractor for Internet Archive (https://archive.org).
@@ -115,6 +117,9 @@ class InternetArchiveExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
+      return LocalEpubExtractor().getNovelDetails(novelUrl);
+    }
     final uri = Uri.parse(novelUrl);
     final identifier = uri.pathSegments.lastWhere((s) => s.isNotEmpty, orElse: () => '');
     if (identifier.isEmpty) {
@@ -176,12 +181,15 @@ class InternetArchiveExtractor implements NovelSource {
     String novelUrl, {
     void Function(List<Chapter> batch)? onBatchLoaded,
   }) async {
+    if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
+      return LocalEpubExtractor().getChapterList(novelUrl, onBatchLoaded: onBatchLoaded);
+    }
     // For whole-book sources, the book will be unpacked upon 1-tap download
     return [];
   }
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    throw UnsupportedError('Internet Archive chapters are unpacked locally via whole-book EPUB download.');
+    return EpubService().loadChapterContent(chapterUrl);
   }
 }

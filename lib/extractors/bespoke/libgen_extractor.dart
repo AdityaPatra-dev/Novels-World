@@ -7,6 +7,8 @@ import '../../core/models/chapter_content.dart';
 import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/http_client_factory.dart';
 import '../../core/utils/text_cleaner.dart';
+import '../../core/services/epub_service.dart';
+import 'local_epub_extractor.dart';
 import '../novel_source.dart';
 
 /// Bespoke extractor for Library Genesis (https://libgen.li).
@@ -167,6 +169,9 @@ class LibGenExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
+      return LocalEpubExtractor().getNovelDetails(novelUrl);
+    }
     final uri = Uri.parse(novelUrl);
     final currentBase = '${uri.scheme}://${uri.host}';
 
@@ -279,11 +284,14 @@ class LibGenExtractor implements NovelSource {
     String novelUrl, {
     void Function(List<Chapter> batch)? onBatchLoaded,
   }) async {
+    if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
+      return LocalEpubExtractor().getChapterList(novelUrl, onBatchLoaded: onBatchLoaded);
+    }
     return [];
   }
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    throw UnsupportedError('LibGen chapters are unpacked locally via whole-book EPUB download.');
+    return EpubService().loadChapterContent(chapterUrl);
   }
 }

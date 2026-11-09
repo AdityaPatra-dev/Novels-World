@@ -310,8 +310,12 @@ class EpubService {
 
   /// Reads and parses an XHTML chapter file into cleaned paragraphs.
   Future<ChapterContent> loadChapterContent(String fileUriStr) async {
-    final uri = Uri.parse(fileUriStr);
-    final filePath = uri.toFilePath();
+    final String filePath;
+    if (fileUriStr.startsWith('file:')) {
+      filePath = Uri.parse(fileUriStr).toFilePath();
+    } else {
+      filePath = fileUriStr;
+    }
     final file = File(filePath);
 
     if (!await file.exists()) {

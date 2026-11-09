@@ -57,7 +57,8 @@ class LocalEpubExtractor implements NovelSource {
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
     final uri = Uri.parse(novelUrl);
-    final path = uri.scheme == 'file' ? uri.toFilePath() : novelUrl;
+    final rawPath = uri.scheme == 'file' ? uri.toFilePath() : novelUrl;
+    final path = rawPath.endsWith('/') ? rawPath.substring(0, rawPath.length - 1) : rawPath;
 
     // Check if path is a raw .epub file or an unpacked directory
     if (path.endsWith('.epub') && await File(path).exists()) {
@@ -80,7 +81,8 @@ class LocalEpubExtractor implements NovelSource {
     void Function(List<Chapter> batch)? onBatchLoaded,
   }) async {
     final uri = Uri.parse(novelUrl);
-    final path = uri.scheme == 'file' ? uri.toFilePath() : novelUrl;
+    final rawPath = uri.scheme == 'file' ? uri.toFilePath() : novelUrl;
+    final path = rawPath.endsWith('/') ? rawPath.substring(0, rawPath.length - 1) : rawPath;
 
     final metaFile = File('$path/metadata.json');
     if (await metaFile.exists()) {

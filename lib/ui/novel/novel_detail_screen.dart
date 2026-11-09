@@ -8,6 +8,7 @@ import '../../core/models/chapter.dart';
 import '../../core/models/reading_progress.dart';
 import '../../data/storage_service.dart';
 import '../../extractors/source_registry.dart';
+import '../../extractors/novel_source.dart';
 import '../../data/download_service.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/reader_provider.dart';
@@ -349,7 +350,14 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     }
 
     try {
-      final source = SourceRegistry.getSource(_novel.sourceId) ?? SourceRegistry.getDefaultSource();
+      final NovelSource source;
+      if (_novel.sourceUrl.startsWith('file:') ||
+          _novel.sourceUrl.startsWith('/') ||
+          _novel.sourceId == 'local_epub') {
+        source = SourceRegistry.getSource('local_epub') ?? SourceRegistry.getDefaultSource();
+      } else {
+        source = SourceRegistry.getSource(_novel.sourceId) ?? SourceRegistry.getDefaultSource();
+      }
       final storage = context.read<StorageService>();
 
       // Fetch metadata details

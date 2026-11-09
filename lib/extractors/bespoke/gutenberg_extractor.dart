@@ -7,6 +7,8 @@ import '../../core/models/chapter.dart';
 import '../../core/models/chapter_content.dart';
 import '../../core/utils/http_client_factory.dart';
 import '../../core/services/webview_session_manager.dart';
+import '../../core/services/epub_service.dart';
+import 'local_epub_extractor.dart';
 import '../../core/utils/text_cleaner.dart';
 import '../novel_source.dart';
 
@@ -117,6 +119,9 @@ class GutenbergExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
+      return LocalEpubExtractor().getNovelDetails(novelUrl);
+    }
     final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
     if (response.statusCode != 200) {
       throw HttpException('Failed to load novel details from Project Gutenberg ($novelUrl)');
@@ -190,6 +195,9 @@ class GutenbergExtractor implements NovelSource {
     String novelUrl, {
     void Function(List<Chapter> batch)? onBatchLoaded,
   }) async {
+    if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
+      return LocalEpubExtractor().getChapterList(novelUrl, onBatchLoaded: onBatchLoaded);
+    }
     final bookNum = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
     if (bookNum.isEmpty) return [];
 
@@ -277,6 +285,9 @@ class GutenbergExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
+    if (chapterUrl.startsWith('file:') || chapterUrl.startsWith('/')) {
+      return EpubService().loadChapterContent(chapterUrl);
+    }
     final uri = Uri.parse(chapterUrl);
     final anchor = uri.fragment;
     final htmlUrl = uri.replace(fragment: '').toString();

@@ -244,18 +244,16 @@ jobs:
             * **🪟 Windows (x64):** `Novels-World-Windows-x64.zip`
             * **🍎 macOS (Universal):** `Novels-World-macOS-Universal.zip`
 
-            ### ✨ What's New in v1.5.1
-            * **🔑 Permanent Release Keystore Signing:** Fixed package conflict (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) errors during in-app updates and manual APK installs by introducing a persistent project release certificate.
-            * **📥 Advanced Batch Downloader & Range Syntax:** Download any custom range of chapters (e.g. `1-40`, `1-30,40-50`, `1,2`, or `30`) with dedicated Downloads tab, queue badge, pause/resume, and storage inspector.
-            * **⚡ Progressive Chapter Batch Streaming:** Instant rendering for massive 3,000+ chapter novels—page 1 chapters stream in ~200ms without waiting for full catalog pagination.
-            * **💾 Instant Return Loading (0ms):** Automatic disk caching of chapter lists and novel details in StorageService for instantaneous retrieval.
-            * **🎨 Clean Novel Titles & Covers:** Universal title sanitizer removing promotional SEO clutter ("Read Online for Free", watermarks) and preventing cards from loading website logos.
-            * **🔍 In-Place Chapter Search & Direct Jump:** Filter thousands of chapters in real-time or leap directly to any chapter number.
-            * **🚀 In-App GitHub Auto-Updater:** Easily check for updates directly inside the app with real-time download progress and native one-tap Android APK installation.
-            * **🎙️ Pure Dart Microsoft Edge Neural Engine (v2 DRM):** Direct WebSocket client with mathematical SHA-256 v2 DRM token generation, completely eliminating 403 Forbidden errors and robotic audio buzzing.
-            * **📖 Seamless Gapless Cross-Chapter Playback:** Continuous reading across chapter boundaries with smart prefetching and strict UI isolation.
-            * **📚 Offline Local EPUB Books:** Import any DRM-free `.epub` file into your library for full offline reading, chapter navigation, and font/theme customization.
-            * **🌐 40+ Web Novel Catalogs:** Support for WordPress Madara, Themesia LightNovelWP, NovelFull, ReadWN, Fictioneer, Project Gutenberg, AllFreeNovel, RoliaScan, and Asura Scans.
+            ### ✨ What's New in v1.6.0
+            * **📚 Full Commercial & Literary Book Support:** Seamlessly search, download, and read complete digital editions of bestsellers (*Harry Potter*, *Dune*, *A Game of Thrones*, *The Hobbit*) and millions of published novels alongside serialized web fiction.
+            * **⚡ 1-Click Whole-Book Downloader Pipeline:** High-speed single-stream atomic `.tmp` downloader with magic byte integrity verification (`PK\x03\x04`), automatic temporary file cleanup, and real-time stage progress reporting (`%`, stage).
+            * **📖 Automated Local Chapter Slicing:** Dedicated EPUB auto-unpacker extracts Table of Contents (TOC), spine, metadata, and chapters into lightweight individual chapters for instant drawer navigation and offline reading.
+            * **🛡️ Tier 3 Flat Monolith Chunking:** Intelligently splits continuous legacy EPUB files without chapter breaks into comfortable ~2,500-word navigable sections, preventing memory exhaustion and UI freezes.
+            * **🌐 6 New Digital Book Repositories:** Direct integration with **Library Genesis** (`libgen.li`), **Internet Archive** (`archive.org`), **OceanofPDF** (`oceanofpdf.com`), **vdoc.pub** (`vdoc.pub`), **Standard Ebooks** (`standardebooks.org`), and **Project Gutenberg** (`gutendex.com`).
+            * **🔒 Silent Headless Cloudflare Bypass:** Automated background Turnstile resolution and cookie harvesting via `WebViewSessionManager` for protected book sources without interactive captchas.
+            * **🗂️ Unified Library & Downloads Shelves:** Dedicated `Books & EPUBs` filter chips, prominent `[BOOK]` badges on cards, real-time whole-book progress cards, and 1-tap `[Start Reading]` / `[Continue Reading]` actions.
+            * **🎙️ Gapless Continuous AI Audiobook Narration:** 0ms latency audio transitions across extracted book chapters with pure Dart Microsoft Edge Neural Engine (v2 DRM).
+            * **📦 Permanent Keystore Signing:** Pre-configured project release signing ensuring frictionless in-app updates and manual APK installs.
 
   publish-docker:
     name: 🐳 Build & Push Docker Hub Image

@@ -120,71 +120,106 @@ In earlier iterations of novel scraping, we proved that users do **not** need to
 
 ---
 
-## 4. Component Architecture & UI Modifications
+## 4. User Experience (UX) Specification & Flow Design
 
-### A. Global Search (`lib/ui/search/global_search_screen.dart` & `global_search_controller.dart`)
-1. **Multi-Source Hybrid Search**:
-   * Supports serialized web novels, direct-download book repositories (Internet Archive, LibGen, Gutendex, Standard Ebooks), and headless-bypassed web sources (OceanofPDF, vdoc.pub).
-2. **Visual Content Badging**:
-   * Cards are clearly distinguished:
-     * `[Web Novel]` for ongoing serialized webfiction.
-     * `[Complete Book]` for full-length published novels and literature.
-3. **Unified 1-Tap "Download Entire Book" Action**:
-   * For all book sources (whether LibGen, Archive.org, OceanofPDF, or vdoc.pub), the user sees a single, clean **"Download Entire Book"** button.
-   * Background cookie handling is completely transparent to the user.
-4. **"Import Local Book" Assistant Banner**:
-   * If a user searches for a commercial title, display a smart helper card to import existing local `.epub` files directly.
+To ensure an intuitive, premium, and zero-confusion reading experience, the UX contract across the app is defined as follows:
 
----
-
-### B. Downloads Tab (`lib/ui/downloads/downloads_screen.dart` & `lib/data/download_service.dart`)
-1. **Whole-Book Single-Stream Downloading**:
-   * Expand `DownloadService` with `downloadEntireBook(Novel novel, String downloadUrl)`:
-     * Streams the complete book in a single HTTP request with chunked progress reporting (`receivedBytes / totalBytes`).
-     * Automatically hands off the completed file to `EpubService.importEpub()`.
-     * Unpacks all internal chapters and indexes them in `StorageService`.
-2. **Dedicated "Books & EPUBs" Section in Downloads**:
-   * Downloads tab features:
-     * **Active Queue**: Live download progress bar, download speed, and cancel/pause buttons.
-     * **Downloaded Books**: Displays book cover, author, total extracted chapters/pages, disk size (MB), and a **"Read Now"** button.
-3. **Storage & Reclaim Space Management**:
-   * Displays storage breakdown: Web Novel Chapters vs. Complete Books.
-   * Ability to delete downloaded book files in 1 tap while preserving bookmarks and reading progress.
+### A. Global Search (`GlobalSearchScreen`)
+1. **Parallel Multi-Source Querying**:
+   * Searches web novels and whole-book sources concurrently with independent 8-second timeouts. A slow source will never freeze or delay results from faster sources.
+2. **Visual Differentiation**:
+   * `[Book]` Badge with book icon + file size pill (e.g. `EPUB • 4.2 MB`).
+   * `[Web Novel]` Badge with scroll icon for serialized webfiction.
+3. **Dynamic State Action Buttons**:
+   * **Not Downloaded**: Prominent button: **`[Download Entire Book]`** (1 tap).
+   * **Downloading**: Live circular progress with percentage: **`[Downloading 48%]`**.
+   * **Already Downloaded**: Changes immediately to: **`[Read Now]`** (accent color) to prevent accidental duplicate downloads.
+4. **Smart Empty-State Assistant**:
+   * When searching for commercial books, if online scrapers are undergoing source downtime, display an actionable helper banner:
+     > *"Looking for a commercial book? If you have the .epub file on your device, tap here to import and read immediately with AI voice."*
 
 ---
 
-### C. Library Tab (`lib/ui/library/library_screen.dart`)
-1. **Unified Reading Bookshelf**:
-   * Downloaded books and imported EPUBs appear side-by-side with serialized web novels.
-2. **Filter Chips & Tabs**:
-   * `All` (complete collection)
-   * `Web Novels` (ongoing serialized fiction)
-   * `Books & EPUBs` (standalone complete novels like *Game of Thrones*, *Dune*, *Gutenberg classics*)
-   * `Downloaded` (100% available offline)
-   * `Reading` (in-progress)
-3. **Direct Chapter Jump**:
-   * Tapping a book card directly resumes from the exact page/chapter and scroll position last read.
+### B. Downloads Tab (`DownloadsScreen`)
+The Downloads tab is organized into two distinct sections:
+
+1. **Active Queue**:
+   * Real-time progress bar with bytes transferred (`2.1 MB / 4.5 MB`), download speed (`1.2 MB/s`), and cancel button.
+   * State transitions: `Connecting...` $\to$ `Downloading (60%)...` $\to$ `Extracting 38 chapters...` $\to$ `Ready to Read!`.
+2. **Downloaded Books & EPUBs Shelf**:
+   * Displays all complete books stored locally.
+   * Information: Cover thumbnail, Title, Author, Total Chapter Count, Disk Size.
+   * Primary Action: **`[Read Now]`** button that directly launches the Reader at the last-read chapter.
+   * Overflow Menu:
+     * *Delete Book Files* (frees disk space while keeping reading progress and bookmarks).
+     * *Export EPUB* (allows user to share or backup the clean file).
 
 ---
 
-### D. Reader Presentation (`lib/ui/reader/reader_screen.dart` & `lib/core/models/chapter_content.dart`)
-1. **Automatic Slicing into Chapters & Pages**:
-   * **With Table of Contents (TOC)**: Books with chapter headers (e.g. *Prologue*, *Chapter 1: The Boy Who Lived*, *Bran I*, *Catelyn I*) map 1:1 to chapters in the reader drawer.
-   * **Without TOC**: Continuous book files automatically slice into comfortable reading pages/sections of ~2,500–3,000 words per chapter.
-2. **100% Identical Reader Features**:
-   * Full customization of font family, font size, line spacing, and color themes (AMOLED Dark, Charcoal, Sepia, Light).
-   * **Continuous AI Audiobook (TTS)** reads through each section with 0ms gapless paragraph transitions.
-   * Interactive sentence tapping, bookmarks, and cross-device cloud sync.
+### C. Library Tab (`LibraryScreen`)
+1. **Seamless Shelf Filtering**:
+   * New Filter Chip: **`Books & EPUBs`** placed alongside `All`, `Web Novels`, `Downloaded`, and `Reading`.
+2. **Direct Reading Resume**:
+   * Tapping any downloaded book card opens `ReaderScreen` instantly at the exact chapter and scroll position last read.
 
 ---
 
-## 5. Phased Implementation Roadmap
+### D. Reader Presentation & Continuous Audio (`ReaderScreen`)
+1. **Drawer Navigation**:
+   * Populated with real chapter titles extracted from the EPUB TOC (e.g., *Chapter 1: The Boy Who Lived*, *Prologue*, *Bran I*, *Catelyn I*).
+2. **Zero-Latency AI Audiobook Narration**:
+   * Reads extracted book chapters with gapless 0ms paragraph streaming.
+   * When the user finishes listening to Chapter 1, the player automatically pre-loads and transitions into Chapter 2 without any manual taps or audio interruption.
+3. **Reading Customization**:
+   * Font scale, line height, and color themes (AMOLED Pitch Black, Dark Charcoal, Warm Sepia, Soft Light).
+
+---
+
+## 5. Defensive Engineering & Zero-Error Guarantees
+
+To ensure zero crashes, zero file corruptions, and zero UI freezes, the following defenses are engineered into the pipeline:
+
+### 1. Atomic Streaming & Magic Byte Integrity Verification
+* **The Risk**: A dropped Wi-Fi/mobile network connection leaves an incomplete 1.5MB file instead of 4MB, causing the zip unpacker to crash with a corrupt archive exception.
+* **The Defense**:
+  1. The file is streamed to a temporary extension: `${bookId}.tmp`.
+  2. Upon stream completion, the first 4 bytes are validated against the standard ZIP/EPUB magic number: `0x50, 0x4B, 0x03, 0x04` (`PK\x03\x04`).
+  3. If magic bytes or file length do not match, the `.tmp` file is deleted, and the UI displays a clean "Network Interrupted — Tap to Retry" state.
+  4. Only verified files are renamed to `${bookId}.epub` and handed to `EpubService`.
+
+### 2. Malformed EPUB Resilient 3-Tier Fallback Parser
+* **The Risk**: Community or legacy EPUB files may lack standard `META-INF/container.xml`, have broken TOC links, or pack the entire book into a single monolithic 500,000-word HTML file.
+* **The Defense**:
+  * **Tier 1 (Standard)**: Read `container.xml` $\to$ OPF spine $\to$ `toc.ncx` / `nav.xhtml`.
+  * **Tier 2 (TOC Fallback)**: If TOC is missing, inspect individual chapter files for `<h1>`, `<h2>`, or `<title>` tags to generate human-readable chapter names.
+  * **Tier 3 (Flat Monolith Chunking)**: If the EPUB contains only one continuous HTML file without chapter splits, the unpacker automatically chunks the text into comfortable ~2,500-word sections ("Section 1", "Section 2", etc.). This prevents Flutter's `ListView` from freezing under memory pressure.
+
+### 3. Low-Memory Lazy Loading (Preventing OOM)
+* **The Risk**: Large books with high-resolution illustrations can cause Out-Of-Memory (OOM) crashes on low-end Android devices if unpacked fully into memory.
+* **The Defense**:
+  * Extracted chapter files are written to disk under the app's documents directory (`imported_novels/${novelId}/`).
+  * `metadata.json` stores the lightweight chapter index.
+  * When the reader opens a chapter, only that specific chapter's XHTML is parsed into memory via `EpubService.loadChapterContent()`. Previous chapters are garbage collected.
+
+### 4. Background Cloudflare Timeout Bounds
+* **The Risk**: A source with a blocked IP causes the headless WebView to wait indefinitely, leaving the user with an endless loading spinner.
+* **The Defense**:
+  * Headless resolution in `WebViewSessionManager` has a strict **10-second timeout**.
+  * If resolution exceeds 10 seconds or fails, the app cleanly falls back to alternative sources (Library Genesis / Internet Archive) without freezing the app or throwing uncaught exceptions.
+
+### 5. Deduplication & Storage Self-Cleaning
+* **Deduplication**: Before starting a download, `DownloadService` verifies whether the `novelId` or book title already exists in `StorageService`. If present, it prompts "Already in Library — Open Now?".
+* **Boot Cleanup**: On app launch, `EpubService` scans the cache directory and automatically deletes any orphaned `temp_dl_*.epub` or `.tmp` files from interrupted downloads.
+
+---
+
+## 6. Phased Implementation Roadmap
 
 ### Phase 1: Core Downloader & Service Extensions
 * [ ] **Extend `DownloadService`** (`lib/data/download_service.dart`):
   * Add `downloadEntireBook({required Novel novel, required String downloadUrl})`.
-  * Support streaming file download with real-time percentage and byte tracking using headers from `WebViewSessionManager`.
-  * Connect download completion hook to `EpubService.importEpub()`.
+  * Implement atomic download streaming (`.tmp` $\to$ magic byte verification $\to$ `.epub`).
+  * Connect completion hook to `EpubService.importEpub()`.
 * [ ] **Update `Novel` Domain Model** (`lib/core/models/novel.dart`):
   * Add flags: `bool isFullBook`, `String? bookDownloadUrl`, `String? bookFormat` (e.g., `'epub'`).
 
@@ -196,7 +231,7 @@ In earlier iterations of novel scraping, we proved that users do **not** need to
 
 ### Phase 3: Search Screen & Quick Download Actions
 * [ ] **Update `GlobalSearchScreen`** (`lib/ui/search/global_search_screen.dart`):
-  * Add **"Download Entire Book"** action button directly on book search cards.
+  * Add dynamic **"Download Entire Book"** / **"Read Now"** action buttons on book search cards.
   * Add `[Book]` badge differentiating whole books from multi-chapter web serials.
   * Add "Import Local Book (.epub)" helper card for users searching for commercial titles.
 
@@ -221,7 +256,7 @@ In earlier iterations of novel scraping, we proved that users do **not** need to
 
 ---
 
-## 6. Architectural Integrity & Safety Guarantees
+## 7. Architectural Integrity & Safety Guarantees
 * **Zero Regression for Web Novels**: Existing web novel scrapers (NovelFull, WuxiaBox, Madara, LightNovelWP) remain completely untouched and function as usual.
 * **100% Offline Capability**: Once a book is downloaded, zero network connectivity is required to read or listen to audio narration.
 * **Storage Efficiency**: Extracted chapter texts are compressed and cached locally using existing Hive storage structures.

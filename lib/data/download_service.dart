@@ -242,17 +242,26 @@ class DownloadService extends ChangeNotifier {
           'Please choose another edition or a public domain scan from Project Gutenberg or Standard Ebooks.',
         );
       }
-    } else if (novel.sourceId == 'libgen' && !effectiveUrl.contains('key=')) {
-      try {
-        final extractor = SourceRegistry.getSource('libgen');
-        if (extractor != null) {
-          final detailed = await extractor.getNovelDetails(novel.sourceUrl);
-          if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty) {
-            effectiveUrl = detailed.bookDownloadUrl!;
-            targetNovel = detailed;
+    } else if (novel.sourceId == 'libgen') {
+      if (!effectiveUrl.contains('key=')) {
+        try {
+          final extractor = SourceRegistry.getSource('libgen');
+          if (extractor != null) {
+            final detailed = await extractor.getNovelDetails(novel.sourceUrl);
+            if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty) {
+              effectiveUrl = detailed.bookDownloadUrl!;
+              targetNovel = detailed;
+            }
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
+      if (targetNovel.bookFormat != null &&
+          targetNovel.bookFormat!.toLowerCase() != 'epub') {
+        throw StateError(
+          'This book is in ${targetNovel.bookFormat!.toUpperCase()} format. '
+          'Novels-World supports EPUB digital editions. Please choose an EPUB edition of this title.',
+        );
+      }
     } else if ((novel.sourceId == 'vdocpub' || novel.sourceId == 'oceanofpdf') &&
         (novel.bookDownloadUrl == null || novel.bookDownloadUrl!.isEmpty)) {
       try {
@@ -297,10 +306,7 @@ class DownloadService extends ChangeNotifier {
       };
 
       if (targetNovel.sourceUrl.isNotEmpty) {
-        final origin = Uri.tryParse(targetNovel.sourceUrl)?.origin;
-        if (origin != null && origin.isNotEmpty) {
-          headers['Referer'] = '$origin/';
-        }
+        headers['Referer'] = targetNovel.sourceUrl;
       }
 
       final cookie = WebViewSessionManager.instance.getCookieHeader(effectiveUrl) ??

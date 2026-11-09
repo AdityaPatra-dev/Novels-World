@@ -27,8 +27,6 @@ class LibGenExtractor implements NovelSource {
 
   static const List<String> mirrors = [
     'https://libgen.li',
-    'https://libgen.la',
-    'https://libgen.bz',
   ];
 
   String _activeMirror = mirrors.first;
@@ -57,12 +55,12 @@ class LibGenExtractor implements NovelSource {
 
   @override
   Future<List<Novel>> getPopular({int page = 1}) async {
-    return search('fantasy fiction', page: page);
+    return search('dune', page: page);
   }
 
   @override
   Future<List<Novel>> getLatest({int page = 1}) async {
-    return search('sci-fi', page: page);
+    return search('fantasy', page: page);
   }
 
   @override
@@ -72,13 +70,12 @@ class LibGenExtractor implements NovelSource {
 
     final encoded = Uri.encodeComponent(cleanQuery);
 
-    // Multi-mirror failover: if libgen.li returns HTTP 522/timeout, rotate to libgen.la or libgen.bz
     for (final mirror in mirrors) {
-      final url = '$mirror/index.php?req=$encoded&columns%5B%5D=t&objects%5B%5D=f&topics%5B%5D=l&res=25';
+      final url = '$mirror/index.php?req=$encoded&columns%5B%5D=t&objects%5B%5D=f&topics%5B%5D=l&topics%5B%5D=f&res=50';
       try {
         final response = await _client
             .get(Uri.parse(url), headers: _getHeaders(mirror))
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 12));
 
         if (response.statusCode == 200 && response.body.contains('table')) {
           _activeMirror = mirror;
@@ -88,7 +85,7 @@ class LibGenExtractor implements NovelSource {
           }
         }
       } catch (_) {
-        // Continue to next mirror on timeout or connection error (HTTP 522)
+        // Continue on connection error
       }
     }
 
@@ -100,7 +97,8 @@ class LibGenExtractor implements NovelSource {
     final currentBase = base ?? _activeMirror;
     final doc = html_parser.parse(html);
     final rows = doc.querySelectorAll('table#tablelibgen tr, table.table-striped tr, table.c tr, tbody tr, tr');
-    final List<Novel> results = [];
+    final List<Novel> epubResults = [];
+    final List<Novel> otherResults = [];
 
     for (final row in rows) {
       final cells = row.querySelectorAll('td');
@@ -181,9 +179,7 @@ class LibGenExtractor implements NovelSource {
       final bookPageUrl = '$currentBase/ads.php?md5=$md5Hash';
       final downloadUrl = '$currentBase/get.php?md5=$md5Hash';
 
-      if (results.any((n) => n.id == '${id}_$md5Hash')) continue;
-
-      results.add(Novel(
+      final item = Novel(
         id: '${id}_$md5Hash',
         sourceId: id,
         title: title,
@@ -195,9 +191,17 @@ class LibGenExtractor implements NovelSource {
         isFullBook: true,
         bookDownloadUrl: downloadUrl,
         bookFormat: format,
-      ));
+      );
+
+      if (epubResults.any((n) => n.id == item.id) || otherResults.any((n) => n.id == item.id)) continue;
+
+      if (format.toLowerCase() == 'epub') {
+        epubResults.add(item);
+      } else {
+        otherResults.add(item);
+      }
     }
-    return results;
+    return epubResults.isNotEmpty ? epubResults : otherResults;
   }
 
   @override
@@ -220,8 +224,8 @@ class LibGenExtractor implements NovelSource {
       try {
         final res = await _client
             .get(Uri.parse(targetUrl), headers: _getHeaders(base))
-            .timeout(const Duration(seconds: 10));
-        if (res.statusCode == 200) {
+            .timeout(const Duration(seconds: 12));
+        if (res.statusCode == 200 && (res.body.contains('table') || res.body.contains('get.php') || res.body.contains('ads.php'))) {
           response = res;
           _activeMirror = base;
           break;
@@ -242,11 +246,12 @@ class LibGenExtractor implements NovelSource {
       final relHref = downloadAnchor.attributes['href'] ?? '';
       downloadUrl = relHref.startsWith('http') ? relHref : '$_activeMirror/$relHref';
     } else {
-      // If landed on edition.php, resolve underlying ads.php page to extract keyed get.php link
-      final adsAnchor = doc.querySelector('a[href*="ads.php?md5="]');
-      if (adsAnchor != null) {
-        final relAds = adsAnchor.attributes['href'] ?? '';
-        final adsUrl = relAds.startsWith('http') ? relAds : '$_activeMirror/$relAds';
+      // If landed on edition.php or file.php, resolve underlying ads.php page to extract keyed get.php link
+      final md5Match = RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(novelUrl) ??
+          RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(response.body);
+      if (md5Match != null) {
+        final md5 = md5Match.group(1)!;
+        final adsUrl = '$_activeMirror/ads.php?md5=$md5';
         try {
           final adsRes = await _client
               .get(Uri.parse(adsUrl), headers: _getHeaders(_activeMirror))
@@ -337,6 +342,12 @@ class LibGenExtractor implements NovelSource {
     );
     final author = (rawAuthor != null && rawAuthor.isNotEmpty) ? rawAuthor : 'Unknown Author';
 
+    String detectedFormat = 'epub';
+    final formatMatch = RegExp(r'\b(epub|pdf|mobi|azw3)\b', caseSensitive: false).firstMatch(response.body);
+    if (formatMatch != null) {
+      detectedFormat = formatMatch.group(1)!.toLowerCase();
+    }
+
     return Novel(
       id: novelUrl,
       sourceId: id,
@@ -347,7 +358,7 @@ class LibGenExtractor implements NovelSource {
       status: 'COMPLETED',
       isFullBook: true,
       bookDownloadUrl: downloadUrl,
-      bookFormat: 'epub',
+      bookFormat: detectedFormat,
     );
   }
 

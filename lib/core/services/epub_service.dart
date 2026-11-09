@@ -492,7 +492,7 @@ class EpubService {
       throw 'EPUB URL import is not supported in browser environment';
     }
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 30);
+    client.connectionTimeout = const Duration(seconds: 15);
     client.autoUncompress = true;
     File? tempFile;
     File? tempTmpFile;
@@ -533,11 +533,9 @@ class EpubService {
           request.headers.set(HttpHeaders.userAgentHeader, WebViewSessionManager.defaultUserAgent);
         }
 
-        // Maintain Referer across redirects
+        // Maintain Referer across redirects: forward original referer so CDN recognizes source site
         String? referer = headers?['Referer'];
-        if (redirect > 0) {
-          referer = currentUri.toString();
-        } else if (referer == null || referer.isEmpty) {
+        if (referer == null || referer.isEmpty) {
           if (originalNovel != null && originalNovel.sourceUrl.isNotEmpty) {
             referer = originalNovel.sourceUrl;
           } else {
@@ -576,7 +574,14 @@ class EpubService {
       }
 
       if (response == null || response.statusCode != 200) {
-        throw HttpException('Failed to download EPUB: HTTP ${response?.statusCode ?? 500}');
+        final code = response?.statusCode ?? 500;
+        if (code == 522 || code == 502 || code == 504) {
+          throw HttpException(
+            'The storage mirror server (${currentUri.host}) is temporarily unreachable (HTTP $code). '
+            'Please choose another edition of this book or try again in a few moments.',
+          );
+        }
+        throw HttpException('Failed to download EPUB: HTTP $code');
       }
 
       final contentLength = response.contentLength;

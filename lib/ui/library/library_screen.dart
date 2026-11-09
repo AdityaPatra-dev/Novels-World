@@ -29,17 +29,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final allNovels = libraryProvider.novels;
 
     final downloadedNovels = allNovels.where((n) {
-      if (n.sourceId == 'local_epub') return true;
+      if (n.isFullBook || n.sourceId == 'local_epub') return true;
       return _storageService.getDownloadedChapterIds(n.id).isNotEmpty;
     }).toList();
+
+    final booksCount = allNovels.where((n) => n.isFullBook || n.sourceId == 'local_epub').length;
 
     final filteredNovels = allNovels.where((n) {
       if (_selectedFilter == 1) {
         return n.lastReadChapterId != null;
       } else if (_selectedFilter == 2) {
-        return n.sourceId == 'local_epub' || _storageService.getDownloadedChapterIds(n.id).isNotEmpty;
+        return n.isFullBook || n.sourceId == 'local_epub' || _storageService.getDownloadedChapterIds(n.id).isNotEmpty;
       } else if (_selectedFilter == 3) {
         return n.status == 'COMPLETED';
+      } else if (_selectedFilter == 4) {
+        return n.isFullBook || n.sourceId == 'local_epub';
       }
       return true;
     }).toList();
@@ -74,6 +78,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     child: Row(
                       children: [
                         _buildFilterChip(0, 'All (${allNovels.length})'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(4, 'Books & EPUBs ($booksCount)'),
                         const SizedBox(width: 8),
                         _buildFilterChip(1, 'Reading (${allNovels.where((n) => n.lastReadChapterId != null).length})'),
                         if (!kIsWeb) ...[

@@ -11,6 +11,10 @@ class Novel {
   final bool inLibrary;
   final String? lastReadChapterId;
   final DateTime? lastReadAt;
+  final bool isFullBook;
+  final String? bookDownloadUrl;
+  final String? bookFormat; // epub, pdf
+  final int? bookSizeBytes;
 
   const Novel({
     required this.id,
@@ -25,6 +29,10 @@ class Novel {
     this.inLibrary = false,
     this.lastReadChapterId,
     this.lastReadAt,
+    this.isFullBook = false,
+    this.bookDownloadUrl,
+    this.bookFormat,
+    this.bookSizeBytes,
   });
 
   Novel copyWith({
@@ -40,6 +48,10 @@ class Novel {
     bool? inLibrary,
     String? lastReadChapterId,
     DateTime? lastReadAt,
+    bool? isFullBook,
+    String? bookDownloadUrl,
+    String? bookFormat,
+    int? bookSizeBytes,
   }) {
     return Novel(
       id: id ?? this.id,
@@ -54,6 +66,10 @@ class Novel {
       inLibrary: inLibrary ?? this.inLibrary,
       lastReadChapterId: lastReadChapterId ?? this.lastReadChapterId,
       lastReadAt: lastReadAt ?? this.lastReadAt,
+      isFullBook: isFullBook ?? this.isFullBook,
+      bookDownloadUrl: bookDownloadUrl ?? this.bookDownloadUrl,
+      bookFormat: bookFormat ?? this.bookFormat,
+      bookSizeBytes: bookSizeBytes ?? this.bookSizeBytes,
     );
   }
 
@@ -71,6 +87,10 @@ class Novel {
       'inLibrary': inLibrary,
       'lastReadChapterId': lastReadChapterId,
       'lastReadAt': lastReadAt?.toIso8601String(),
+      'isFullBook': isFullBook,
+      'bookDownloadUrl': bookDownloadUrl,
+      'bookFormat': bookFormat,
+      'bookSizeBytes': bookSizeBytes,
     };
   }
 
@@ -88,7 +108,10 @@ class Novel {
       inLibrary: json['inLibrary'] as bool? ?? false,
       lastReadChapterId: json['lastReadChapterId'] as String?,
       lastReadAt: json['lastReadAt'] != null ? DateTime.tryParse(json['lastReadAt'] as String) : null,
+      isFullBook: json['isFullBook'] as bool? ?? false,
+      bookDownloadUrl: json['bookDownloadUrl'] as String?,
+      bookFormat: json['bookFormat'] as String?,
+      bookSizeBytes: json['bookSizeBytes'] as int?,
     );
   }
 }
-

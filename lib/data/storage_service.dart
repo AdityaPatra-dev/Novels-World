@@ -309,7 +309,7 @@ class StorageService {
         fileNames: [],
       );
     }
-    if (novel.sourceId == 'local_epub') {
+    if (novel.sourceId == 'local_epub' || novel.isFullBook) {
       String path = '';
       if (novel.sourceUrl.isNotEmpty) {
         final uri = Uri.tryParse(novel.sourceUrl);
@@ -396,7 +396,7 @@ class StorageService {
   Future<void> deleteNovelStorage(Novel novel) async {
     await init();
     if (kIsWeb) return;
-    if (novel.sourceId == 'local_epub') {
+    if (novel.sourceId == 'local_epub' || novel.isFullBook) {
       String path = '';
       if (novel.sourceUrl.isNotEmpty) {
         final uri = Uri.tryParse(novel.sourceUrl);
@@ -575,9 +575,9 @@ class StorageService {
       novelMap[n.id] = n;
     }
 
-    // Also include any library novels that are local_epub or have downloaded chapters
+    // Also include any library novels that are local_epub or isFullBook or have downloaded chapters
     for (final n in getLibraryNovels()) {
-      if (n.sourceId == 'local_epub') {
+      if (n.sourceId == 'local_epub' || n.isFullBook) {
         novelMap[n.id] = n;
       } else {
         final chs = getDownloadedChapterIds(n.id);

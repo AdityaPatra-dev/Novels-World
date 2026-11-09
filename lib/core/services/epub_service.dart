@@ -21,13 +21,25 @@ class EpubService {
 
   /// Imports an EPUB file, extracts its contents into app documents,
   /// parses its metadata/spine/TOC, and returns a fully initialized [Novel].
-  Future<Novel> importEpub(File epubFile, {Directory? targetDir}) async {
+  Future<Novel> importEpub(File epubFile, {Directory? targetDir, Novel? originalNovel}) async {
     final bytes = await epubFile.readAsBytes();
+
+    // Verify magic bytes: Standard ZIP/EPUB starts with PK\x03\x04 (0x50, 0x4B, 0x03, 0x04)
+    if (bytes.length < 4 ||
+        bytes[0] != 0x50 ||
+        bytes[1] != 0x4B ||
+        bytes[2] != 0x03 ||
+        bytes[3] != 0x04) {
+      throw const FormatException('Corrupt or invalid EPUB archive: missing PK signature header');
+    }
+
     final archive = ZipDecoder().decodeBytes(bytes);
 
-    // Compute a stable ID from file content hash
+    // Compute a stable ID from file content hash or use originalNovel.id
     final digest = md5.convert(bytes.sublist(0, bytes.length > 8192 ? 8192 : bytes.length)).toString().substring(0, 12);
-    final novelId = 'local_epub_$digest';
+    final novelId = (originalNovel != null && originalNovel.id.isNotEmpty)
+        ? originalNovel.id
+        : 'local_epub_$digest';
 
     final baseDir = targetDir ?? await _getImportDirectory();
     final bookDir = Directory('${baseDir.path}/$novelId');
@@ -203,16 +215,39 @@ class EpubService {
       chapterIndex++;
     }
 
+    final effectiveTitle = (originalNovel != null && originalNovel.title.isNotEmpty)
+        ? originalNovel.title
+        : title;
+    final effectiveAuthor = (originalNovel != null &&
+            originalNovel.author.isNotEmpty &&
+            originalNovel.author != 'Unknown Author')
+        ? originalNovel.author
+        : author;
+    final effectiveCover = coverUrl.isNotEmpty
+        ? coverUrl
+        : (originalNovel?.coverUrl ?? '');
+    final effectiveDesc = description.isNotEmpty
+        ? description
+        : (originalNovel?.description ?? '');
+    final effectiveGenres = (originalNovel?.genres.isNotEmpty == true)
+        ? originalNovel!.genres
+        : const <String>[];
+
     final novel = Novel(
       id: novelId,
-      sourceId: 'local_epub',
-      title: title,
-      author: author,
-      description: description,
-      coverUrl: coverUrl,
+      sourceId: originalNovel?.sourceId ?? 'local_epub',
+      title: effectiveTitle,
+      author: effectiveAuthor,
+      description: effectiveDesc,
+      coverUrl: effectiveCover,
+      genres: effectiveGenres,
       sourceUrl: bookDir.uri.toString(),
       inLibrary: true,
       status: 'COMPLETED',
+      isFullBook: true,
+      bookFormat: 'epub',
+      bookSizeBytes: bytes.length,
+      bookDownloadUrl: originalNovel?.bookDownloadUrl,
     );
 
     // Save metadata.json for high-speed instant re-reading
@@ -341,14 +376,18 @@ class EpubService {
   Future<Novel> importEpubFromUrl(
     String url, {
     Map<String, String>? headers,
-    void Function(double progress)? onProgress,
+    void Function(double progress, String stage)? onProgress,
+    Novel? originalNovel,
   }) async {
     if (kIsWeb) {
       throw 'EPUB URL import is not supported in browser environment';
     }
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 20);
+    client.connectionTimeout = const Duration(seconds: 25);
+    File? tempFile;
+    File? tempTmpFile;
     try {
+      onProgress?.call(0.05, 'Connecting');
       final request = await client.getUrl(Uri.parse(url));
       if (headers != null) {
         headers.forEach((key, value) {
@@ -361,31 +400,54 @@ class EpubService {
       }
 
       final contentLength = response.contentLength;
-      final bytes = <int>[];
+      final baseDir = await _getImportDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      tempTmpFile = File('${baseDir.path}/temp_dl_$timestamp.tmp');
+      final sink = tempTmpFile.openWrite();
+
       int downloaded = 0;
+      onProgress?.call(0.1, 'Downloading');
 
       await for (final chunk in response) {
-        bytes.addAll(chunk);
+        sink.add(chunk);
         downloaded += chunk.length;
         if (contentLength > 0 && onProgress != null) {
-          onProgress(downloaded / contentLength);
+          final p = (downloaded / contentLength).clamp(0.0, 1.0);
+          onProgress(p * 0.85 + 0.1, 'Downloading');
         }
       }
+      await sink.flush();
+      await sink.close();
 
-      final baseDir = await _getImportDirectory();
-      final tempFile = File('${baseDir.path}/temp_dl_${DateTime.now().millisecondsSinceEpoch}.epub');
-      await tempFile.writeAsBytes(bytes);
-
-      try {
-        final novel = await importEpub(tempFile);
-        return novel;
-      } finally {
-        if (await tempFile.exists()) {
-          await tempFile.delete();
-        }
+      onProgress?.call(0.95, 'Verifying');
+      // Validate magic bytes
+      final headerBytes = await tempTmpFile.openRead(0, 4).first;
+      if (headerBytes.length < 4 ||
+          headerBytes[0] != 0x50 ||
+          headerBytes[1] != 0x4B ||
+          headerBytes[2] != 0x03 ||
+          headerBytes[3] != 0x04) {
+        throw const FormatException('Downloaded file is not a valid EPUB archive (corrupted or blocked download).');
       }
+
+      tempFile = File('${baseDir.path}/temp_dl_$timestamp.epub');
+      await tempTmpFile.rename(tempFile.path);
+      tempTmpFile = null;
+
+      onProgress?.call(0.98, 'Extracting');
+      final novel = await importEpub(tempFile, originalNovel: originalNovel);
+      onProgress?.call(1.0, 'Completed');
+      return novel;
     } finally {
       client.close();
+      try {
+        if (tempTmpFile != null && await tempTmpFile.exists()) {
+          await tempTmpFile.delete();
+        }
+        if (tempFile != null && await tempFile.exists()) {
+          await tempFile.delete();
+        }
+      } catch (_) {}
     }
   }
 
@@ -416,7 +478,17 @@ class EpubService {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
+    // Clean up any stray temporary files left over from prior aborted downloads
+    try {
+      await for (final entity in dir.list()) {
+        if (entity is File) {
+          final name = entity.uri.pathSegments.last;
+          if (name.startsWith('temp_dl_') || name.endsWith('.tmp')) {
+            await entity.delete();
+          }
+        }
+      }
+    } catch (_) {}
     return dir;
   }
 }
-

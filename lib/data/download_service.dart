@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../core/models/novel.dart';
 import '../core/models/chapter.dart';
 import '../core/models/chapter_content.dart';
+import '../core/services/epub_service.dart';
+import '../core/services/webview_session_manager.dart';
 import '../core/utils/chapter_range_parser.dart';
 import '../extractors/source_registry.dart';
 import 'storage_service.dart';
@@ -30,9 +32,32 @@ class DownloadTask {
   });
 }
 
+class BookDownloadTask {
+  final Novel novel;
+  final String downloadUrl;
+  DownloadStatus status;
+  double progress; // 0.0 to 1.0
+  int receivedBytes;
+  int totalBytes;
+  String? error;
+  String stage; // 'Connecting', 'Downloading', 'Verifying', 'Extracting', 'Completed'
+
+  BookDownloadTask({
+    required this.novel,
+    required this.downloadUrl,
+    this.status = DownloadStatus.queued,
+    this.progress = 0.0,
+    this.receivedBytes = 0,
+    this.totalBytes = 0,
+    this.error,
+    this.stage = 'Connecting',
+  });
+}
+
 class DownloadService extends ChangeNotifier {
   final StorageService _storage;
   final List<DownloadTask> _queue = [];
+  final List<BookDownloadTask> _bookTasks = [];
   bool _isProcessing = false;
   bool _isPaused = false;
 
@@ -45,7 +70,11 @@ class DownloadService extends ChangeNotifier {
   bool get isProcessing => _isProcessing;
   bool get isPaused => _isPaused;
   List<DownloadTask> get queue => _queue;
-  int get activeQueueCount => _queue.where((t) => t.status == DownloadStatus.queued || t.status == DownloadStatus.downloading).length;
+  List<BookDownloadTask> get bookTasks => _bookTasks;
+
+  int get activeQueueCount =>
+      _queue.where((t) => t.status == DownloadStatus.queued || t.status == DownloadStatus.downloading).length +
+      _bookTasks.where((t) => t.status == DownloadStatus.queued || t.status == DownloadStatus.downloading).length;
 
   int get completedInCurrentBatch => _queue.where((t) => t.status == DownloadStatus.completed).length;
   int get totalInCurrentBatch => _queue.length;
@@ -59,13 +88,33 @@ class DownloadService extends ChangeNotifier {
             orElse: () => null,
           );
 
+  BookDownloadTask? get currentBookTask =>
+      _bookTasks.cast<BookDownloadTask?>().firstWhere(
+            (t) => t?.status == DownloadStatus.downloading,
+            orElse: () => null,
+          );
+
   Future<void> _initDownloadedSet() async {
-    // Initial check of downloaded items
     notifyListeners();
   }
 
   bool isChapterDownloaded(String chapterId) {
     return _downloadedChapterIds.contains(chapterId);
+  }
+
+  bool isBookDownloaded(String novelId) {
+    // Check if book exists in downloaded tasks or library
+    if (_bookTasks.any((t) => t.novel.id == novelId && t.status == DownloadStatus.completed)) {
+      return true;
+    }
+    return _storage.isNovelInLibrary(novelId);
+  }
+
+  BookDownloadTask? getBookTask(String novelId) {
+    return _bookTasks.cast<BookDownloadTask?>().firstWhere(
+          (t) => t?.novel.id == novelId,
+          orElse: () => null,
+        );
   }
 
   Future<void> checkChaptersDownloaded(List<Chapter> chapters) async {
@@ -121,6 +170,82 @@ class DownloadService extends ChangeNotifier {
     return matchingChapters.length;
   }
 
+  /// Downloads an entire book in a single atomic stream and automatically unpacks it.
+  Future<Novel> downloadEntireBook({
+    required Novel novel,
+    required String downloadUrl,
+    void Function(double progress, String stage)? onProgress,
+  }) async {
+    // Check if task already exists
+    BookDownloadTask task;
+    final existingIndex = _bookTasks.indexWhere((t) => t.novel.id == novel.id);
+    if (existingIndex >= 0) {
+      task = _bookTasks[existingIndex];
+      if (task.status == DownloadStatus.downloading) {
+        throw StateError('Book is already downloading');
+      }
+      task.status = DownloadStatus.downloading;
+      task.error = null;
+      task.progress = 0.0;
+      task.stage = 'Connecting';
+    } else {
+      task = BookDownloadTask(
+        novel: novel,
+        downloadUrl: downloadUrl,
+        status: DownloadStatus.downloading,
+        stage: 'Connecting',
+      );
+      _bookTasks.insert(0, task);
+    }
+    notifyListeners();
+
+    try {
+      final headers = <String, String>{
+        'User-Agent': WebViewSessionManager.defaultUserAgent,
+        'Accept': '*/*',
+      };
+
+      final cookie = WebViewSessionManager.instance.getCookieHeader(downloadUrl);
+      if (cookie != null && cookie.isNotEmpty) {
+        headers['Cookie'] = cookie;
+      }
+
+      final importedNovel = await EpubService().importEpubFromUrl(
+        downloadUrl,
+        headers: headers,
+        originalNovel: novel,
+        onProgress: (p, stage) {
+          task.progress = p;
+          task.stage = stage;
+          onProgress?.call(p, stage);
+          notifyListeners();
+        },
+      );
+
+      // Save to library and record download
+      await _storage.saveNovelToLibrary(importedNovel);
+      await _storage.recordDownloadedNovel(importedNovel, 'complete_book');
+
+      task.status = DownloadStatus.completed;
+      task.stage = 'Completed';
+      task.progress = 1.0;
+      notifyListeners();
+
+      return importedNovel;
+    } catch (e) {
+      task.status = DownloadStatus.failed;
+      task.error = e.toString();
+      task.stage = 'Failed';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  void cancelBookDownload(String novelId) {
+    _bookTasks.removeWhere((t) => t.novel.id == novelId && t.status != DownloadStatus.completed);
+    notifyListeners();
+  }
+
   void pause() {
     _isPaused = true;
     notifyListeners();
@@ -136,6 +261,7 @@ class DownloadService extends ChangeNotifier {
 
   void cancelAll() {
     _queue.clear();
+    _bookTasks.removeWhere((t) => t.status != DownloadStatus.completed);
     _isProcessing = false;
     _isPaused = false;
     notifyListeners();
@@ -147,6 +273,7 @@ class DownloadService extends ChangeNotifier {
       _downloadedChapterIds.remove(ch.id);
     }
     _queue.removeWhere((t) => t.novel.id == novelId);
+    _bookTasks.removeWhere((t) => t.novel.id == novelId);
     await _storage.removeDownloadedNovel(novelId);
     notifyListeners();
   }
@@ -196,4 +323,3 @@ class DownloadService extends ChangeNotifier {
     notifyListeners();
   }
 }
-

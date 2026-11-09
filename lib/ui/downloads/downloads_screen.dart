@@ -30,6 +30,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   bool _isLoading = true;
   double _totalStorageMb = 0.0;
   int _totalChaptersCount = 0;
+  String _selectedFilter = 'all'; // 'all', 'books', 'novels'
 
   @override
   void initState() {
@@ -143,6 +144,15 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   Widget build(BuildContext context) {
     final downloadService = context.watch<DownloadService>();
 
+    final filteredNovels = _downloadedNovels.where((n) {
+      if (_selectedFilter == 'books') {
+        return n.isFullBook || n.sourceId == 'local_epub';
+      } else if (_selectedFilter == 'novels') {
+        return !n.isFullBook && n.sourceId != 'local_epub';
+      }
+      return true;
+    }).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -174,19 +184,34 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
                   const SizedBox(height: 12),
 
-                  // Active Download Queue Banner
+                  // Active Whole-Book Downloads
+                  if (downloadService.bookTasks.any((t) => t.status == DownloadStatus.downloading || t.status == DownloadStatus.queued)) ...[
+                    _buildActiveBookDownloadBanner(downloadService),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Active Web Chapter Download Queue Banner
                   if (downloadService.isProcessing || downloadService.queue.isNotEmpty) ...[
                     _buildActiveDownloadBanner(downloadService),
                     const SizedBox(height: 12),
                   ],
 
-                  if (_downloadedNovels.isEmpty)
+                  // Filter Chips
+                  _buildFilterChips(),
+
+                  const SizedBox(height: 12),
+
+                  if (filteredNovels.isEmpty)
                     _buildEmptyState()
                   else ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 8, top: 4),
                       child: Text(
-                        'Downloaded Novels (${_downloadedNovels.length})',
+                        _selectedFilter == 'books'
+                            ? 'Downloaded Books & EPUBs (${filteredNovels.length})'
+                            : _selectedFilter == 'novels'
+                                ? 'Downloaded Web Novels (${filteredNovels.length})'
+                                : 'All Downloaded Content (${filteredNovels.length})',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -194,7 +219,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         ),
                       ),
                     ),
-                    ..._downloadedNovels.map(
+                    ...filteredNovels.map(
                       (novel) => _DownloadedNovelCard(
                         novel: novel,
                         onNovelUpdated: _loadDownloadedNovels,
@@ -204,6 +229,44 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildFilterChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildChip('All Content', 'all', Icons.auto_stories_rounded),
+          const SizedBox(width: 8),
+          _buildChip('Complete Books', 'books', Icons.book_rounded),
+          const SizedBox(width: 8),
+          _buildChip('Web Novels', 'novels', Icons.menu_book_rounded),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChip(String label, String value, IconData icon) {
+    final isSelected = _selectedFilter == value;
+    return ChoiceChip(
+      avatar: Icon(
+        icon,
+        size: 16,
+        color: isSelected ? Colors.white : Colors.white60,
+      ),
+      label: Text(label),
+      selected: isSelected,
+      selectedColor: const Color(0xFF8B5CF6),
+      backgroundColor: const Color(0xFF1E1E2C),
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        color: isSelected ? Colors.white : Colors.white70,
+      ),
+      onSelected: (_) {
+        setState(() => _selectedFilter = value);
+      },
     );
   }
 
@@ -258,6 +321,77 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActiveBookDownloadBanner(DownloadService downloadService) {
+    final activeBookTasks = downloadService.bookTasks
+        .where((t) => t.status == DownloadStatus.downloading || t.status == DownloadStatus.queued)
+        .toList();
+
+    return Column(
+      children: activeBookTasks.map((task) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E192E),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFA78BFA).withValues(alpha: 0.6)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Downloading: ${task.novel.title}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${(task.progress * 100).toInt()}% • ${task.stage}',
+                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFA78BFA)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: task.progress,
+                  backgroundColor: Colors.white10,
+                  color: const Color(0xFFA78BFA),
+                  minHeight: 6,
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -350,12 +484,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
             Icon(Icons.cloud_download_outlined, size: 64, color: Colors.white.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
             const Text(
-              'No Downloaded Novels Yet',
+              'No Downloaded Content Yet',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
             ),
             const SizedBox(height: 8),
             Text(
-              'Download chapters or entire novels for reading offline anywhere without an internet connection.',
+              'Download entire books or web novel chapters to read completely offline with continuous AI audio anywhere.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.6)),
             ),
@@ -364,7 +498,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               ElevatedButton.icon(
                 onPressed: widget.onBrowseTap,
                 icon: const Icon(Icons.explore),
-                label: const Text('Browse Novels to Download'),
+                label: const Text('Browse Novels & Books'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF8B5CF6),
                   foregroundColor: Colors.white,
@@ -504,13 +638,16 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
     final chapterCount = _storageInfo?.chapterCount ?? 0;
     final sizeFormatted = _storageInfo?.formattedSize ?? '...';
     final storageDir = _storageInfo?.directoryPath ?? _storageService.chaptersDirectoryPath;
+    final isBook = widget.novel.isFullBook || widget.novel.sourceId == 'local_epub';
 
     return Card(
       color: const Color(0xFF1A1A24),
       margin: const EdgeInsets.only(bottom: 14),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Colors.white10),
+        side: BorderSide(
+          color: isBook ? const Color(0xFFA78BFA).withValues(alpha: 0.3) : Colors.white10,
+        ),
       ),
       child: InkWell(
         onTap: () {
@@ -561,15 +698,47 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          TextCleaner.cleanNovelTitle(widget.novel.title),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                        Row(
+                          children: [
+                            if (isBook)
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.book_rounded, size: 10, color: Color(0xFFA78BFA)),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'BOOK',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFA78BFA),
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Expanded(
+                              child: Text(
+                                TextCleaner.cleanNovelTitle(widget.novel.title),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -599,7 +768,7 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
                                   const Icon(Icons.offline_pin_rounded, size: 12, color: Color(0xFF34D399)),
                                   const SizedBox(width: 4),
                                   Text(
-                                    '$chapterCount Chapters',
+                                    isBook ? '$chapterCount Sections' : '$chapterCount Chapters',
                                     style: const TextStyle(
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.bold,
@@ -675,7 +844,7 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
 
               const SizedBox(height: 10),
 
-              // Action Row: "Start Reading" button + "Download" button just beside it!
+              // Action Row: "Start Reading" button (+ optional range download for web serials) + Delete
               Row(
                 children: [
                   Expanded(
@@ -696,34 +865,35 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // Download button just beside Start Reading
-                  ElevatedButton.icon(
-                    onPressed: _openRangeDownloadDialog,
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    label: const Text(
-                      'Download',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                  if (!isBook) ...[
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: _openRangeDownloadDialog,
+                      icon: const Icon(Icons.download_rounded, size: 18),
+                      label: const Text(
+                        'Download',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF282838),
+                        foregroundColor: const Color(0xFFA78BFA),
+                        side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF282838),
-                      foregroundColor: const Color(0xFFA78BFA),
-                      side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
-                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
+                  ],
                   const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                    tooltip: 'Delete downloaded chapters',
+                    tooltip: isBook ? 'Delete book from device' : 'Delete downloaded chapters',
                     onPressed: () async {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
                           backgroundColor: const Color(0xFF1E1E2C),
-                          title: const Text('Delete Downloads?'),
-                          content: Text('Remove all downloaded chapters for "${widget.novel.title}" from device storage?'),
+                          title: Text(isBook ? 'Delete Book?' : 'Delete Downloads?'),
+                          content: Text('Remove "${widget.novel.title}" from local device storage?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, false),

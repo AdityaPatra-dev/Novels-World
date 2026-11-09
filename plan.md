@@ -1,7 +1,7 @@
 # Engineering Plan: Full Book Search, 1-Click Whole-Book Downloads & Unified Chapter Slicing
 
 > **Document**: `plan.md`  
-> **Status**: Ready for Implementation  
+> **Status**: Fully Implemented & Verified  
 > **Target Platforms**: Android, Web, Desktop (Linux/Windows/macOS)  
 > **Architecture Scope**: Search Engine, Downloader Pipeline, Storage & Unpacker, Library UI, and Reader Presentation
 
@@ -216,32 +216,32 @@ To ensure zero crashes, zero file corruptions, and zero UI freezes, the followin
 ## 6. Phased Implementation Roadmap
 
 ### Phase 1: Core Downloader & Service Extensions
-* [ ] **Extend `DownloadService`** (`lib/data/download_service.dart`):
+* [x] **Extend `DownloadService`** (`lib/data/download_service.dart`):
   * Add `downloadEntireBook({required Novel novel, required String downloadUrl})`.
   * Implement atomic download streaming (`.tmp` $\to$ magic byte verification $\to$ `.epub`).
   * Connect completion hook to `EpubService.importEpub()`.
-* [ ] **Update `Novel` Domain Model** (`lib/core/models/novel.dart`):
+* [x] **Update `Novel` Domain Model** (`lib/core/models/novel.dart`):
   * Add flags: `bool isFullBook`, `String? bookDownloadUrl`, `String? bookFormat` (e.g., `'epub'`).
 
 ### Phase 2: Downloads Screen Redesign
-* [ ] **Enhance `DownloadsScreen`** (`lib/ui/downloads/downloads_screen.dart`):
+* [x] **Enhance `DownloadsScreen`** (`lib/ui/downloads/downloads_screen.dart`):
   * Display dedicated progress card for whole-book downloads.
   * Add "Downloaded Books & EPUBs" card list with cover, chapter count, file size, and 1-tap **"Read Now"** button.
   * Add storage management modal to view and reclaim space.
 
 ### Phase 3: Search Screen & Quick Download Actions
-* [ ] **Update `GlobalSearchScreen`** (`lib/ui/search/global_search_screen.dart`):
+* [x] **Update `GlobalSearchScreen`** (`lib/ui/search/global_search_screen.dart`):
   * Add dynamic **"Download Entire Book"** / **"Read Now"** action buttons on book search cards.
   * Add `[Book]` badge differentiating whole books from multi-chapter web serials.
   * Add "Import Local Book (.epub)" helper card for users searching for commercial titles.
 
 ### Phase 4: Library Tab Filtering & Shelf Organization
-* [ ] **Update `LibraryScreen`** (`lib/ui/library/library_screen.dart`):
+* [x] **Update `LibraryScreen`** (`lib/ui/library/library_screen.dart`):
   * Add `Books & EPUBs` filter chip.
   * Display book badges and download status indicators on novel cards.
 
 ### Phase 5: Book Source Integrations
-* [ ] **Integrate Primary Book Sources**:
+* [x] **Integrate Primary Book Sources**:
   * Implement `OceanofPdfExtractor` with `WebViewSessionManager` automated background resolution.
   * Implement `VdocPubExtractor` with automated cookie synchronization.
   * Implement `LibGenExtractor` client (`libgen.li` direct MD5 downloader).
@@ -250,9 +250,9 @@ To ensure zero crashes, zero file corruptions, and zero UI freezes, the followin
   * Implement `StandardEbooksExtractor` client.
 
 ### Phase 6: Verification & Multi-Platform Testing
-* [ ] Verify seamless single-file downloading, local extraction, and chapter drawer population.
-* [ ] Run `flutter analyze` and `flutter test` across all platforms.
-* [ ] Verify continuous AI TTS audio playback on extracted book chapters.
+* [x] Verify seamless single-file downloading, local extraction, and chapter drawer population.
+* [x] Run `flutter analyze` and `flutter test` across all platforms.
+* [x] Verify continuous AI TTS audio playback on extracted book chapters.
 
 ---
 

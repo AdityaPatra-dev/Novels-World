@@ -5,6 +5,7 @@ import 'package:novels_world/extractors/bespoke/internet_archive_extractor.dart'
 import 'package:novels_world/extractors/bespoke/libgen_extractor.dart';
 import 'package:novels_world/extractors/bespoke/standard_ebooks_extractor.dart';
 import 'package:novels_world/extractors/bespoke/oceanofpdf_extractor.dart';
+import 'package:novels_world/extractors/bespoke/vdocpub_extractor.dart';
 import 'package:novels_world/extractors/bespoke/gutenberg_extractor.dart';
 
 void main() {
@@ -16,18 +17,21 @@ void main() {
       final libgen = SourceRegistry.getSource('libgen');
       final standard = SourceRegistry.getSource('standard_ebooks');
       final ocean = SourceRegistry.getSource('oceanofpdf');
+      final vdoc = SourceRegistry.getSource('vdocpub');
       final gutenberg = SourceRegistry.getSource('gutenberg');
 
       expect(archive, isNotNull);
       expect(libgen, isNotNull);
       expect(standard, isNotNull);
       expect(ocean, isNotNull);
+      expect(vdoc, isNotNull);
       expect(gutenberg, isNotNull);
 
       expect(archive is InternetArchiveExtractor, isTrue);
       expect(libgen is LibGenExtractor, isTrue);
       expect(standard is StandardEbooksExtractor, isTrue);
       expect(ocean is OceanofPdfExtractor, isTrue);
+      expect(vdoc is VdocPubExtractor, isTrue);
       expect(gutenberg is GutenbergExtractor, isTrue);
     });
   });
@@ -223,6 +227,39 @@ void main() {
 
       expect(novel.isFullBook, isTrue);
       expect(novel.bookDownloadUrl, 'https://www.gutenberg.org/ebooks/1342.epub3.images');
+    });
+  });
+
+  group('VdocPubExtractor Unit Tests', () {
+    late VdocPubExtractor extractor;
+
+    setUp(() {
+      extractor = VdocPubExtractor();
+    });
+
+    test('Parses vdoc.pub HTML document entries with download URLs', () {
+      const html = '''
+        <div class="row">
+          <div class="col-md-6">
+            <div class="card document-item">
+              <a href="/documents/a-game-of-thrones-george-r-r-martin-12345">
+                <img src="/covers/got.jpg" />
+                <h3 class="title">A Game of Thrones</h3>
+              </a>
+              <p class="author">by George R. R. Martin</p>
+            </div>
+          </div>
+        </div>
+      ''';
+
+      final novels = extractor.parseHtml(html);
+      expect(novels.length, 1);
+      final got = novels.first;
+      expect(got.title, 'A Game of Thrones');
+      expect(got.author, 'George R. R. Martin');
+      expect(got.isFullBook, isTrue);
+      expect(got.bookFormat, 'epub');
+      expect(got.bookDownloadUrl, 'https://vdoc.pub/download/a-game-of-thrones-george-r-r-martin-12345');
     });
   });
 }

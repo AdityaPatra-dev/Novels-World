@@ -215,6 +215,51 @@ class EpubService {
       chapterIndex++;
     }
 
+    // Tier 3: Monolith Chunking (if only 1 continuous chapter file was found with > 25 paragraphs)
+    if (chapters.length == 1) {
+      try {
+        final monoFile = File(Uri.parse(chapters.first.url).toFilePath());
+        if (await monoFile.exists()) {
+          final content = await monoFile.readAsString();
+          final parsed = html_parser.parse(content);
+          final paragraphs = parsed.querySelectorAll('p, div.paragraph');
+
+          if (paragraphs.length > 25) {
+            final chunkedChapters = <Chapter>[];
+            const paragraphsPerSection = 30;
+            int sectionIndex = 1;
+
+            for (int i = 0; i < paragraphs.length; i += paragraphsPerSection) {
+              final end = (i + paragraphsPerSection < paragraphs.length)
+                  ? i + paragraphsPerSection
+                  : paragraphs.length;
+              final sectionParas = paragraphs.sublist(i, end).map((p) => '<p>${p.innerHtml}</p>').join('\n');
+
+              final sectionFileName = 'section_$sectionIndex.xhtml';
+              final sectionFile = File('${bookDir.path}/$sectionFileName');
+              await sectionFile.writeAsString(
+                '<!DOCTYPE html><html><head><title>Section $sectionIndex</title></head><body>$sectionParas</body></html>',
+              );
+
+              chunkedChapters.add(Chapter(
+                id: '${novelId}_$sectionIndex',
+                novelId: novelId,
+                title: 'Section $sectionIndex',
+                url: sectionFile.uri.toString(),
+                chapterNumber: sectionIndex.toDouble(),
+              ));
+              sectionIndex++;
+            }
+
+            if (chunkedChapters.length > 1) {
+              chapters.clear();
+              chapters.addAll(chunkedChapters);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     final effectiveTitle = (originalNovel != null && originalNovel.title.isNotEmpty)
         ? originalNovel.title
         : title;

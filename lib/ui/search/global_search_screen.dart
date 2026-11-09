@@ -1,9 +1,16 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/models/novel.dart';
+import '../../core/services/epub_service.dart';
 import '../../core/services/global_search_controller.dart';
 import '../../core/services/webview_session_manager.dart';
+import '../../data/download_service.dart';
+import '../../providers/library_provider.dart';
 import '../novel/novel_detail_screen.dart';
 
 /// Global Multi-Source Search Screen.
@@ -28,6 +35,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
   final List<String> _popularSuggestions = const [
     'Shadow Slave',
+    'Harry Potter',
+    'Dune',
+    'The Hobbit',
+    'A Game of Thrones',
     'Lord of the Mysteries',
     'Reverend Insanity',
     'Omniscient Reader\'s Viewpoint',
@@ -37,9 +48,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     'The Primal Hunter',
     'Defiance of the Fall',
     'Overgeared',
-    'SSS-Class Suicide Hunter',
-    'Trash of the Count\'s Family',
-    'Second Coming of Gluttony',
+    'Frankenstein',
+    'Pride and Prejudice',
+    'Dracula',
     'Classroom of the Elite',
     'Martial Peak',
     'Against the Gods',
@@ -47,7 +58,6 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     'Coiling Dragon',
     'Warlock of the Magus World',
     'Super Gene',
-    'A Will Eternal',
     'Chrysalis',
   ];
 
@@ -139,6 +149,50 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     );
   }
 
+  Future<void> _importLocalEpub() async {
+    if (kIsWeb) return;
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.any,
+      );
+      if (!mounted) return;
+      if (files.isNotEmpty && files.first.path != null) {
+        final path = files.first.path!;
+        if (!path.toLowerCase().endsWith('.epub')) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please select a valid .epub book file.')),
+            );
+          }
+          return;
+        }
+        final scaffold = ScaffoldMessenger.of(context);
+        final libraryProvider = context.read<LibraryProvider>();
+        scaffold.showSnackBar(
+          const SnackBar(content: Text('Importing EPUB book...')),
+        );
+        final novel = await EpubService().importEpub(File(path));
+        if (!mounted) return;
+        await libraryProvider.saveToLibrary(novel);
+        scaffold.showSnackBar(
+          SnackBar(
+            content: Text('Imported "${novel.title}" to Library'),
+            action: SnackBarAction(
+              label: 'Read Now',
+              onPressed: () => _openNovel(novel),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import EPUB: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -156,7 +210,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           child: Container(
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF22222E),
+              color: const Color(0xFF222232),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFF6C5CE7).withValues(alpha: 0.3), width: 1),
             ),
@@ -168,7 +222,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               textInputAction: TextInputAction.search,
               style: const TextStyle(color: Colors.white, fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Search across all sources...',
+                hintText: 'Search books, web novels, authors...',
                 hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
                 prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF6C5CE7), size: 20),
                 suffixIcon: ValueListenableBuilder<TextEditingValue>(
@@ -468,10 +522,22 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Searched all ${state.totalSources} registered novel sources. Try checking the title spelling or searching with a broader keyword.',
+                'Searched all registered novel and book sources. Try checking the title spelling or searching with a broader keyword.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13),
               ),
+              const SizedBox(height: 20),
+              if (!kIsWeb)
+                ElevatedButton.icon(
+                  onPressed: _importLocalEpub,
+                  icon: const Icon(Icons.file_upload_outlined),
+                  label: const Text('Import Local EPUB Book'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
             ],
           ),
         ),
@@ -487,6 +553,60 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Smart Local EPUB Import Card
+          if (!kIsWeb) ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1A2C),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.file_upload_outlined, color: Color(0xFFA78BFA), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Have an EPUB book on your device?',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Import Harry Potter, Dune, or any .epub file to read with continuous AI audio.',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _importLocalEpub,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B5CF6),
+                      foregroundColor: Colors.white,
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Import', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+
           if (_recentSearches.isNotEmpty) ...[
             Row(
               children: [
@@ -604,7 +724,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'One search query simultaneously browses NovelFull, NovelFire, Royal Road, ScribbleHub, WuxiaBox, and all other sources. Results appear instantly as each source responds.',
+                        'One search query simultaneously browses web novels, Gutenberg classics, and complete book libraries. Results appear instantly as each source responds.',
                         style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12, height: 1.4),
                       ),
                     ],
@@ -631,11 +751,29 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   }
 
   Widget _buildGroupedCard(GroupedNovelMatch match) {
+    final downloadService = context.watch<DownloadService>();
+
+    final isBook = match.primaryNovel.isFullBook ||
+        match.primaryNovel.sourceId == 'local_epub' ||
+        match.sourceVariants.values.any((n) => n.isFullBook || n.sourceId == 'local_epub');
+
+    final bookNovel = match.sourceVariants.values.firstWhere(
+      (n) => n.isFullBook || n.sourceId == 'local_epub',
+      orElse: () => match.primaryNovel,
+    );
+
+    final isDownloaded = downloadService.isBookDownloaded(bookNovel.id);
+    final bookTask = downloadService.getBookTask(bookNovel.id);
+    final isDownloading = bookTask?.status == DownloadStatus.downloading;
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A24),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF282838), width: 1),
+        border: Border.all(
+          color: isBook ? const Color(0xFFA78BFA).withValues(alpha: 0.3) : const Color(0xFF282838),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -675,21 +813,53 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                   ),
                   const SizedBox(width: 14),
 
-                  // Title, Author, and Badge
+                  // Title, Author, and Badges
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          match.canonicalTitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            height: 1.3,
-                          ),
+                        Row(
+                          children: [
+                            if (isBook)
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.book_rounded, size: 10, color: Color(0xFFA78BFA)),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'BOOK',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFA78BFA),
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Expanded(
+                              child: Text(
+                                match.canonicalTitle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -701,28 +871,119 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                             fontSize: 12,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: match.sourceCount > 1
-                                ? const Color(0xFF10B981).withValues(alpha: 0.15)
-                                : const Color(0xFF6C5CE7).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            match.sourceCount > 1
-                                ? 'Available in ${match.sourceCount} sources'
-                                : 'Available in 1 source',
-                            style: TextStyle(
-                              color: match.sourceCount > 1
-                                  ? const Color(0xFF34D399)
-                                  : const Color(0xFFA78BFA),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: match.sourceCount > 1
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                    : const Color(0xFF6C5CE7).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                match.sourceCount > 1
+                                    ? 'Available in ${match.sourceCount} sources'
+                                    : 'Available in 1 source',
+                                style: TextStyle(
+                                  color: match.sourceCount > 1
+                                      ? const Color(0xFF34D399)
+                                      : const Color(0xFFA78BFA),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
+                        if (isBook && bookNovel.bookDownloadUrl != null && bookNovel.bookDownloadUrl!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 32,
+                            child: isDownloaded
+                                ? ElevatedButton.icon(
+                                    onPressed: () => _openNovel(bookNovel),
+                                    icon: const Icon(Icons.menu_book_rounded, size: 14),
+                                    label: const Text('Read Now', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF10B981),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                    ),
+                                  )
+                                : isDownloading
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF222232),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: const Color(0xFFA78BFA)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const SizedBox(
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'Downloading ${(bookTask!.progress * 100).toInt()}%',
+                                              style: const TextStyle(fontSize: 11, color: Color(0xFFA78BFA), fontWeight: FontWeight.bold),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : ElevatedButton.icon(
+                                        onPressed: () async {
+                                          final scaffold = ScaffoldMessenger.of(context);
+                                          scaffold.showSnackBar(
+                                            SnackBar(
+                                              content: Text('Downloading "${bookNovel.title}" in background...'),
+                                              behavior: SnackBarBehavior.floating,
+                                            ),
+                                          );
+                                          try {
+                                            await downloadService.downloadEntireBook(
+                                              novel: bookNovel,
+                                              downloadUrl: bookNovel.bookDownloadUrl!,
+                                            );
+                                            scaffold.showSnackBar(
+                                              SnackBar(
+                                                content: Text('"${bookNovel.title}" ready to read!'),
+                                                behavior: SnackBarBehavior.floating,
+                                                action: SnackBarAction(
+                                                  label: 'Read Now',
+                                                  onPressed: () => _openNovel(bookNovel),
+                                                ),
+                                              ),
+                                            );
+                                          } catch (e) {
+                                            scaffold.showSnackBar(
+                                              SnackBar(
+                                                content: Text('Download failed: $e'),
+                                                behavior: SnackBarBehavior.floating,
+                                                backgroundColor: Colors.redAccent,
+                                              ),
+                                            );
+                                          }
+                                        },
+                                        icon: const Icon(Icons.download_rounded, size: 14),
+                                        label: const Text('Download Entire Book', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF8B5CF6),
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                        ),
+                                      ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -872,6 +1133,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                 separatorBuilder: (_, _) => const SizedBox(width: 10),
                 itemBuilder: (context, nIdx) {
                   final novel = novels[nIdx];
+                  final isBook = novel.isFullBook || novel.sourceId == 'local_epub';
+
                   return SizedBox(
                     width: 110,
                     child: InkWell(
@@ -880,24 +1143,48 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              width: 110,
-                              height: 140,
-                              color: const Color(0xFF1E1E28),
-                              child: novel.coverUrl.isNotEmpty
-                                  ? Image.network(
-                                      novel.coverUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) => const Center(
-                                        child: Icon(Icons.book, color: Colors.white24, size: 30),
-                                      ),
-                                    )
-                                  : const Center(
-                                      child: Icon(Icons.book, color: Colors.white24, size: 30),
+                          Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  width: 110,
+                                  height: 140,
+                                  color: const Color(0xFF1E1E28),
+                                  child: novel.coverUrl.isNotEmpty
+                                      ? Image.network(
+                                          novel.coverUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) => const Center(
+                                            child: Icon(Icons.book, color: Colors.white24, size: 30),
+                                          ),
+                                        )
+                                      : const Center(
+                                          child: Icon(Icons.book, color: Colors.white24, size: 30),
+                                        ),
+                                ),
+                              ),
+                              if (isBook)
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.85),
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
-                            ),
+                                    child: const Text(
+                                      'BOOK',
+                                      style: TextStyle(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -927,4 +1214,3 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     );
   }
 }
-

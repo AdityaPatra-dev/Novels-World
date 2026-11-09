@@ -16,6 +16,7 @@ import 'bespoke/libgen_extractor.dart';
 import 'bespoke/standard_ebooks_extractor.dart';
 import 'bespoke/oceanofpdf_extractor.dart';
 import 'bespoke/vdocpub_extractor.dart';
+import 'bespoke/openlibrary_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -37,6 +38,7 @@ class SourceRegistry {
     'standard_ebooks': StandardEbooksExtractor(),
     'oceanofpdf': OceanofPdfExtractor(),
     'vdocpub': VdocPubExtractor(),
+    'openlibrary': OpenLibraryExtractor(),
     'novelcool': NovelCoolExtractor(),
     'roliascan': RoliaScanExtractor(),
     'asurascans': AsuraScansExtractor(),

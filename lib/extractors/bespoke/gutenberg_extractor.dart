@@ -27,7 +27,7 @@ class GutenbergExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://www.gutenberg.org/favicon.ico';
 
   @override
   final int estimatedNovelCount = 70000;

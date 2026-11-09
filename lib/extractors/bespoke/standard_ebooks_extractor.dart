@@ -73,21 +73,35 @@ class StandardEbooksExtractor implements NovelSource {
     final doc = html_parser.parse(html);
     final List<Novel> results = [];
 
-    final items = doc.querySelectorAll('li[itemscope], .list-item, ol li, article');
+    final items = doc.querySelectorAll('li[itemscope], li[typeof*="Book"], .list-item, ol.ebooks-list li, ol li, article');
     for (final item in items) {
-      final titleAnchor = item.querySelector('a[href*="/ebooks/"]');
-      if (titleAnchor == null) continue;
+      final anchors = item.querySelectorAll('a[href*="/ebooks/"]');
+      if (anchors.isEmpty) continue;
 
-      final href = titleAnchor.attributes['href'] ?? '';
+      // Find anchor that points to the specific book edition
+      String? href;
+      for (final a in anchors) {
+        final h = a.attributes['href'] ?? '';
+        final uri = Uri.tryParse(h);
+        if (uri != null && uri.pathSegments.length >= 3 && uri.pathSegments[0] == 'ebooks') {
+          href = h;
+          break;
+        }
+      }
+      href ??= item.attributes['about'] ?? anchors.first.attributes['href'] ?? '';
       if (href.isEmpty || href.endsWith('/ebooks') || href.contains('?')) continue;
 
       final fullUrl = href.startsWith('http') ? href : '$baseUrl$href';
       if (results.any((n) => n.sourceUrl == fullUrl)) continue;
-      final rawTitle = titleAnchor.text.trim();
-      if (rawTitle.isEmpty) continue;
+
+      final nameSpan = item.querySelector('span[property="schema:name"]');
+      final rawTitle = nameSpan?.text.trim().isNotEmpty == true
+          ? nameSpan!.text.trim()
+          : anchors.map((a) => a.text.trim()).firstWhere((t) => t.isNotEmpty, orElse: () => Uri.parse(fullUrl).pathSegments.last);
+      if (rawTitle.isEmpty || rawTitle.toLowerCase() == 'ebooks') continue;
       final title = TextCleaner.cleanNovelTitle(rawTitle);
 
-      final authorEl = item.querySelector('[itemprop="author"], .author, p');
+      final authorEl = item.querySelector('[property="schema:author"] span, [itemprop="author"], .author');
       final author = authorEl?.text.trim().isNotEmpty == true ? authorEl!.text.trim() : 'Unknown Author';
 
       final img = item.querySelector('img');

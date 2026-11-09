@@ -6,6 +6,7 @@ import 'package:novels_world/extractors/bespoke/libgen_extractor.dart';
 import 'package:novels_world/extractors/bespoke/standard_ebooks_extractor.dart';
 import 'package:novels_world/extractors/bespoke/oceanofpdf_extractor.dart';
 import 'package:novels_world/extractors/bespoke/vdocpub_extractor.dart';
+import 'package:novels_world/extractors/bespoke/openlibrary_extractor.dart';
 import 'package:novels_world/extractors/bespoke/gutenberg_extractor.dart';
 
 void main() {
@@ -18,6 +19,7 @@ void main() {
       final standard = SourceRegistry.getSource('standard_ebooks');
       final ocean = SourceRegistry.getSource('oceanofpdf');
       final vdoc = SourceRegistry.getSource('vdocpub');
+      final openlib = SourceRegistry.getSource('openlibrary');
       final gutenberg = SourceRegistry.getSource('gutenberg');
 
       expect(archive, isNotNull);
@@ -25,6 +27,7 @@ void main() {
       expect(standard, isNotNull);
       expect(ocean, isNotNull);
       expect(vdoc, isNotNull);
+      expect(openlib, isNotNull);
       expect(gutenberg, isNotNull);
 
       expect(archive is InternetArchiveExtractor, isTrue);
@@ -32,6 +35,7 @@ void main() {
       expect(standard is StandardEbooksExtractor, isTrue);
       expect(ocean is OceanofPdfExtractor, isTrue);
       expect(vdoc is VdocPubExtractor, isTrue);
+      expect(openlib is OpenLibraryExtractor, isTrue);
       expect(gutenberg is GutenbergExtractor, isTrue);
     });
   });
@@ -260,6 +264,49 @@ void main() {
       expect(got.isFullBook, isTrue);
       expect(got.bookFormat, 'epub');
       expect(got.bookDownloadUrl, 'https://vdoc.pub/download/a-game-of-thrones-george-r-r-martin-12345');
+    });
+  });
+
+  group('OpenLibraryExtractor Unit Tests', () {
+    late OpenLibraryExtractor extractor;
+
+    setUp(() {
+      extractor = OpenLibraryExtractor();
+    });
+
+    test('Parses Open Library JSON search documents into full book Novel models', () {
+      final sampleDocs = [
+        {
+          'key': '/works/OL893414W',
+          'title': 'Dune',
+          'author_name': ['Frank Herbert'],
+          'cover_i': 11481354,
+          'ia': ['dune_frank_herbert_4189', 'dune0000fran'],
+        },
+        {
+          'key': '/works/OL893461W',
+          'title': 'The Hobbit',
+          'author_name': ['J.R.R. Tolkien'],
+          'cover_i': 847291,
+          'ia': ['thehobbit00tolk'],
+        }
+      ];
+
+      final novels = extractor.parseDocs(sampleDocs);
+      expect(novels.length, 2);
+
+      final dune = novels[0];
+      expect(dune.title, 'Dune');
+      expect(dune.author, 'Frank Herbert');
+      expect(dune.coverUrl, 'https://covers.openlibrary.org/b/id/11481354-M.jpg');
+      expect(dune.isFullBook, isTrue);
+      expect(dune.bookFormat, 'epub');
+      expect(dune.bookDownloadUrl, 'https://archive.org/download/dune_frank_herbert_4189/dune_frank_herbert_4189.epub');
+
+      final hobbit = novels[1];
+      expect(hobbit.title, 'The Hobbit');
+      expect(hobbit.author, 'J.R.R. Tolkien');
+      expect(hobbit.isFullBook, isTrue);
     });
   });
 }

@@ -182,7 +182,7 @@ class RingBufferManager extends ChangeNotifier {
       final targetIdx = _currentIndex + offset;
       if (targetIdx < _sentences.length) {
         final text = _sentences[targetIdx].trim();
-        if (text.isNotEmpty) {
+        if (text.isNotEmpty && !text.startsWith('[IMAGE:')) {
           _activeEngine.synthesizeSentenceToFile(
             text,
             voice: _activeVoice,
@@ -229,7 +229,7 @@ class RingBufferManager extends ChangeNotifier {
   Future<void> _playCurrentSentence(int epoch) async {
     if (!_isPlaying || epoch != _sessionEpoch || _sentences.isEmpty) return;
     final text = _sentences[_currentIndex].trim();
-    if (text.isEmpty) {
+    if (text.isEmpty || text.startsWith('[IMAGE:')) {
       if (_currentIndex < _sentences.length - 1) {
         _currentIndex++;
         onSentenceStarted?.call(_currentIndex);

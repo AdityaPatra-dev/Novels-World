@@ -158,7 +158,13 @@ class ReaderProvider extends ChangeNotifier {
       // Restore saved progress if available
       final progress = _storage.getProgress(_novel!.id);
       if (progress != null && progress.chapterId == chapter.id) {
-        _activeSentenceIndex = progress.activeSentenceIndex.clamp(0, _sentences.length - 1);
+        if (_sentences.isNotEmpty) {
+          _activeSentenceIndex = progress.activeSentenceIndex.clamp(0, _sentences.length - 1);
+        } else {
+          _activeSentenceIndex = 0;
+        }
+      } else {
+        _activeSentenceIndex = 0;
       }
 
       // Load sentences into the real-time TTS streaming ring-buffer

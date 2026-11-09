@@ -19,6 +19,7 @@ import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/text_cleaner.dart';
 import '../../core/utils/chapter_range_parser.dart';
 import '../../core/utils/http_client_factory.dart';
+import '../../core/services/epub_service.dart';
 
 class NovelDetailScreen extends StatefulWidget {
   final Novel novel;
@@ -810,7 +811,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                               )
                             : ElevatedButton.icon(
                                 onPressed: _chapters.isNotEmpty
-                                    ? () => _openReader(_lastReadChapter ?? _chapters.first)
+                                    ? () => _openReader(_lastReadChapter ?? EpubService.getFirstNarrativeChapter(_chapters))
                                     : null,
                                 icon: Icon(_lastReadChapter != null
                                     ? Icons.play_circle_fill_rounded

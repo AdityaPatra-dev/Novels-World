@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:html/parser.dart' as html_parser;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:xml/xml.dart';
 import '../models/novel.dart';
@@ -323,6 +324,23 @@ class EpubService {
     // Remove unwanted non-narrative tags
     doc.querySelectorAll('script, style, link, meta').forEach((el) => el.remove());
 
+    // Extract any embedded images (cover pages, scene illustrations)
+    final imageElements = doc.querySelectorAll('img, svg image, image');
+    final validImageTokens = <String>[];
+    for (final img in imageElements) {
+      final src = img.attributes['src'] ??
+          img.attributes['xlink:href'] ??
+          img.attributes['href'] ??
+          '';
+      if (src.trim().isNotEmpty) {
+        final decoded = Uri.decodeFull(src.trim());
+        final resolvedPath = p.normalize(p.join(file.parent.path, decoded));
+        if (File(resolvedPath).existsSync()) {
+          validImageTokens.add('[IMAGE:file://$resolvedPath]');
+        }
+      }
+    }
+
     final rawParas = <String>[];
     final pElements = doc.querySelectorAll('p');
 
@@ -334,32 +352,71 @@ class EpubService {
         }
       }
     } else {
-      // Fallback: look at divs or body text
+      // Fallback: look at headings, divs, blockquotes, or body text
       final bodyEl = doc.body;
       if (bodyEl != null) {
-        for (final div in bodyEl.querySelectorAll('div')) {
+        for (final div in bodyEl.querySelectorAll('div, blockquote, li, h1, h2, h3, h4, h5, h6')) {
           final text = div.text.trim();
           if (text.length > 20) {
             rawParas.add(text);
           }
         }
-        if (rawParas.isEmpty) {
+        if (rawParas.isEmpty && bodyEl.text.trim().isNotEmpty) {
           rawParas.add(bodyEl.text.trim());
         }
       }
     }
 
+    // Include resolved illustrations if present
+    if (validImageTokens.isNotEmpty) {
+      if (rawParas.isEmpty) {
+        rawParas.addAll(validImageTokens);
+      } else {
+        rawParas.insertAll(0, validImageTokens);
+      }
+    }
+
+    // Safety fallback: ensure section is never empty so reader view never crashes
+    if (rawParas.isEmpty) {
+      rawParas.add('This section contains no text content.');
+    }
+
     final paragraphs = TextCleaner.cleanParagraphs(rawParas);
-    final rawText = TextCleaner.toCleanRawText(paragraphs);
+    final finalParagraphs = paragraphs.isNotEmpty ? paragraphs : rawParas;
+    final rawText = TextCleaner.toCleanRawText(finalParagraphs);
     final title = doc.querySelector('h1, h2, title')?.text.trim() ?? 'Chapter';
 
     return ChapterContent(
       chapterId: filePath,
       novelId: 'local_epub',
       title: title,
-      rawText: rawText,
-      paragraphs: paragraphs,
+      rawText: rawText.isNotEmpty ? rawText : 'Section',
+      paragraphs: finalParagraphs,
     );
+  }
+
+  /// Returns the first narrative chapter, skipping non-narrative front-matter
+  /// such as cover images, title pages, wrappers, or jacket pages.
+  static Chapter getFirstNarrativeChapter(List<Chapter> chapters) {
+    if (chapters.isEmpty) {
+      throw StateError('Cannot get first narrative chapter from empty chapters list');
+    }
+    for (final ch in chapters) {
+      final t = ch.title.toLowerCase();
+      final u = ch.url.toLowerCase();
+      final isFrontMatter = t.contains('cover') ||
+          t.contains('title page') ||
+          t.contains('titlepage') ||
+          t.contains('jacket') ||
+          u.contains('wrap0000') ||
+          u.contains('cover.x') ||
+          u.contains('cover.h') ||
+          u.contains('titlepage');
+      if (!isFrontMatter) {
+        return ch;
+      }
+    }
+    return chapters.first;
   }
 
   /// Returns all previously imported EPUB novels stored locally.

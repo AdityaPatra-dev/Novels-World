@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -405,8 +406,78 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final units = reader.sentences;
     final List<Widget> widgets = [];
 
+    if (units.isEmpty) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.menu_book_outlined, size: 48, color: settings.textColor.withValues(alpha: 0.4)),
+                const SizedBox(height: 16),
+                Text(
+                  'No text in this section (Illustration / Cover page)',
+                  textAlign: TextAlign.center,
+                  style: baseTextStyle.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: settings.textColor.withValues(alpha: 0.7),
+                  ),
+                ),
+                if (reader.hasNextChapter) ...[
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _scrollController.jumpTo(0);
+                      reader.nextChapter();
+                    },
+                    icon: const Icon(Icons.arrow_forward_rounded),
+                    label: const Text('Continue to Next Chapter'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B5CF6),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+      return widgets;
+    }
+
     for (int i = 0; i < units.length; i++) {
       final text = units[i];
+
+      // Render embedded local images (illustrations, cover art)
+      if (text.startsWith('[IMAGE:file://') || text.startsWith('[IMAGE:')) {
+        final rawPath = text.startsWith('[IMAGE:file://')
+            ? text.substring(14, text.endsWith(']') ? text.length - 1 : text.length)
+            : text.substring(7, text.endsWith(']') ? text.length - 1 : text.length);
+        final file = File(rawPath);
+        if (file.existsSync()) {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(
+                    file,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ),
+          );
+          continue;
+        }
+      }
+
       final isHighlighted = reader.isTtsPlaying && reader.activeSentenceIndex == i;
 
       widgets.add(

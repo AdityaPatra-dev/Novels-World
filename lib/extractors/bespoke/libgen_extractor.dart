@@ -206,7 +206,7 @@ class LibGenExtractor implements NovelSource {
     }
 
     // Cover image extraction
-    final coverImg = doc.querySelector('img[src*="/covers/"], img[src*="cover"]');
+    final coverImg = doc.querySelector('img[src*="covers/"], img[src*="cover"], img[src*="/editioncovers/"], img[src*="/comicscovers/"]');
     var coverUrl = '';
     if (coverImg != null) {
       final src = coverImg.attributes['src'] ?? '';
@@ -215,11 +215,50 @@ class LibGenExtractor implements NovelSource {
       }
     }
 
-    final rawTitle = doc.querySelector('h1, .title, title')?.text.trim() ?? 'Novel';
-    final title = TextCleaner.cleanNovelTitle(rawTitle);
+    // Extract Title and Author from BibTeX or Table text
+    final bibtext = doc.querySelector('textarea#bibtext, textarea[name="bibtext"]')?.text ?? '';
+    String? rawTitle;
+    String? rawAuthor;
 
-    final authorAnchor = doc.querySelector('a[href*="author.php"], .author');
-    final author = authorAnchor?.text.trim() ?? 'Unknown Author';
+    if (bibtext.isNotEmpty) {
+      final titleMatch = RegExp(r'title\s*=\s*\{([^}]+)\}', caseSensitive: false).firstMatch(bibtext);
+      if (titleMatch != null) rawTitle = titleMatch.group(1)?.trim();
+
+      final authorMatch = RegExp(r'author\s*=\s*\{([^}]+)\}', caseSensitive: false).firstMatch(bibtext);
+      if (authorMatch != null) rawAuthor = authorMatch.group(1)?.trim();
+    }
+
+    // Fallback: parse from table rows or strong labels
+    if (rawTitle == null || rawTitle.isEmpty) {
+      final bodyText = response.body;
+      final titleRowMatch = RegExp(r'Title:\s*([^<\n\r]+)', caseSensitive: false).firstMatch(bodyText);
+      if (titleRowMatch != null) {
+        rawTitle = titleRowMatch.group(1)?.trim();
+      }
+    }
+
+    if (rawAuthor == null || rawAuthor.isEmpty) {
+      final bodyText = response.body;
+      final authorRowMatch = RegExp(r'Author\(s\):\s*([^<\n\r]+)', caseSensitive: false).firstMatch(bodyText);
+      if (authorRowMatch != null) {
+        rawAuthor = authorRowMatch.group(1)?.trim();
+      }
+    }
+
+    // If still not found, try heading elements but ignore default site title "Library Genesis"
+    if (rawTitle == null || rawTitle.isEmpty) {
+      final h = doc.querySelector('h1, h2, .title')?.text.trim();
+      if (h != null && h.isNotEmpty && h.toLowerCase() != 'library genesis' && h.toLowerCase() != 'get') {
+        rawTitle = h;
+      }
+    }
+
+    final title = TextCleaner.cleanNovelTitle(
+      (rawTitle != null && rawTitle.isNotEmpty && rawTitle.toLowerCase() != 'library genesis')
+          ? rawTitle
+          : 'Book',
+    );
+    final author = (rawAuthor != null && rawAuthor.isNotEmpty) ? rawAuthor : 'Unknown Author';
 
     return Novel(
       id: novelUrl,

@@ -24,6 +24,11 @@ class ChapterContent {
       final trimmed = paragraph.trim();
       if (trimmed.isEmpty) continue;
 
+      if (trimmed.startsWith('[IMAGE:')) {
+        rawParagraphs.add(trimmed);
+        continue;
+      }
+
       // If a single paragraph is unusually massive (>600 chars), break it at sentence boundaries
       if (trimmed.length <= 600) {
         rawParagraphs.add(trimmed);
@@ -58,6 +63,14 @@ class ChapterContent {
     final StringBuffer buffer = StringBuffer();
 
     for (final p in rawParagraphs) {
+      if (p.startsWith('[IMAGE:')) {
+        if (buffer.isNotEmpty) {
+          units.add(buffer.toString().trim());
+          buffer.clear();
+        }
+        units.add(p);
+        continue;
+      }
       if (buffer.isNotEmpty && (buffer.length + p.length + 2 > 700)) {
         units.add(buffer.toString().trim());
         buffer.clear();

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/models/novel.dart';
 import '../../core/models/chapter.dart';
 import '../../core/services/webview_session_manager.dart';
+import '../../core/services/epub_service.dart';
 import '../../core/utils/text_cleaner.dart';
 import '../../data/download_service.dart';
 import '../../data/storage_service.dart';
@@ -611,7 +612,7 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
 
     // Find first unread or last read chapter
     final progress = _storageService.getProgress(widget.novel.id);
-    Chapter targetChapter = _chapters.first;
+    Chapter targetChapter = EpubService.getFirstNarrativeChapter(_chapters);
     if (progress != null) {
       final found = _chapters.where((c) => c.id == progress.chapterId);
       if (found.isNotEmpty) targetChapter = found.first;

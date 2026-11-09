@@ -17,6 +17,12 @@ class TextCleaner {
       String p = raw.trim();
       if (p.isEmpty) continue;
 
+      // Preserve image tokens for embedded illustrations and cover pages
+      if (p.startsWith('[IMAGE:')) {
+        cleaned.add(p);
+        continue;
+      }
+
       // Filter known ad / watermark paragraphs
       bool isAd = false;
       for (final pattern in _adPatterns) {
@@ -327,6 +333,11 @@ class TextCleaner {
     final u = url.trim().toLowerCase();
     if (u.isEmpty || u == '#' || u == '/') return false;
     if (u.startsWith('data:')) return false;
+
+    // NovelCool and similar novel sources store legitimate covers under /logo/ paths or specific subdomains
+    if (u.contains('novelcool.com') || u.contains('img.novelcool.com') || u.contains('vdoc.pub')) {
+      return true;
+    }
 
     // Filter out common site logos, headers, favicons, avatars, banners, and placeholders
     final badPatterns = [

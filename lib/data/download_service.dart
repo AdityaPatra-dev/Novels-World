@@ -7,6 +7,7 @@ import '../core/services/epub_service.dart';
 import '../core/services/webview_session_manager.dart';
 import '../core/utils/chapter_range_parser.dart';
 import '../extractors/source_registry.dart';
+import '../extractors/bespoke/openlibrary_extractor.dart';
 import 'storage_service.dart';
 
 enum DownloadStatus {
@@ -196,11 +197,10 @@ class DownloadService extends ChangeNotifier {
     }
 
     // Auto-resolve exact file URLs and session tokens for whole-book sources
-    if (novel.sourceId == 'internet_archive' &&
-        (effectiveUrl.contains('/${novel.id.replaceFirst('internet_archive_', '')}.epub') ||
-            !effectiveUrl.contains('/download/'))) {
+    if ((novel.sourceId == 'internet_archive' || novel.sourceId == 'open_library') &&
+        (effectiveUrl.contains('archive.org') || !effectiveUrl.endsWith('.epub'))) {
       try {
-        final extractor = SourceRegistry.getSource('internet_archive');
+        final extractor = SourceRegistry.getSource(novel.sourceId);
         if (extractor != null) {
           final detailed = await extractor.getNovelDetails(novel.sourceUrl);
           if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty) {
@@ -209,6 +209,16 @@ class DownloadService extends ChangeNotifier {
           }
         }
       } catch (_) {}
+
+      if (!effectiveUrl.endsWith('.epub')) {
+        final iaMatch = RegExp(r'archive\.org/(?:download|metadata)/([^/?#]+)').firstMatch(effectiveUrl);
+        if (iaMatch != null) {
+          final resolved = await OpenLibraryExtractor.resolveArchiveOrgEpub(iaMatch.group(1)!);
+          if (resolved != null) {
+            effectiveUrl = resolved;
+          }
+        }
+      }
     } else if (novel.sourceId == 'libgen' && !effectiveUrl.contains('key=')) {
       try {
         final extractor = SourceRegistry.getSource('libgen');

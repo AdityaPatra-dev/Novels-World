@@ -109,7 +109,7 @@ class OpenLibraryExtractor implements NovelSource {
       iaId ??= iaList.isNotEmpty ? iaList.first.toString() : null;
 
       final novelUrl = '$baseUrl$key';
-      final downloadUrl = iaId != null ? 'https://archive.org/download/$iaId/$iaId.epub' : null;
+      final downloadUrl = iaId != null ? 'https://archive.org/download/$iaId' : null;
 
       results.add(Novel(
         id: '${id}_${key.replaceAll('/', '_')}',
@@ -126,6 +126,38 @@ class OpenLibraryExtractor implements NovelSource {
     }
 
     return results;
+  }
+
+  /// Resolves the direct, unencrypted public EPUB download URL from Internet Archive metadata
+  static Future<String?> resolveArchiveOrgEpub(String iaId, {http.Client? client}) async {
+    final c = client ?? createPlatformHttpClient();
+    try {
+      final metaUrl = 'https://archive.org/metadata/$iaId/files';
+      final response = await c.get(
+        Uri.parse(metaUrl),
+        headers: {'User-Agent': WebViewSessionManager.defaultUserAgent},
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final files = data['result'] as List<dynamic>? ?? [];
+        for (final f in files) {
+          if (f is! Map<String, dynamic>) continue;
+          final name = f['name']?.toString() ?? '';
+          final format = f['format']?.toString() ?? '';
+          final isPrivate = f['private']?.toString().toLowerCase() == 'true';
+          if (isPrivate) continue;
+
+          if (format.toUpperCase() == 'EPUB' ||
+              (name.toLowerCase().endsWith('.epub') &&
+                  !name.toLowerCase().contains('_lcp') &&
+                  !format.toLowerCase().contains('encrypted'))) {
+            return 'https://archive.org/download/$iaId/${Uri.encodeComponent(name)}';
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override
@@ -156,6 +188,35 @@ class OpenLibraryExtractor implements NovelSource {
 
     final key = data['key']?.toString() ?? novelUrl;
 
+    // Resolve unencrypted EPUB download URL from editions or OCAID
+    String? resolvedDownloadUrl;
+    final ocaid = data['ocaid']?.toString();
+    if (ocaid != null && ocaid.isNotEmpty && !ocaid.startsWith('isbn_')) {
+      resolvedDownloadUrl = await resolveArchiveOrgEpub(ocaid, client: _client);
+    }
+
+    if (resolvedDownloadUrl == null && cleanUrl.contains('/works/')) {
+      try {
+        final editionsUrl = '${cleanUrl.replaceAll('.json', '')}/editions.json?limit=10';
+        final edRes = await _client.get(Uri.parse(editionsUrl), headers: _headers);
+        if (edRes.statusCode == 200) {
+          final edData = jsonDecode(edRes.body) as Map<String, dynamic>;
+          final entries = edData['entries'] as List<dynamic>? ?? [];
+          for (final entry in entries) {
+            if (entry is! Map<String, dynamic>) continue;
+            final edOcaid = entry['ocaid']?.toString();
+            if (edOcaid != null && edOcaid.isNotEmpty && !edOcaid.startsWith('isbn_')) {
+              final dl = await resolveArchiveOrgEpub(edOcaid, client: _client);
+              if (dl != null) {
+                resolvedDownloadUrl = dl;
+                break;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     return Novel(
       id: '${id}_${key.replaceAll('/', '_')}',
       sourceId: id,
@@ -165,6 +226,7 @@ class OpenLibraryExtractor implements NovelSource {
       sourceUrl: novelUrl,
       status: 'COMPLETED',
       isFullBook: true,
+      bookDownloadUrl: resolvedDownloadUrl,
       bookFormat: 'epub',
     );
   }

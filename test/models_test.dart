@@ -48,14 +48,14 @@ void main() {
     });
 
     test('ChapterContent sentence parsing for TTS & Karaoke highlight', () {
-      const content = ChapterContent(
+      final content = ChapterContent(
         chapterId: 'ch_1',
         novelId: 'test_novel_1',
         title: 'Chapter 1',
         rawText: 'Sunny looked at the sky. It was dark! "Why me?" he whispered.',
         paragraphs: [
-          'Sunny looked at the sky. It was dark!',
-          '"Why me?" he whispered.',
+          'Sunny looked at the sky. It was dark! ' * 20,
+          '"Why me?" he whispered. ' * 20,
         ],
       );
 

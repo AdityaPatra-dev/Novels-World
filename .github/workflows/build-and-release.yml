@@ -67,6 +67,7 @@ jobs:
             test/source_registry_test.dart \
             test/tts_engine_test.dart \
             test/webview_session_manager_test.dart \
+            test/book_download_pipeline_test.dart \
             test/widget_test.dart
 
       - name: Build Android Release APK

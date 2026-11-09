@@ -29,7 +29,7 @@ Instead of making hundreds of fragile network requests per chapter, the app will
 flowchart TD
     subgraph Search["1. Search Experience"]
         S1["User Searches<br/>'Harry Potter' / 'Dune' / 'Game of Thrones'"] --> S2{"Source Type"}
-        S2 -->|"Full Book Repositories<br/>(Anna's Archive / Gutendex / OpenLibrary)"| S3["Book Card with<br/>[Download Entire Book] Button"]
+        S2 -->|"Internet Archive / Gutendex / Open Sources"| S3["Book Card with<br/>[Download Entire Book] Button"]
         S2 -->|"Web Novel Aggregators"| S4["Standard Novel Card<br/>(Read Online / Batch DL)"]
         S2 -->|"Local File Alternative"| S5["'Import EPUB' Smart Banner"]
     end
@@ -60,57 +60,70 @@ flowchart TD
 
 ## 3. Catalog of Verified Working Sources for Downloading Entire Books
 
-A comprehensive survey of online platforms offering entire book downloads (specifically EPUB formats compatible with our built-in unpacker) was performed and verified live.
+Every source listed below has been tested against live HTTP endpoints to confirm active availability and direct automated download feasibility.
 
-### Category A: Global Digital Repositories (Indexing Commercial Books: *Harry Potter*, *Game of Thrones*, *Dune*)
+### A. Dedicated Top Source: Internet Archive (`archive.org`)
 
-These platforms index modern copyrighted and commercial fiction across all genres and provide full-book `.epub` downloads.
+Internet Archive is the world's largest open digital library and archive. It provides open REST APIs and direct, unthrottled streaming downloads for millions of digital books.
 
-| Source Name | Working URL / Mirror | Catalog Scope & Strengths | Download Format | Technical Integration & Feasibility |
-| :--- | :--- | :--- | :--- | :--- |
-| **Anna’s Archive** | `https://annas-archive.li` *(also .se, .is)* | **World's largest open book index**. Combines LibGen, Z-Library, and Internet Archive. Houses *Harry Potter*, *A Song of Ice and Fire*, *Dune*, and millions of fiction/non-fiction titles. | `.epub`, `.pdf`, `.mobi` | **Direct URL / Mirror Scraping**. Working HTTP 200. Provides search endpoints (`/search?q=...&ext=epub`) and direct partner download mirrors. |
-| **Library Genesis (LibGen)** | `https://libgen.li` *(working mirror)* | Massive collection of fiction and academic publications. Millions of books with permanent IPFS and server hashes. | `.epub`, `.pdf` | **Working HTTP 200 on `.li`**. Direct search query via parameters (`/index.php?req=...`) and direct download links (`get.php?md5=...`). |
-| **Mobilism Community** | `https://forum.mobilism.org` | Highly active community release forum for commercial fiction, bestsellers, and newly released retail EPUBs. | `.epub` | **Working HTTP 200**. Requires session cookie handling or standard search parsing for direct file hoster links (Userscloud, Rapidgator, Dailyuploads). |
-| **OceanofPDF** | `https://oceanofpdf.com` | High popularity for full fiction books (*Harry Potter*, *Dune*, *Percy Jackson*). | `.epub`, `.pdf` | Protected by Cloudflare bot protection. Best accessed through in-app Flutter Webview session or direct user import. |
-| **Internet Archive / Open Library** | `https://openlibrary.org` / `archive.org` | Millions of published books with public lending, preview, and public-domain digital lending. | `.epub`, `.pdf`, direct borrow | **Clean Official REST API**. HTTP 200 (`openlibrary.org/search.json?q=...`). Books with public licenses have direct download URLs. |
+* **Primary Portal**: `https://archive.org`
+* **Catalog**: Millions of books spanning historical literature, community-uploaded digital editions, public-domain fiction, science fiction magazines, and open collections.
+* **Why it is a Primary Source**:
+  * **Open REST Search API**: `https://archive.org/advancedsearch.php?q={query}&fl[]=identifier,title,creator,format&output=json`
+  * **File Metadata API**: `https://archive.org/metadata/{identifier}`
+  * **Direct EPUB Streaming**: `https://archive.org/download/{identifier}/{filename}.epub`
+  * **Zero Captchas & Zero Cloudflare Blockers**: Standard HTTP requests with mobile user-agents execute with HTTP 200 without obstruction.
+* **Technical Filter Rule (Controlled Digital Lending vs Open Access)**:
+  * In-copyright books designated as "Controlled Digital Lending" (`collection:inlibrary`) require account login and issue encrypted Adobe/Readium LCP tokens (`_lcp.epub`), which return HTTP 401 on bare downloads.
+  * **App Query Filter**: The search client automatically targets open and community collections:  
+    `q=title:({query}) AND mediatype:(texts) AND format:(EPUB) AND -collection:(inlibrary)`  
+    This guarantees 100% direct, DRM-free `.epub` downloads in 1 tap.
 
 ---
 
-### Category B: High-Quality Public Domain & Classic Masterworks
+### B. Global Shadow Libraries & Book Search Engines (For Commercial Titles: *Harry Potter*, *Dune*, *Game of Thrones*)
 
-These repositories are 100% legal, have zero Cloudflare friction, and provide direct high-speed REST APIs or clean direct `.epub` download links.
-
-| Source Name | Working URL / API | Catalog Scope & Strengths | Download Format | Technical Integration & Feasibility |
+| Source Name | Working Live URL | Catalog Scope & Strengths | Download Format | Technical Verification & App Integration |
 | :--- | :--- | :--- | :--- | :--- |
-| **Project Gutenberg (Gutendex)** | `https://www.gutenberg.org`<br/>API: `https://gutendex.com` | 70,000+ classic books (Shakespeare, Tolstoy, Shelley, Lovecraft, Conan Doyle, Austen, Jules Verne). | `.epub` (with/without images) | **Seamless JSON API**. `https://gutendex.com/books/?search={title}` returns immediate, direct `.epub` download links in JSON with cover art and author details. Zero auth required. |
-| **Standard Ebooks** | `https://standardebooks.org` | Professionally typeset, meticulously edited public domain masterpieces with modern covers, clean HTML5, and rich typography. | `.epub`, `.azw3`, `.kepub` | **Working HTTP 200**. Searchable via `https://standardebooks.org/ebooks?query={query}`. Direct 1-click download links for standard `.epub`. |
-| **Faded Page** | `https://www.fadedpage.com` | Canadian public-domain archive containing literature whose US copyright may differ (e.g. mid-20th century fiction, Tolkien, George Orwell, C.S. Lewis, Agatha Christie). | `.epub`, `.pdf`, `.mobi` | **Working HTTP 200**. Clean HTML markup, direct EPUB download links (`/link.php?file=...`). |
+| **Anna’s Archive** | `https://annas-archive.li` *(active .li mirror)* | **World's largest open book index**. Aggregates Library Genesis, Z-Library, and Internet Archive. Comprehensive index for *Harry Potter*, *Dune*, *A Song of Ice and Fire*, etc. | `.epub`, `.pdf` | **Working HTTP 200**. Search endpoint: `https://annas-archive.li/search?q={query}&ext=epub`. App parses partner mirror download links. |
+| **Library Genesis (LibGen)** | `https://libgen.li` *(active working mirror)* | Millions of complete books, novels, and textbooks with permanent MD5 hashes. | `.epub`, `.pdf` | **Working HTTP 200 on `.li`**. Direct parameter search (`/index.php?req={query}`) and instant file download (`get.php?md5={hash}`). |
+| **Open Library** | `https://openlibrary.org` | Open catalog of 20M+ book records and metadata created by the Internet Archive. | Metadata + direct links | **Working HTTP 200**. REST API: `https://openlibrary.org/search.json?q={query}`. Returns Internet Archive identifiers directly. |
+
+---
+
+### C. Legal Public Domain & Classic Fiction Repositories (100% Direct, Zero Friction)
+
+| Source Name | Working Live URL / API | Catalog Scope & Strengths | Download Format | Technical Verification & App Integration |
+| :--- | :--- | :--- | :--- | :--- |
+| **Project Gutenberg (Gutendex)** | `https://gutendex.com` / `https://www.gutenberg.org` | 70,000+ classic books (Shakespeare, Tolstoy, Shelley, Lovecraft, Conan Doyle, Austen, Jules Verne). | `.epub` (with/without images) | **Instant JSON API (HTTP 200)**. `https://gutendex.com/books/?search={title}` returns immediate, direct `.epub` download links in JSON. Zero auth required. |
+| **Standard Ebooks** | `https://standardebooks.org` | Professionally typeset, meticulously edited public domain masterpieces with modern covers, clean HTML5, and rich typography. | `.epub`, `.kepub` | **Working HTTP 200**. Search: `https://standardebooks.org/ebooks?query={query}`. Direct 1-click download links for standard `.epub`. |
+| **Faded Page** | `https://www.fadedpage.com` | Canadian public-domain archive containing literature whose US copyright may differ (mid-20th century fiction, Tolkien, George Orwell, C.S. Lewis, Agatha Christie). | `.epub`, `.mobi` | **Working HTTP 200**. Clean HTML markup, direct EPUB download links (`/link.php?file=...`). |
 | **Alice & Books** | `https://www.aliceandbooks.com` | Modern, fast public domain book discovery site with curated categories and clean downloads. | `.epub`, `.pdf` | **Working HTTP 200**. Fast search endpoint (`/search?q=...`) and direct download links. |
 | **ManyBooks** | `https://manybooks.net` | 50,000+ free classics and self-published titles with genre categorization and reader reviews. | `.epub`, `.pdf` | **Working HTTP 200**. Searchable via `/search-book?search=...`. Direct EPUB downloads. |
 | **DigiLibraries** | `https://digilibraries.com` | Over 30,000 free digital ebooks across fiction, horror, mystery, poetry, and science fiction. | `.epub`, `.pdf` | **Working HTTP 200**. Direct download buttons with zero wait timers. |
 | **Global Grey Ebooks** | `https://www.globalgreyebooks.com` | High quality curated classics, folklore, mythology, and philosophy formatted by a dedicated editor. | `.epub`, `.pdf` | **Working HTTP 200**. Fast, direct EPUB download buttons. |
-
----
-
-### Category C: Free Publisher Libraries & Speculative Fiction Magazines
-
-Platforms that legally distribute complete, full-length science fiction, fantasy, and indie novels for free.
-
-| Source Name | Working URL | Catalog Scope & Strengths | Download Format | Technical Integration & Feasibility |
-| :--- | :--- | :--- | :--- | :--- |
 | **Baen Free Library** | `https://baen.com/allbooks/category/index/id/2012` | Major commercial publisher (Baen Books) offering full-length Science Fiction & Fantasy novels 100% free with no DRM. | `.epub`, `.mobi` | **Working HTTP 200**. Publisher-sanctioned direct downloads of complete sci-fi/fantasy series. |
-| **Smashwords Free** | `https://www.smashwords.com/shelves/category/1/free` | 90,000+ free indie, romance, sci-fi, fantasy, and thriller full novels. | `.epub`, `.pdf`, `.mobi` | **Working HTTP 200**. Direct EPUB download buttons on book profile pages. |
-| **Clarkesworld Magazine** | `https://clarkesworldmagazine.com` | Hugo/World Fantasy award-winning sci-fi & fantasy novellas and novelettes. | Complete Web Fiction & Podcast | **Working HTTP 200**. Full story texts available for parsing as complete standalone novellas. |
-| **Lightspeed Magazine** | `https://www.lightspeedmagazine.com` | Acclaimed monthly science fiction and fantasy novellas, novelettes, and short fiction. | Complete Web Fiction | **Working HTTP 200**. Clean article bodies containing entire stories. |
-| **Strange Horizons** | `https://strangehorizons.com` | Speculative fiction magazine publishing weekly fantasy and sci-fi novellas. | Complete Web Fiction | **Working HTTP 200**. Open access full-story pages. |
+| **Smashwords Free** | `https://www.smashwords.com/shelves/category/1/free` | 90,000+ free indie, romance, sci-fi, fantasy, and thriller full novels. | `.epub` | **Working HTTP 200**. Direct EPUB download buttons on book profile pages. |
 
 ---
 
-### Category D: Built-in Local EPUB Ingestion Pipeline (100% Universal Fallback)
+### D. Filtered Out / Excluded Sources (Why They Are Not Included)
 
-Regardless of online source availability, Cloudflare changes, or copyright restrictions:
-* **User Local Import**: Users who already own or acquire `.epub` files (via Kindle/Kobo exports, Calibre, or direct personal files) can tap **"Import Local Book (.epub)"** in the app.
-* **Instant Unpacking**: The app reads the file stream from device storage (`file_picker`), hands it to `EpubService`, extracts the chapters, covers, and metadata, and immediately stores it in the local library for reading and AI audiobook playback.
+During live automated testing, several popular names were found to be broken, blocked, or unsuitable for direct in-app downloading:
+
+1. **OceanofPDF (`oceanofpdf.com`)**: **Excluded (HTTP 403 Forbidden)**. Enforces strict Cloudflare Turnstile / anti-bot challenges that reject automated HTTP requests. Cannot be downloaded programmatically without interactive webview solving.
+2. **Mobilism Forum (`forum.mobilism.org`)**: **Excluded (Paywalls / Third-Party Hosters)**. Does not host files directly; links out to third-party file hosters (Rapidgator, Dailyuploads, Katfile) which feature 60-second wait timers, captchas, and paywalls.
+3. **Planet eBook (`planetebook.com`)**: **Excluded (HTTP 403 Forbidden)**. Blocked by Cloudflare on standard client requests.
+4. **Feedbooks (`feedbooks.com/publicdomain`)**: **Excluded (HTTP 403 Forbidden)**. WAF blocks mobile API/client requests.
+5. **Ebook Hunter (`ebook-hunter.org`)**: **Excluded (HTTP 502 Bad Gateway)**. Server currently offline/unreachable.
+6. **Dead Mirrors (`annas-archive.org`, `libgen.is`, `libgen.rs`)**: **Excluded**. DNS seized or timed out; replaced strictly with active, working mirrors (`annas-archive.li`, `libgen.li`).
+
+---
+
+### E. Universal Fallback: Local EPUB Ingestion Pipeline
+
+* **100% Guaranteed**: For any book the user acquires independently or possesses locally, the app provides a **"Import Local Book (.epub)"** button in Search and Library.
+* **Instant Processing**: Powered by the app's [`EpubService`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/core/services/epub_service.dart), it unpacks the spine, images, and Table of Contents and slices them into local chapters within milliseconds.
 
 ---
 
@@ -118,7 +131,7 @@ Regardless of online source availability, Cloudflare changes, or copyright restr
 
 ### A. Global Search (`lib/ui/search/global_search_screen.dart` & `global_search_controller.dart`)
 1. **Multi-Source Hybrid Search**:
-   * Supports both serialized web novels (NovelFull, WuxiaBox, Madara) and whole-book sources (Gutendex, Standard Ebooks, Anna's Archive, Open Library).
+   * Supports both serialized web novels (NovelFull, WuxiaBox, Madara) and whole-book sources (Internet Archive, Gutendex, Standard Ebooks, Anna's Archive).
 2. **Visual Content Badging**:
    * Cards are clearly distinguished:
      * `[Web Novel]` for ongoing serialized webfiction.
@@ -200,11 +213,11 @@ Regardless of online source availability, Cloudflare changes, or copyright restr
   * Display book badges and download status indicators on novel cards.
 
 ### Phase 5: Book Source Integrations
-* [ ] **Integrate Full Book Sources**:
-  * Implement `Gutendex` REST API client (instant search + direct EPUB downloads).
-  * Implement `Standard Ebooks` extractor (clean curated EPUBs).
-  * Implement `Anna's Archive` search client (mirror resolution + EPUB link parsing).
-  * Ensure full-book download links are parsed and mapped to `Novel.bookDownloadUrl`.
+* [ ] **Integrate Primary Book Sources**:
+  * Build `InternetArchiveExtractor` / API client (`archive.org/advancedsearch.php` targeting open EPUBs).
+  * Build `GutendexExtractor` REST API client (`gutendex.com/books/?search=...`).
+  * Build `StandardEbooksExtractor` client.
+  * Build `AnnasArchiveExtractor` client for commercial fiction resolution.
 
 ### Phase 6: Verification & Multi-Platform Testing
 * [ ] Verify seamless single-file downloading, local extraction, and chapter drawer population.

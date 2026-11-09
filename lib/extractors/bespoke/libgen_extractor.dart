@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 import '../../core/models/novel.dart';
@@ -11,6 +12,7 @@ import '../novel_source.dart';
 /// Bespoke extractor for Library Genesis (https://libgen.li).
 /// World's largest open book and academic repository containing complete digital editions
 /// of Harry Potter, Dune, Game of Thrones, The Hobbit, and millions of published novels.
+/// Features multi-mirror failover across libgen.li, libgen.la, and libgen.bz to prevent HTTP 522 Cloudflare timeouts.
 class LibGenExtractor implements NovelSource {
   @override
   final String id = 'libgen';
@@ -19,7 +21,15 @@ class LibGenExtractor implements NovelSource {
   final String name = 'Library Genesis';
 
   @override
-  final String baseUrl = 'https://libgen.li';
+  String get baseUrl => _activeMirror;
+
+  static const List<String> mirrors = [
+    'https://libgen.li',
+    'https://libgen.la',
+    'https://libgen.bz',
+  ];
+
+  String _activeMirror = mirrors.first;
 
   @override
   final String lang = 'en';
@@ -36,11 +46,11 @@ class LibGenExtractor implements NovelSource {
     _client = client ?? createPlatformHttpClient();
   }
 
-  Map<String, String> get _headers => {
+  Map<String, String> _getHeaders(String base) => {
     'User-Agent': WebViewSessionManager.defaultUserAgent,
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Referer': '$baseUrl/',
+    'Referer': '$base/',
   };
 
   @override
@@ -59,36 +69,57 @@ class LibGenExtractor implements NovelSource {
     if (cleanQuery.isEmpty) return [];
 
     final encoded = Uri.encodeComponent(cleanQuery);
-    final url = '$baseUrl/index.php?req=$encoded&columns%5B%5D=t&objects%5B%5D=f&topics%5B%5D=l&res=25';
 
-    try {
-      final response = await _client.get(Uri.parse(url), headers: _headers);
-      if (response.statusCode != 200) return [];
-      return parseHtmlTable(response.body);
-    } catch (_) {
-      return [];
+    // Multi-mirror failover: if libgen.li returns HTTP 522/timeout, rotate to libgen.la or libgen.bz
+    for (final mirror in mirrors) {
+      final url = '$mirror/index.php?req=$encoded&columns%5B%5D=t&objects%5B%5D=f&topics%5B%5D=l&res=25';
+      try {
+        final response = await _client
+            .get(Uri.parse(url), headers: _getHeaders(mirror))
+            .timeout(const Duration(seconds: 10));
+
+        if (response.statusCode == 200 && response.body.contains('table')) {
+          _activeMirror = mirror;
+          final results = parseHtmlTable(response.body, mirror);
+          if (results.isNotEmpty) {
+            return results;
+          }
+        }
+      } catch (_) {
+        // Continue to next mirror on timeout or connection error (HTTP 522)
+      }
     }
+
+    return [];
   }
 
   /// Parses LibGen search results HTML table into Novel instances
-  List<Novel> parseHtmlTable(String html) {
+  List<Novel> parseHtmlTable(String html, [String? base]) {
+    final currentBase = base ?? _activeMirror;
     final doc = html_parser.parse(html);
-    final rows = doc.querySelectorAll('table.c tr, tbody tr, tr');
+    final rows = doc.querySelectorAll('table#tablelibgen tr, table.table-striped tr, table.c tr, tbody tr, tr');
     final List<Novel> results = [];
 
     for (final row in rows) {
       final cells = row.querySelectorAll('td');
-      if (cells.length < 9) continue;
+      if (cells.length < 5) continue;
 
       final titleAnchor = row.querySelector('a[href*="edition.php"]') ??
           row.querySelector('a[href*="book/index.php"]') ??
+          row.querySelector('a[href*="ads.php"]') ??
           row.querySelector('a[id*="title"]') ??
           cells[0].querySelector('a');
       final rawTitle = titleAnchor?.text.trim() ?? '';
-      if (rawTitle.isEmpty) continue;
+      if (rawTitle.isEmpty || rawTitle.toLowerCase() == 'title') continue;
       final title = TextCleaner.cleanNovelTitle(rawTitle);
 
-      final author = cells[1].text.trim().isNotEmpty ? cells[1].text.trim() : 'Unknown Author';
+      var author = 'Unknown Author';
+      if (cells.length > 1) {
+        final authorText = cells[1].text.trim();
+        if (authorText.isNotEmpty && authorText.toLowerCase() != 'author') {
+          author = authorText;
+        }
+      }
 
       var format = 'epub';
       for (final c in cells) {
@@ -99,13 +130,23 @@ class LibGenExtractor implements NovelSource {
         }
       }
 
-      final md5Anchor = row.querySelector('a[href*="md5="]') ?? row.querySelector('a[href*="/get.php"]');
+      final md5Anchor = row.querySelector('a[href*="ads.php?md5="]') ??
+          row.querySelector('a[href*="md5="]') ??
+          row.querySelector('a[href*="/get.php"]');
       final href = md5Anchor?.attributes['href'] ?? '';
       final md5Match = RegExp(r'md5=([a-zA-Z0-9]+)').firstMatch(href);
       final md5Hash = md5Match?.group(1);
       if (md5Hash == null || md5Hash.isEmpty) continue;
 
-      final bookUrl = '$baseUrl/get.php?md5=$md5Hash';
+      // Real book page with direct download key and cover
+      final bookPageUrl = '$currentBase/ads.php?md5=$md5Hash';
+      final downloadUrl = '$currentBase/get.php?md5=$md5Hash';
+
+      // LibGen standardized cover image path
+      final coverPrefix = md5Hash.length >= 3 ? md5Hash.substring(0, 3) : '000';
+      final coverUrl = '$currentBase/covers/${coverPrefix}000/$md5Hash.jpg';
+
+      if (results.any((n) => n.id == '${id}_$md5Hash')) continue;
 
       results.add(Novel(
         id: '${id}_$md5Hash',
@@ -113,11 +154,11 @@ class LibGenExtractor implements NovelSource {
         title: title,
         author: author,
         description: 'Format: ${format.toUpperCase()}',
-        coverUrl: '',
-        sourceUrl: bookUrl,
+        coverUrl: coverUrl,
+        sourceUrl: bookPageUrl,
         status: 'COMPLETED',
         isFullBook: true,
-        bookDownloadUrl: bookUrl,
+        bookDownloadUrl: downloadUrl,
         bookFormat: format,
       ));
     }
@@ -126,27 +167,66 @@ class LibGenExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
-    final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-    if (response.statusCode != 200) {
+    final uri = Uri.parse(novelUrl);
+    final currentBase = '${uri.scheme}://${uri.host}';
+
+    http.Response? response;
+    // Try current base first, then fallback to mirrors
+    final tryBases = [currentBase, ...mirrors.where((m) => m != currentBase)];
+
+    for (final base in tryBases) {
+      final targetUrl = novelUrl.startsWith('http')
+          ? novelUrl.replaceFirst(RegExp(r'^https?://[^/]+'), base)
+          : '$base/$novelUrl';
+
+      try {
+        final res = await _client
+            .get(Uri.parse(targetUrl), headers: _getHeaders(base))
+            .timeout(const Duration(seconds: 10));
+        if (res.statusCode == 200) {
+          response = res;
+          _activeMirror = base;
+          break;
+        }
+      } catch (_) {}
+    }
+
+    if (response == null || response.statusCode != 200) {
       throw Exception('Failed to load LibGen novel details from $novelUrl');
     }
 
     final doc = html_parser.parse(response.body);
 
-    // Look for direct get.php download button with key
+    // Look for direct get.php download button with active session key
     final downloadAnchor = doc.querySelector('a[href*="get.php?md5="]');
     var downloadUrl = novelUrl;
     if (downloadAnchor != null) {
       final relHref = downloadAnchor.attributes['href'] ?? '';
-      downloadUrl = relHref.startsWith('http') ? relHref : '$baseUrl/$relHref';
+      downloadUrl = relHref.startsWith('http') ? relHref : '$_activeMirror/$relHref';
     }
 
-    final title = doc.querySelector('h1, .title, title')?.text.trim() ?? 'Novel';
+    // Cover image extraction
+    final coverImg = doc.querySelector('img[src*="/covers/"], img[src*="cover"]');
+    var coverUrl = '';
+    if (coverImg != null) {
+      final src = coverImg.attributes['src'] ?? '';
+      if (src.isNotEmpty) {
+        coverUrl = src.startsWith('http') ? src : '$_activeMirror$src';
+      }
+    }
+
+    final rawTitle = doc.querySelector('h1, .title, title')?.text.trim() ?? 'Novel';
+    final title = TextCleaner.cleanNovelTitle(rawTitle);
+
+    final authorAnchor = doc.querySelector('a[href*="author.php"], .author');
+    final author = authorAnchor?.text.trim() ?? 'Unknown Author';
 
     return Novel(
       id: novelUrl,
       sourceId: id,
-      title: TextCleaner.cleanNovelTitle(title),
+      title: title,
+      author: author,
+      coverUrl: coverUrl,
       sourceUrl: novelUrl,
       status: 'COMPLETED',
       isFullBook: true,

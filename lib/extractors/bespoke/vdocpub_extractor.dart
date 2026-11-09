@@ -26,7 +26,7 @@ class VdocPubExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://vdoc.pub/favicon.ico';
 
   @override
   final int estimatedNovelCount = 150000;
@@ -124,8 +124,15 @@ class VdocPubExtractor implements NovelSource {
       final img = item.querySelector('img');
       String coverUrl = '';
       if (img != null) {
-        final src = img.attributes['data-src'] ?? img.attributes['src'] ?? '';
-        if (src.isNotEmpty) {
+        var src = img.attributes['data-src'] ??
+            img.attributes['data-original'] ??
+            img.attributes['data-lazy-src'] ??
+            img.attributes['src'] ??
+            '';
+        if (src.contains('data:image') || src.contains('placeholder')) {
+          src = img.attributes['data-src'] ?? img.attributes['data-original'] ?? '';
+        }
+        if (src.isNotEmpty && !src.contains('data:image')) {
           coverUrl = src.startsWith('http') ? src : '$baseUrl$src';
         }
       }
@@ -179,12 +186,23 @@ class VdocPubExtractor implements NovelSource {
     final author = doc.querySelector('.author, [itemprop="author"]')?.text.trim() ?? 'Unknown Author';
     final description = doc.querySelector('.description, .synopsis, #description, .card-body p')?.text.trim() ?? '';
 
-    final img = doc.querySelector('.cover-image img, .document-cover img, img.img-fluid');
-    String coverUrl = '';
-    if (img != null) {
-      final src = img.attributes['data-src'] ?? img.attributes['src'] ?? '';
-      if (src.isNotEmpty) {
-        coverUrl = src.startsWith('http') ? src : '$baseUrl$src';
+    final ogImg = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
+    var coverUrl = ogImg?.attributes['content'] ?? '';
+
+    if (coverUrl.isEmpty) {
+      final img = doc.querySelector('.cover-image img, .document-cover img, img.img-fluid, .cover img, img');
+      if (img != null) {
+        var src = img.attributes['data-src'] ??
+            img.attributes['data-original'] ??
+            img.attributes['data-lazy-src'] ??
+            img.attributes['src'] ??
+            '';
+        if (src.contains('data:image') || src.contains('placeholder')) {
+          src = img.attributes['data-src'] ?? img.attributes['data-original'] ?? '';
+        }
+        if (src.isNotEmpty && !src.contains('data:image')) {
+          coverUrl = src.startsWith('http') ? src : '$baseUrl$src';
+        }
       }
     }
 

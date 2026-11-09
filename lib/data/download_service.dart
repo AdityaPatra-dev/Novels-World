@@ -189,9 +189,49 @@ class DownloadService extends ChangeNotifier {
     String? downloadUrl,
     void Function(double progress, String stage)? onProgress,
   }) async {
-    final effectiveUrl = downloadUrl ?? novel.bookDownloadUrl ?? novel.sourceUrl;
+    Novel targetNovel = novel;
+    var effectiveUrl = downloadUrl ?? novel.bookDownloadUrl ?? novel.sourceUrl;
     if (effectiveUrl.isEmpty) {
       throw ArgumentError('No valid download URL provided for complete book');
+    }
+
+    // Auto-resolve exact file URLs and session tokens for whole-book sources
+    if (novel.sourceId == 'internet_archive' &&
+        (effectiveUrl.contains('/${novel.id.replaceFirst('internet_archive_', '')}.epub') ||
+            !effectiveUrl.contains('/download/'))) {
+      try {
+        final extractor = SourceRegistry.getSource('internet_archive');
+        if (extractor != null) {
+          final detailed = await extractor.getNovelDetails(novel.sourceUrl);
+          if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty) {
+            effectiveUrl = detailed.bookDownloadUrl!;
+            targetNovel = detailed;
+          }
+        }
+      } catch (_) {}
+    } else if (novel.sourceId == 'libgen' && !effectiveUrl.contains('key=')) {
+      try {
+        final extractor = SourceRegistry.getSource('libgen');
+        if (extractor != null) {
+          final detailed = await extractor.getNovelDetails(novel.sourceUrl);
+          if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty) {
+            effectiveUrl = detailed.bookDownloadUrl!;
+            targetNovel = detailed;
+          }
+        }
+      } catch (_) {}
+    } else if ((novel.sourceId == 'vdocpub' || novel.sourceId == 'oceanofpdf') &&
+        (novel.bookDownloadUrl == null || novel.bookDownloadUrl!.isEmpty)) {
+      try {
+        final extractor = SourceRegistry.getSource(novel.sourceId);
+        if (extractor != null) {
+          final detailed = await extractor.getNovelDetails(novel.sourceUrl);
+          if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty) {
+            effectiveUrl = detailed.bookDownloadUrl!;
+            targetNovel = detailed;
+          }
+        }
+      } catch (_) {}
     }
 
     // Check if task already exists
@@ -208,7 +248,7 @@ class DownloadService extends ChangeNotifier {
       task.stage = 'Connecting';
     } else {
       task = BookDownloadTask(
-        novel: novel,
+        novel: targetNovel,
         downloadUrl: effectiveUrl,
         status: DownloadStatus.downloading,
         stage: 'Connecting',
@@ -220,10 +260,20 @@ class DownloadService extends ChangeNotifier {
     try {
       final headers = <String, String>{
         'User-Agent': WebViewSessionManager.defaultUserAgent,
-        'Accept': '*/*',
+        'Accept': 'application/epub+zip,application/octet-stream,*/*;q=0.9',
       };
 
-      final cookie = WebViewSessionManager.instance.getCookieHeader(effectiveUrl);
+      if (targetNovel.sourceUrl.isNotEmpty) {
+        final origin = Uri.tryParse(targetNovel.sourceUrl)?.origin;
+        if (origin != null && origin.isNotEmpty) {
+          headers['Referer'] = '$origin/';
+        }
+      }
+
+      final cookie = WebViewSessionManager.instance.getCookieHeader(effectiveUrl) ??
+          (targetNovel.sourceUrl.isNotEmpty
+              ? WebViewSessionManager.instance.getCookieHeader(targetNovel.sourceUrl)
+              : null);
       if (cookie != null && cookie.isNotEmpty) {
         headers['Cookie'] = cookie;
       }
@@ -231,7 +281,7 @@ class DownloadService extends ChangeNotifier {
       final importedNovel = await EpubService().importEpubFromUrl(
         effectiveUrl,
         headers: headers,
-        originalNovel: novel,
+        originalNovel: targetNovel,
         onProgress: (p, stage) {
           task.progress = p;
           task.stage = stage;

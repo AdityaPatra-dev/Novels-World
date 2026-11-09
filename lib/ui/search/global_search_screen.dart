@@ -1032,15 +1032,36 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF10B981),
-                                shape: BoxShape.circle,
+                            if (source.iconUrl.isNotEmpty) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(3),
+                                child: Image.network(
+                                  source.iconUrl,
+                                  width: 14,
+                                  height: 14,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, _, _) => Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF10B981),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 6),
+                              const SizedBox(width: 6),
+                            ] else ...[
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF10B981),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
                             Text(
                               source.name,
                               style: const TextStyle(
@@ -1088,6 +1109,19 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 children: [
+                  if (source.iconUrl.isNotEmpty) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: Image.network(
+                        source.iconUrl,
+                        width: 20,
+                        height: 20,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(

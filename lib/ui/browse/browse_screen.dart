@@ -285,7 +285,30 @@ class _BrowseScreenState extends State<BrowseScreen> {
                             items: allSources.map((s) {
                               return DropdownMenuItem(
                                 value: s,
-                                child: Text('${s.name} (${s.lang.toUpperCase()})', style: const TextStyle(fontSize: 13)),
+                                child: Row(
+                                  children: [
+                                    if (s.iconUrl.isNotEmpty) ...[
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Image.network(
+                                          s.iconUrl,
+                                          width: 18,
+                                          height: 18,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    Expanded(
+                                      child: Text(
+                                        '${s.name} (${s.lang.toUpperCase()})',
+                                        style: const TextStyle(fontSize: 13),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               );
                             }).toList(),
                             onChanged: _onSourceChanged,

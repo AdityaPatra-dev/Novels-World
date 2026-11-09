@@ -58,7 +58,8 @@ class InternetArchiveExtractor implements NovelSource {
 
     final encoded = Uri.encodeComponent(cleanQuery);
     // Target open access texts with EPUB format, excluding controlled digital lending (inlibrary)
-    final url = '$baseUrl/advancedsearch.php?q=($encoded)+AND+mediatype:(texts)+AND+format:(EPUB)+AND+-collection:(inlibrary)&fl[]=identifier,title,creator,description,downloads,format&sort[]=downloads+desc&rows=25&page=$page&output=json';
+    // and excluding encrypted LCP / ACS DRM formats that require lending borrow credentials (401)
+    final url = '$baseUrl/advancedsearch.php?q=($encoded)+AND+mediatype:(texts)+AND+format:(EPUB)+AND+-format:(%22LCP+Encrypted+EPUB%22)+AND+-format:(%22ACS+Encrypted+PDF%22)+AND+-format:(%22ACS+Encrypted+EPUB%22)+AND+-collection:(inlibrary)&fl[]=identifier,title,creator,description,downloads,format&sort[]=downloads+desc&rows=25&page=$page&output=json';
 
     try {
       final response = await _client.get(Uri.parse(url), headers: _headers);
@@ -135,18 +136,24 @@ class InternetArchiveExtractor implements NovelSource {
     final description = metadata['description']?.toString() ?? '';
     final coverUrl = '$baseUrl/services/img/$identifier';
 
-    // Find actual EPUB filename
+    // Find actual unencrypted EPUB filename
     String? epubName;
     for (final f in files) {
+      if (f is! Map<String, dynamic>) continue;
       final name = f['name']?.toString() ?? '';
-      if (name.toLowerCase().endsWith('.epub') && !name.contains('_lcp')) {
+      final format = f['format']?.toString() ?? '';
+      final isPrivate = f['private']?.toString().toLowerCase() == 'true';
+      if (isPrivate) continue;
+
+      if (format.toUpperCase() == 'EPUB' ||
+          (name.toLowerCase().endsWith('.epub') && !name.toLowerCase().contains('_lcp'))) {
         epubName = name;
         break;
       }
     }
 
     final downloadUrl = epubName != null
-        ? '$baseUrl/download/$identifier/$epubName'
+        ? '$baseUrl/download/$identifier/${Uri.encodeComponent(epubName)}'
         : '$baseUrl/download/$identifier/$identifier.epub';
 
     return Novel(

@@ -191,18 +191,22 @@ class OceanofPdfExtractor implements NovelSource {
       }
     }
 
-    String coverUrl = '';
-    final imgElem = doc.querySelector('.entry-content img, article img');
-    if (imgElem != null) {
-      coverUrl = imgElem.attributes['data-lazy-src'] ??
-          imgElem.attributes['data-src'] ??
-          imgElem.attributes['src'] ??
-          '';
+    final ogImg = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
+    var coverUrl = ogImg?.attributes['content'] ?? '';
+
+    if (coverUrl.isEmpty) {
+      final imgElem = doc.querySelector('.entry-content img, article img, .post-thumbnail img');
+      if (imgElem != null) {
+        coverUrl = imgElem.attributes['data-lazy-src'] ??
+            imgElem.attributes['data-src'] ??
+            imgElem.attributes['src'] ??
+            '';
+      }
     }
 
     // Look for EPUB download button / form
     String? downloadUrl;
-    final forms = doc.querySelectorAll('form[action*="epub"], form');
+    final forms = doc.querySelectorAll('form[action*="epub"], form[action*="download"], form');
     for (final f in forms) {
       final action = f.attributes['action'] ?? '';
       if (action.toLowerCase().contains('.epub') || action.toLowerCase().contains('download')) {
@@ -212,7 +216,7 @@ class OceanofPdfExtractor implements NovelSource {
     }
 
     if (downloadUrl == null) {
-      final epubAnchor = doc.querySelector('a[href*=".epub"]');
+      final epubAnchor = doc.querySelector('a[href*=".epub"], a[href*="/download/"]');
       if (epubAnchor != null) {
         final href = epubAnchor.attributes['href'] ?? '';
         downloadUrl = href.startsWith('http') ? href : '$baseUrl$href';

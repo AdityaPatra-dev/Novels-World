@@ -11,6 +11,7 @@ import '../models/novel.dart';
 import '../models/chapter.dart';
 import '../models/chapter_content.dart';
 import '../utils/text_cleaner.dart';
+import 'webview_session_manager.dart';
 
 /// Service responsible for parsing, extracting, and importing local EPUB files
 /// into the Novels-World offline library.
@@ -428,20 +429,80 @@ class EpubService {
       throw 'EPUB URL import is not supported in browser environment';
     }
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 25);
+    client.connectionTimeout = const Duration(seconds: 30);
+    client.autoUncompress = true;
     File? tempFile;
     File? tempTmpFile;
     try {
       onProgress?.call(0.05, 'Connecting');
-      final request = await client.getUrl(Uri.parse(url));
-      if (headers != null) {
-        headers.forEach((key, value) {
-          request.headers.set(key, value);
-        });
+
+      Uri currentUri = Uri.parse(url);
+      HttpClientResponse? response;
+
+      // Handle redirects manually to preserve and forward User-Agent, Referer, and Cookies
+      for (int redirect = 0; redirect < 10; redirect++) {
+        final request = await client.getUrl(currentUri);
+        request.followRedirects = false;
+
+        // Apply caller headers (except cookie/referer which we manage dynamically)
+        if (headers != null) {
+          headers.forEach((key, value) {
+            final lower = key.toLowerCase();
+            if (lower != 'cookie' && lower != 'referer') {
+              request.headers.set(key, value);
+            }
+          });
+        }
+
+        // Forward User-Agent matching active WebView session
+        if (request.headers.value(HttpHeaders.userAgentHeader) == null) {
+          request.headers.set(HttpHeaders.userAgentHeader, WebViewSessionManager.defaultUserAgent);
+        }
+
+        // Maintain Referer across redirects
+        String? referer = headers?['Referer'];
+        if (redirect > 0) {
+          referer = currentUri.toString();
+        } else if (referer == null || referer.isEmpty) {
+          if (originalNovel != null && originalNovel.sourceUrl.isNotEmpty) {
+            referer = originalNovel.sourceUrl;
+          } else {
+            referer = '${currentUri.scheme}://${currentUri.host}/';
+          }
+        }
+        request.headers.set(HttpHeaders.refererHeader, referer);
+
+        // Resolve cookie from currentUri, falling back to original source domain
+        String? cookie = WebViewSessionManager.instance.getCookieHeader(currentUri.toString());
+        if (cookie == null || cookie.isEmpty) {
+          if (originalNovel != null && originalNovel.sourceUrl.isNotEmpty) {
+            cookie = WebViewSessionManager.instance.getCookieHeader(originalNovel.sourceUrl);
+          }
+        }
+        if (cookie == null || cookie.isEmpty) {
+          cookie = headers?['Cookie'];
+        }
+        if (cookie != null && cookie.isNotEmpty) {
+          request.headers.set(HttpHeaders.cookieHeader, cookie);
+        }
+
+        response = await request.close();
+
+        if (response.isRedirect) {
+          final location = response.headers.value(HttpHeaders.locationHeader);
+          if (location == null || location.isEmpty) {
+            throw HttpException('Redirect with no Location header from $currentUri');
+          }
+          currentUri = currentUri.resolve(location);
+          await response.drain();
+          continue;
+        }
+
+        break;
       }
-      final response = await request.close();
-      if (response.statusCode != 200) {
-        throw HttpException('Failed to download EPUB: HTTP ${response.statusCode}');
+
+      if (response == null || response.statusCode != 200) {
+        throw HttpException('Failed to download EPUB: HTTP ${response?.statusCode ?? 500}');
       }
 
       final contentLength = response.contentLength;

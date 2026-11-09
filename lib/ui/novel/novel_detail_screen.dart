@@ -454,11 +454,51 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     );
   }
 
+  Future<void> _downloadFullBook() async {
+    final downloadService = context.read<DownloadService>();
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Starting download for "${_novel.title}"...'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      final downloadedNovel = await downloadService.downloadEntireBook(novel: _novel);
+      if (mounted) {
+        setState(() {
+          _novel = downloadedNovel;
+        });
+        await _loadCachedDataFirst();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Downloaded "${_novel.title}"! Unpacked ${_chapters.length} chapters.'),
+              backgroundColor: const Color(0xFF10B981),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final libraryProvider = context.watch<LibraryProvider>();
     final downloadService = context.watch<DownloadService>();
     final isInLibrary = libraryProvider.isInLibrary(_novel.id);
+    final isFullBook = _novel.isFullBook || _novel.sourceId == 'local_epub';
+    final isBookDownloaded = !kIsWeb && downloadService.isBookDownloaded(_novel.id);
+    final isDownloadingBook = !kIsWeb && downloadService.isDownloadingBook(_novel.id);
+    final activeBookTask = !kIsWeb ? downloadService.activeBookDownloads[_novel.id] : null;
 
     final displayList = _displayChapters;
 
@@ -552,16 +592,42 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _novel.status == 'COMPLETED' ? Colors.green[800] : Colors.blueGrey[800],
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  _novel.status,
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: _novel.status == 'COMPLETED' ? Colors.green[800] : Colors.blueGrey[800],
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      _novel.status,
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  if (isFullBook) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFF8B5CF6), width: 0.8),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.auto_stories_rounded, size: 11, color: Color(0xFFA78BFA)),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'BOOK',
+                                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFA78BFA)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ],
                           ),
@@ -620,7 +686,59 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Active Download Progress Banner
+                  // Active Whole-Book Download Progress Banner
+                  if (!kIsWeb && isDownloadingBook && activeBookTask != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E28),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.5)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${activeBookTask.stage}... (${(activeBookTask.progress * 100).toInt()}%)',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                              TextButton(
+                                onPressed: () => downloadService.cancelBookDownload(_novel.id),
+                                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                                child: const Text('Cancel', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: activeBookTask.progress > 0 ? activeBookTask.progress : null,
+                              backgroundColor: Colors.white12,
+                              color: const Color(0xFF8B5CF6),
+                              minHeight: 6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Active Download Progress Banner (Web Serial Chapters)
                   if (!kIsWeb && downloadService.isProcessing && downloadService.queue.any((t) => t.novel.id == _novel.id)) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -666,44 +784,104 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _chapters.isNotEmpty
-                              ? () => _openReader(_lastReadChapter ?? _chapters.first)
-                              : null,
-                          icon: Icon(_lastReadChapter != null
-                              ? Icons.play_circle_fill_rounded
-                              : Icons.menu_book),
-                          label: Text(
-                            _chapters.isEmpty
-                                ? 'Loading...'
-                                : (_lastReadChapter != null
-                                    ? 'Continue: ${_lastReadChapter!.title}'
-                                    : 'Start Reading'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF8B5CF6),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
+                        child: isFullBook && !isBookDownloaded
+                            ? ElevatedButton.icon(
+                                onPressed: isDownloadingBook ? null : _downloadFullBook,
+                                icon: isDownloadingBook
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Icon(Icons.download_rounded),
+                                label: Text(
+                                  isDownloadingBook
+                                      ? '${activeBookTask?.stage ?? 'Downloading'} (${((activeBookTask?.progress ?? 0) * 100).toInt()}%)'
+                                      : 'Download Entire Book${_novel.bookSizeBytes != null && _novel.bookSizeBytes! > 0 ? ' (${(_novel.bookSizeBytes! / (1024 * 1024)).toStringAsFixed(1)} MB)' : ''}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF8B5CF6),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              )
+                            : ElevatedButton.icon(
+                                onPressed: _chapters.isNotEmpty
+                                    ? () => _openReader(_lastReadChapter ?? _chapters.first)
+                                    : null,
+                                icon: Icon(_lastReadChapter != null
+                                    ? Icons.play_circle_fill_rounded
+                                    : Icons.menu_book),
+                                label: Text(
+                                  _chapters.isEmpty
+                                      ? (isFullBook ? 'Book Ready' : 'Loading...')
+                                      : (_lastReadChapter != null
+                                          ? 'Continue: ${_lastReadChapter!.title}'
+                                          : 'Start Reading'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF8B5CF6),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
                       ),
                       if (!kIsWeb) ...[
                         const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          onPressed: _chapters.isNotEmpty ? _showDownloadModal : null,
-                          icon: const Icon(Icons.download_rounded, size: 18),
-                          label: const Text('Download'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF28283C),
-                            foregroundColor: const Color(0xFFA78BFA),
-                            side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        if (isFullBook)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isBookDownloaded
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                  : const Color(0xFF28283C),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isBookDownloaded
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                                    : const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isBookDownloaded ? Icons.check_circle_rounded : Icons.auto_stories_rounded,
+                                  size: 16,
+                                  color: isBookDownloaded ? const Color(0xFF10B981) : const Color(0xFFA78BFA),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isBookDownloaded ? 'Ready' : 'EPUB',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isBookDownloaded ? const Color(0xFF10B981) : const Color(0xFFA78BFA),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          ElevatedButton.icon(
+                            onPressed: _chapters.isNotEmpty ? _showDownloadModal : null,
+                            icon: const Icon(Icons.download_rounded, size: 18),
+                            label: const Text('Download'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF28283C),
+                              foregroundColor: const Color(0xFFA78BFA),
+                              side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
                           ),
-                        ),
                       ],
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
@@ -999,15 +1177,59 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           else if (displayList.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Center(
-                  child: Text(
-                    _searchQuery.isNotEmpty
-                        ? 'No chapters found matching "$_searchQuery"'
-                        : 'No chapters available yet.',
-                    style: const TextStyle(color: Colors.white54, fontSize: 13),
-                  ),
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
+                child: isFullBook && !isBookDownloaded
+                    ? Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E2C),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.auto_stories_rounded, size: 40, color: Color(0xFFA78BFA)),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Complete Digital Book Edition',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'This book is available as a complete EPUB package. Download it once to unpack chapters, navigate the table of contents, and read offline.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.7), height: 1.4),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: isDownloadingBook ? null : _downloadFullBook,
+                              icon: isDownloadingBook
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.download_rounded),
+                              label: Text(isDownloadingBook ? 'Downloading Book...' : 'Download Entire Book'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Center(
+                        child: Text(
+                          _searchQuery.isNotEmpty
+                              ? 'No chapters found matching "$_searchQuery"'
+                              : 'No chapters available yet.',
+                          style: const TextStyle(color: Colors.white54, fontSize: 13),
+                        ),
+                      ),
               ),
             )
           else

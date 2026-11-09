@@ -110,6 +110,19 @@ class DownloadService extends ChangeNotifier {
     return _storage.isNovelInLibrary(novelId);
   }
 
+  bool isDownloadingBook(String novelId) =>
+      _bookTasks.any((t) => t.novel.id == novelId && t.status == DownloadStatus.downloading);
+
+  Map<String, BookDownloadTask> get activeBookDownloads {
+    final map = <String, BookDownloadTask>{};
+    for (final t in _bookTasks) {
+      if (t.status == DownloadStatus.downloading) {
+        map[t.novel.id] = t;
+      }
+    }
+    return map;
+  }
+
   BookDownloadTask? getBookTask(String novelId) {
     return _bookTasks.cast<BookDownloadTask?>().firstWhere(
           (t) => t?.novel.id == novelId,
@@ -173,9 +186,14 @@ class DownloadService extends ChangeNotifier {
   /// Downloads an entire book in a single atomic stream and automatically unpacks it.
   Future<Novel> downloadEntireBook({
     required Novel novel,
-    required String downloadUrl,
+    String? downloadUrl,
     void Function(double progress, String stage)? onProgress,
   }) async {
+    final effectiveUrl = downloadUrl ?? novel.bookDownloadUrl ?? novel.sourceUrl;
+    if (effectiveUrl.isEmpty) {
+      throw ArgumentError('No valid download URL provided for complete book');
+    }
+
     // Check if task already exists
     BookDownloadTask task;
     final existingIndex = _bookTasks.indexWhere((t) => t.novel.id == novel.id);
@@ -191,7 +209,7 @@ class DownloadService extends ChangeNotifier {
     } else {
       task = BookDownloadTask(
         novel: novel,
-        downloadUrl: downloadUrl,
+        downloadUrl: effectiveUrl,
         status: DownloadStatus.downloading,
         stage: 'Connecting',
       );
@@ -205,13 +223,13 @@ class DownloadService extends ChangeNotifier {
         'Accept': '*/*',
       };
 
-      final cookie = WebViewSessionManager.instance.getCookieHeader(downloadUrl);
+      final cookie = WebViewSessionManager.instance.getCookieHeader(effectiveUrl);
       if (cookie != null && cookie.isNotEmpty) {
         headers['Cookie'] = cookie;
       }
 
       final importedNovel = await EpubService().importEpubFromUrl(
-        downloadUrl,
+        effectiveUrl,
         headers: headers,
         originalNovel: novel,
         onProgress: (p, stage) {
@@ -225,6 +243,20 @@ class DownloadService extends ChangeNotifier {
       // Save to library and record download
       await _storage.saveNovelToLibrary(importedNovel);
       await _storage.recordDownloadedNovel(importedNovel, 'complete_book');
+
+      try {
+        final localExtractor = SourceRegistry.getSource('local_epub');
+        if (localExtractor != null) {
+          final chapters = await localExtractor.getChapterList(importedNovel.sourceUrl);
+          if (chapters.isNotEmpty) {
+            await _storage.cacheChapterList(importedNovel.id, chapters);
+            await _storage.cacheNovelDetails(importedNovel);
+            for (final ch in chapters) {
+              _downloadedChapterIds.add(ch.id);
+            }
+          }
+        }
+      } catch (_) {}
 
       task.status = DownloadStatus.completed;
       task.stage = 'Completed';

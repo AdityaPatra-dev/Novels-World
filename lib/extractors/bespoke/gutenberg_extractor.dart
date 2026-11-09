@@ -97,6 +97,7 @@ class GutenbergExtractor implements NovelSource {
         coverUrl = '$baseUrl/cache/epub/$bookNum/pg$bookNum.cover.medium.jpg';
       }
 
+      final downloadUrl = bookNum.isNotEmpty ? '$baseUrl/ebooks/$bookNum.epub.images' : '';
       novelList.add(Novel(
         id: '${id}_$bookNum',
         sourceId: id,
@@ -105,6 +106,9 @@ class GutenbergExtractor implements NovelSource {
         coverUrl: coverUrl,
         sourceUrl: fullUrl,
         status: 'COMPLETED',
+        isFullBook: true,
+        bookDownloadUrl: downloadUrl.isNotEmpty ? downloadUrl : null,
+        bookFormat: 'epub',
       ));
     }
 
@@ -164,6 +168,7 @@ class GutenbergExtractor implements NovelSource {
       description = 'Subjects: ${genres.join(", ")}';
     }
 
+    final downloadUrl = bookNum.isNotEmpty ? '$baseUrl/ebooks/$bookNum.epub.images' : '';
     return Novel(
       id: '${id}_$bookNum',
       sourceId: id,
@@ -174,6 +179,9 @@ class GutenbergExtractor implements NovelSource {
       genres: genres,
       status: 'COMPLETED',
       sourceUrl: novelUrl,
+      isFullBook: true,
+      bookDownloadUrl: downloadUrl.isNotEmpty ? downloadUrl : null,
+      bookFormat: 'epub',
     );
   }
 

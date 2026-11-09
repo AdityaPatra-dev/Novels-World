@@ -11,6 +11,10 @@ import 'bespoke/asurascans_extractor.dart';
 import 'bespoke/allfreenovel_extractor.dart';
 import 'bespoke/gutenberg_extractor.dart';
 import 'bespoke/local_epub_extractor.dart';
+import 'bespoke/internet_archive_extractor.dart';
+import 'bespoke/libgen_extractor.dart';
+import 'bespoke/standard_ebooks_extractor.dart';
+import 'bespoke/oceanofpdf_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -23,10 +27,14 @@ import 'bespoke/local_epub_extractor.dart';
 class SourceRegistry {
   static final Map<String, NovelSource> _sources = {
     // ==========================================
-    // 1. Bespoke Western Web Fiction & Literature Megaportals
+    // 1. Bespoke Western Web Fiction, Literature & Book Repositories
     // ==========================================
     'allfreenovel': AllFreeNovelExtractor(),
     'gutenberg': GutenbergExtractor(),
+    'internet_archive': InternetArchiveExtractor(),
+    'libgen': LibGenExtractor(),
+    'standard_ebooks': StandardEbooksExtractor(),
+    'oceanofpdf': OceanofPdfExtractor(),
     'novelcool': NovelCoolExtractor(),
     'roliascan': RoliaScanExtractor(),
     'asurascans': AsuraScansExtractor(),

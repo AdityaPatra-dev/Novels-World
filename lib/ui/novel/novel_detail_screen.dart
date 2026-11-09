@@ -480,16 +480,23 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
             action: SnackBarAction(
               label: 'Open Browser',
               textColor: Colors.white,
-              onPressed: () {
-                Navigator.push(
+              onPressed: () async {
+                if (!mounted) return;
+                final targetUrl = (_novel.bookDownloadUrl != null && _novel.bookDownloadUrl!.isNotEmpty)
+                    ? _novel.bookDownloadUrl!
+                    : _novel.sourceUrl;
+                final res = await Navigator.push<bool>(
                   context,
                   MaterialPageRoute(
                     builder: (context) => SourceWebViewScreen(
-                      initialUrl: _novel.sourceUrl,
+                      initialUrl: targetUrl,
                       sourceName: _novel.title,
                     ),
                   ),
                 );
+                if (res == true && mounted) {
+                  _downloadFullBook();
+                }
               },
             ),
           ),
@@ -532,6 +539,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             kIsWeb ? getWebProxiedImageUrl(_sanitizedCoverUrl) : _sanitizedCoverUrl,
                             headers: _imageHeaders,
                             fit: BoxFit.cover,
+                            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                              if (wasSynchronouslyLoaded || frame != null) {
+                                return child;
+                              }
+                              return Container(color: Colors.black87);
+                            },
                             errorBuilder: (context, error, stackTrace) => Container(color: Colors.black87),
                           )),
                   Container(
@@ -570,6 +583,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                         kIsWeb ? getWebProxiedImageUrl(_sanitizedCoverUrl) : _sanitizedCoverUrl,
                                         headers: _imageHeaders,
                                         fit: BoxFit.cover,
+                                        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                                          if (wasSynchronouslyLoaded || frame != null) {
+                                            return child;
+                                          }
+                                          return _buildPlaceholderCover();
+                                        },
                                         errorBuilder: (context, error, stackTrace) => _buildPlaceholderCover(),
                                       ))
                                 : _buildPlaceholderCover(),
@@ -959,6 +978,23 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
+                  ] else ...[
+                    const Text(
+                      'Synopsis',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isFullBook
+                          ? 'This is a complete digital book edition. Download the book to unpack chapters, navigate the table of contents, and read offline.'
+                          : 'No synopsis provided by source.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.white.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
                   ],
 
                   // Chapter List Header
@@ -1210,22 +1246,51 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                               style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.7), height: 1.4),
                             ),
                             const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: isDownloadingBook ? null : _downloadFullBook,
-                              icon: isDownloadingBook
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                    )
-                                  : const Icon(Icons.download_rounded),
-                              label: Text(isDownloadingBook ? 'Downloading Book...' : 'Download Entire Book'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF8B5CF6),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 8,
+                              alignment: WrapAlignment.center,
+                              children: [
+                                ElevatedButton.icon(
+                                  onPressed: isDownloadingBook ? null : _downloadFullBook,
+                                  icon: isDownloadingBook
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Icon(Icons.download_rounded),
+                                  label: Text(isDownloadingBook ? 'Downloading Book...' : 'Download Entire Book'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF8B5CF6),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                ),
+                                if (!kIsWeb && _novel.sourceUrl.isNotEmpty)
+                                  OutlinedButton.icon(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => SourceWebViewScreen(
+                                            initialUrl: _novel.sourceUrl,
+                                            sourceName: _novel.title,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                                    label: const Text('Preview Online'),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFFA78BFA),
+                                      side: BorderSide(color: const Color(0xFF8B5CF6).withValues(alpha: 0.5)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ],
                         ),

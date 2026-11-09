@@ -80,53 +80,114 @@ class VdocPubExtractor implements NovelSource {
     } catch (_) {}
 
     // Headless WebView fallback if Cloudflare challenge is encountered
-    if (htmlBody == null || htmlBody.contains('Just a moment...') || htmlBody.contains('challenge-running')) {
+    if (htmlBody == null ||
+        htmlBody.contains('Just a moment...') ||
+        htmlBody.contains('challenge-running') ||
+        htmlBody.contains('cf-chl-') ||
+        htmlBody.contains('Attention Required')) {
       htmlBody = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrl);
     }
 
-    if (htmlBody == null || htmlBody.isEmpty) {
-      if (!WebViewSessionManager.instance.hasClearanceCookie(baseUrl)) {
-        throw Exception('Cloudflare Turnstile challenge requires in-app WebView session. Open in WebView to solve.');
-      }
-      return [];
+    if (htmlBody == null ||
+        htmlBody.isEmpty ||
+        htmlBody.contains('Just a moment...') ||
+        htmlBody.contains('challenge-running') ||
+        htmlBody.contains('cf-chl-')) {
+      await WebViewSessionManager.instance.clearCookies(baseUrl);
+      throw Exception('Cloudflare Turnstile challenge requires in-app WebView session. Open in WebView to solve.');
     }
 
     final novels = parseHtml(htmlBody);
-    if (novels.isEmpty && !WebViewSessionManager.instance.hasClearanceCookie(baseUrl)) {
-      throw Exception('Cloudflare Turnstile challenge requires in-app WebView session. Open in WebView to solve.');
+    if (novels.isEmpty) {
+      if (htmlBody.contains('Just a moment...') ||
+          htmlBody.contains('challenge-running') ||
+          htmlBody.contains('cf-chl-') ||
+          htmlBody.contains('Attention Required') ||
+          htmlBody.contains('Forbidden') ||
+          !WebViewSessionManager.instance.hasClearanceCookie(baseUrl)) {
+        await WebViewSessionManager.instance.clearCookies(baseUrl);
+        throw Exception('Cloudflare Turnstile challenge requires in-app WebView session. Open in WebView to solve.');
+      }
     }
 
     return novels;
   }
 
+  static String _cleanVdocTitle(String raw) {
+    final s = raw
+        .replaceAll(RegExp(r'\[(?:PDF|EPUB|MOBI|AZW3)\]', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\((?:PDF|EPUB|MOBI|AZW3)\)', caseSensitive: false), '')
+        .trim();
+    return TextCleaner.cleanNovelTitle(s);
+  }
+
   /// Parses vdoc.pub search results HTML
   List<Novel> parseHtml(String html) {
     final doc = html_parser.parse(html);
-    final items = doc.querySelectorAll('.document-item, .card, .row .col-md-6, article');
-    final List<Novel> results = [];
+    final List<Novel> epubResults = [];
+    final List<Novel> otherResults = [];
+    final seenUrls = <String>{};
+
+    // Broad container selector matching document cards, grid columns, list items, search results
+    final items = doc.querySelectorAll(
+      '.document-item, .card, .search-card, .search-result, .document, .row .col-md-6, .col-sm-6, .col-12, .col-md-4, .media, article, li'
+    );
 
     for (final item in items) {
-      final titleAnchor = item.querySelector('a[href*="/documents/"]') ?? item.querySelector('h2 a, h3 a, h4 a, a');
+      final titleAnchor = item.querySelector('a[href*="/document/"], a[href*="/documents/"]') ??
+          item.querySelector('h2 a, h3 a, h4 a, .title a, a');
       if (titleAnchor == null) continue;
 
       final href = titleAnchor.attributes['href'] ?? '';
-      if (href.isEmpty || !href.contains('/documents/')) continue;
+      if (href.isEmpty || (!href.contains('/document/') && !href.contains('/documents/'))) continue;
 
       final fullUrl = href.startsWith('http') ? href : '$baseUrl$href';
-      if (results.any((n) => n.sourceUrl == fullUrl)) continue;
+      if (seenUrls.contains(fullUrl)) continue;
 
-      final rawTitle = titleAnchor.text.trim();
+      var rawTitle = '';
+      // Look for title element that isn't "preview document" or "download"
+      final possibleTitles = item.querySelectorAll('h1, h2, h3, h4, .title, .document-title, strong, a');
+      for (final el in possibleTitles) {
+        final t = el.text.trim();
+        final lower = t.toLowerCase();
+        if (t.isNotEmpty &&
+            !lower.contains('preview document') &&
+            lower != 'download' &&
+            lower != 'read online' &&
+            !lower.startsWith('by ') &&
+            !lower.contains('views') &&
+            !lower.contains('pages') &&
+            !lower.contains('mb') &&
+            !lower.contains('kb')) {
+          rawTitle = t;
+          break;
+        }
+      }
+      if (rawTitle.isEmpty) {
+        final aTitle = titleAnchor.attributes['title']?.trim();
+        if (aTitle != null && aTitle.isNotEmpty && !aTitle.toLowerCase().contains('preview document')) {
+          rawTitle = aTitle;
+        }
+      }
+      if (rawTitle.isEmpty || rawTitle.toLowerCase().contains('preview document') || rawTitle.toLowerCase() == 'download') {
+        final path = Uri.parse(fullUrl).path;
+        final slug = path.split('/').where((s) => s.isNotEmpty).last;
+        final cleanSlug = slug
+            .replaceAll(RegExp(r'-[a-z0-9]{8,25}$', caseSensitive: false), '')
+            .replaceAll(RegExp(r'-(?:pdf|epub|mobi)$', caseSensitive: false), '');
+        rawTitle = cleanSlug.split('-').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '').join(' ');
+      }
       if (rawTitle.isEmpty) continue;
-      final title = TextCleaner.cleanNovelTitle(rawTitle);
+      final title = _cleanVdocTitle(rawTitle);
 
-      final authorEl = item.querySelector('.author, .text-muted, p');
+      final authorEl = item.querySelector('.author, .text-muted, [itemprop="author"], p, .meta');
       String author = 'Unknown Author';
       if (authorEl != null) {
         final text = authorEl.text.trim();
         final byMatch = RegExp(r'\bby\s+(.*?)$', caseSensitive: false).firstMatch(text);
         if (byMatch != null) {
           author = byMatch.group(1)!.trim();
-        } else if (text.isNotEmpty && !text.contains('pages') && !text.contains('MB')) {
+        } else if (text.isNotEmpty && !text.contains('pages') && !text.contains('MB') && !text.contains('views')) {
           author = text;
         }
       }
@@ -134,41 +195,121 @@ class VdocPubExtractor implements NovelSource {
       final img = item.querySelector('img');
       String coverUrl = '';
       if (img != null) {
-        var src = img.attributes['data-src'] ??
+        var src = img.attributes['data-cfsrc'] ??
+            img.attributes['data-src'] ??
             img.attributes['data-original'] ??
             img.attributes['data-lazy-src'] ??
             img.attributes['src'] ??
             '';
-        if (src.contains('data:image') || src.contains('placeholder')) {
-          src = img.attributes['data-src'] ?? img.attributes['data-original'] ?? '';
+        if (src.contains('data:image') || src.contains('placeholder') || src.contains('blank.gif')) {
+          src = img.attributes['data-cfsrc'] ?? img.attributes['data-src'] ?? img.attributes['data-original'] ?? '';
         }
         if (src.isNotEmpty && !src.contains('data:image')) {
-          coverUrl = src.startsWith('http') ? src : '$baseUrl$src';
+          coverUrl = src.startsWith('http') ? src : (src.startsWith('//') ? 'https:$src' : '$baseUrl$src');
         }
       }
 
-      // vdoc.pub document identifier from URL path
       final segments = Uri.parse(fullUrl).pathSegments.where((s) => s.isNotEmpty).toList();
       final docId = segments.isNotEmpty ? segments.last : '${fullUrl.hashCode.abs()}';
 
-      // vdoc direct download link format
+      // Fallback cover if thumbnail is empty
+      if (coverUrl.isEmpty) {
+        coverUrl = '$baseUrl/cover/$docId.jpg';
+      }
+
+      // Format detection
+      var format = 'epub';
+      final checkStr = '$fullUrl $rawTitle'.toLowerCase();
+      if (checkStr.contains('-pdf-') || checkStr.contains('.pdf') || checkStr.contains('[pdf]')) {
+        format = 'pdf';
+      } else if (checkStr.contains('-mobi-') || checkStr.contains('.mobi') || checkStr.contains('[mobi]')) {
+        format = 'mobi';
+      } else if (checkStr.contains('-epub-') || checkStr.contains('.epub') || checkStr.contains('[epub]')) {
+        format = 'epub';
+      }
+
       final downloadUrl = '$baseUrl/download/$docId';
 
-      results.add(Novel(
+      final itemNovel = Novel(
         id: '${id}_$docId',
         sourceId: id,
         title: title,
         author: author,
+        description: 'Format: ${format.toUpperCase()}',
         coverUrl: coverUrl,
         sourceUrl: fullUrl,
         status: 'COMPLETED',
         isFullBook: true,
-        bookFormat: 'epub',
+        bookFormat: format,
         bookDownloadUrl: downloadUrl,
-      ));
+      );
+
+      seenUrls.add(fullUrl);
+      if (format == 'epub') {
+        epubResults.add(itemNovel);
+      } else {
+        otherResults.add(itemNovel);
+      }
     }
 
-    return results;
+    // Fallback: scan any standalone document links on page
+    if (epubResults.isEmpty && otherResults.isEmpty) {
+      final standaloneAnchors = doc.querySelectorAll('a[href*="/document/"], a[href*="/documents/"]');
+      for (final a in standaloneAnchors) {
+        final href = a.attributes['href'] ?? '';
+        if (href.isEmpty) continue;
+        final fullUrl = href.startsWith('http') ? href : '$baseUrl$href';
+        if (seenUrls.contains(fullUrl)) continue;
+
+        var rawTitle = a.text.trim();
+        if (rawTitle.isEmpty || rawTitle.toLowerCase() == 'download' || rawTitle.toLowerCase().contains('preview document')) {
+          rawTitle = a.attributes['title'] ?? '';
+        }
+        if (rawTitle.isEmpty || rawTitle.toLowerCase() == 'download' || rawTitle.toLowerCase().contains('preview document')) {
+          final path = Uri.parse(fullUrl).path;
+          final slug = path.split('/').where((s) => s.isNotEmpty).last;
+          final cleanSlug = slug
+              .replaceAll(RegExp(r'-[a-z0-9]{8,25}$', caseSensitive: false), '')
+              .replaceAll(RegExp(r'-(?:pdf|epub|mobi)$', caseSensitive: false), '');
+          rawTitle = cleanSlug.split('-').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '').join(' ');
+        }
+        if (rawTitle.isEmpty) continue;
+        final title = _cleanVdocTitle(rawTitle);
+
+        final segments = Uri.parse(fullUrl).pathSegments.where((s) => s.isNotEmpty).toList();
+        final docId = segments.isNotEmpty ? segments.last : '${fullUrl.hashCode.abs()}';
+
+        var format = 'epub';
+        final checkStr = '$fullUrl $rawTitle'.toLowerCase();
+        if (checkStr.contains('-pdf-') || checkStr.contains('.pdf') || checkStr.contains('[pdf]')) {
+          format = 'pdf';
+        }
+
+        final itemNovel = Novel(
+          id: '${id}_$docId',
+          sourceId: id,
+          title: title,
+          author: 'Unknown Author',
+          description: 'Format: ${format.toUpperCase()}',
+          coverUrl: '$baseUrl/cover/$docId.jpg',
+          sourceUrl: fullUrl,
+          status: 'COMPLETED',
+          isFullBook: true,
+          bookFormat: format,
+          bookDownloadUrl: '$baseUrl/download/$docId',
+        );
+
+        seenUrls.add(fullUrl);
+        if (format == 'epub') {
+          epubResults.add(itemNovel);
+        } else {
+          otherResults.add(itemNovel);
+        }
+      }
+    }
+
+    final all = [...epubResults, ...otherResults];
+    return all;
   }
 
   @override
@@ -181,64 +322,148 @@ class VdocPubExtractor implements NovelSource {
       }
     } catch (_) {}
 
-    if (htmlBody == null || htmlBody.contains('Just a moment...')) {
+    if (htmlBody == null ||
+        htmlBody.contains('Just a moment...') ||
+        htmlBody.contains('challenge-running') ||
+        htmlBody.contains('cf-chl-') ||
+        htmlBody.contains('Attention Required')) {
       htmlBody = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
     }
 
-    if (htmlBody == null) {
-      throw Exception('Failed to load vdoc.pub details from $novelUrl');
+    if (htmlBody == null ||
+        htmlBody.contains('Just a moment...') ||
+        htmlBody.contains('challenge-running') ||
+        htmlBody.contains('cf-chl-')) {
+      throw Exception('Cloudflare Turnstile challenge requires in-app WebView session. Open in WebView to solve.');
     }
 
     final doc = html_parser.parse(htmlBody);
-    final rawTitle = doc.querySelector('h1, .document-title')?.text.trim() ?? 'Unknown Book';
-    final title = TextCleaner.cleanNovelTitle(rawTitle);
+    final rawTitle = doc.querySelector('h1, .document-title, meta[property="og:title"]')?.text.trim() ??
+        doc.querySelector('meta[property="og:title"]')?.attributes['content'] ??
+        'Unknown Book';
+    final title = _cleanVdocTitle(rawTitle);
 
-    final author = doc.querySelector('.author, [itemprop="author"]')?.text.trim() ?? 'Unknown Author';
-    final description = doc.querySelector('.description, .synopsis, #description, .card-body p')?.text.trim() ?? '';
+    var author = doc.querySelector('.author, [itemprop="author"]')?.text.trim() ?? 'Unknown Author';
+    if (author == 'Unknown Author') {
+      final authorMeta = doc.querySelector('meta[name="author"]')?.attributes['content'];
+      if (authorMeta != null && authorMeta.isNotEmpty) {
+        author = authorMeta;
+      }
+    }
+
+    var description = doc.querySelector('.description, .synopsis, #description, .card-body p, .content, [itemprop="description"]')?.text.trim() ?? '';
+    if (description.isEmpty) {
+      final metaDesc = doc.querySelector('meta[name="description"], meta[property="og:description"]')?.attributes['content'];
+      if (metaDesc != null && metaDesc.isNotEmpty) {
+        description = metaDesc;
+      }
+    }
 
     final ogImg = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
     var coverUrl = ogImg?.attributes['content'] ?? '';
 
+    final segments = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).toList();
+    final docId = segments.isNotEmpty ? segments.last : '${novelUrl.hashCode.abs()}';
+
     if (coverUrl.isEmpty) {
       final img = doc.querySelector('.cover-image img, .document-cover img, img.img-fluid, .cover img, img');
       if (img != null) {
-        var src = img.attributes['data-src'] ??
+        var src = img.attributes['data-cfsrc'] ??
+            img.attributes['data-src'] ??
             img.attributes['data-original'] ??
             img.attributes['data-lazy-src'] ??
             img.attributes['src'] ??
             '';
-        if (src.contains('data:image') || src.contains('placeholder')) {
-          src = img.attributes['data-src'] ?? img.attributes['data-original'] ?? '';
+        if (src.contains('data:image') || src.contains('placeholder') || src.contains('blank.gif')) {
+          src = img.attributes['data-cfsrc'] ?? img.attributes['data-src'] ?? img.attributes['data-original'] ?? '';
         }
         if (src.isNotEmpty && !src.contains('data:image')) {
-          coverUrl = src.startsWith('http') ? src : '$baseUrl$src';
+          coverUrl = src.startsWith('http') ? src : (src.startsWith('//') ? 'https:$src' : '$baseUrl$src');
         }
       }
     }
 
-    // Download URL extraction
-    final dlAnchor = doc.querySelector('a[href*="/download/"]');
+    if (coverUrl.isEmpty) {
+      coverUrl = '$baseUrl/cover/$docId.jpg';
+    }
+
+    var detectedFormat = 'epub';
+    final checkStr = '$novelUrl $rawTitle $htmlBody'.toLowerCase();
+    if (checkStr.contains('-pdf-') || checkStr.contains('.pdf') || checkStr.contains('[pdf]')) {
+      detectedFormat = 'pdf';
+    } else if (checkStr.contains('-mobi-') || checkStr.contains('.mobi') || checkStr.contains('[mobi]')) {
+      detectedFormat = 'mobi';
+    }
+
+    // Direct download link resolution from page
+    final dlAnchor = doc.querySelector('a[href*="/download/"], a[href*="/dl/"], a.btn-download');
     String? downloadUrl = dlAnchor?.attributes['href'];
     if (downloadUrl != null && !downloadUrl.startsWith('http')) {
       downloadUrl = '$baseUrl$downloadUrl';
     }
 
-    final segments = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).toList();
-    final docId = segments.isNotEmpty ? segments.last : '${novelUrl.hashCode.abs()}';
+    final effectiveDownloadUrl = downloadUrl ?? '$baseUrl/download/$docId';
 
     return Novel(
       id: '${id}_$docId',
       sourceId: id,
       title: title,
       author: author,
-      description: description,
+      description: description.isNotEmpty ? description : 'Format: ${detectedFormat.toUpperCase()}',
       coverUrl: coverUrl,
       sourceUrl: novelUrl,
       status: 'COMPLETED',
       isFullBook: true,
-      bookFormat: 'epub',
-      bookDownloadUrl: downloadUrl ?? '$baseUrl/download/$docId',
+      bookFormat: detectedFormat,
+      bookDownloadUrl: effectiveDownloadUrl,
     );
+  }
+
+  /// Resolves the final direct binary download URL from a vdoc.pub download page
+  Future<String?> resolveDirectDownloadUrl(String downloadPageUrl) async {
+    try {
+      final res = await _client
+          .get(Uri.parse(downloadPageUrl), headers: _headers)
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        final cType = res.headers['content-type'] ?? '';
+        if (cType.contains('epub') || cType.contains('octet-stream') || cType.contains('zip')) {
+          return downloadPageUrl;
+        }
+
+        final doc = html_parser.parse(res.body);
+
+        // 1. Direct file anchor
+        final directAnchor = doc.querySelector(
+          'a[href*="/dl/"], a[href*="/file/"], a[href*=".epub"], a[href*=".pdf"], a[download], a.btn-download, a[href*="attachment"]'
+        );
+        if (directAnchor != null) {
+          final href = directAnchor.attributes['href'];
+          if (href != null && href.isNotEmpty) {
+            return href.startsWith('http') ? href : '$baseUrl$href';
+          }
+        }
+
+        // 2. Form submission action
+        final form = doc.querySelector('form[action*="download"], form');
+        if (form != null) {
+          final action = form.attributes['action'];
+          if (action != null && action.isNotEmpty) {
+            return action.startsWith('http') ? action : '$baseUrl$action';
+          }
+        }
+
+        // 3. JavaScript redirect
+        final jsMatch = RegExp(r'''window\.location(?:\.href)?\s*=\s*['"]([^'"]+)['"]''').firstMatch(res.body) ??
+            RegExp(r'''location\.replace\(['"]([^'"]+)['"]\)''').firstMatch(res.body) ??
+            RegExp(r'''href\s*=\s*['"]([^'"]+\.(?:epub|pdf)[^'"]*)['"]''').firstMatch(res.body);
+        if (jsMatch != null) {
+          final target = jsMatch.group(1)!;
+          return target.startsWith('http') ? target : '$baseUrl$target';
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override

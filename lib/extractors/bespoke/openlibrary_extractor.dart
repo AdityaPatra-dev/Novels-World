@@ -107,9 +107,15 @@ class OpenLibraryExtractor implements NovelSource {
       }
 
       final coverI = doc['cover_i'];
-      final coverUrl = coverI != null
+      var coverUrl = coverI != null
           ? 'https://covers.openlibrary.org/b/id/$coverI-M.jpg'
           : '';
+      if (coverUrl.isEmpty) {
+        final isbns = doc['isbn'] as List<dynamic>?;
+        if (isbns != null && isbns.isNotEmpty) {
+          coverUrl = 'https://covers.openlibrary.org/b/isbn/${isbns.first}-M.jpg';
+        }
+      }
 
       final iaList = doc['ia'] as List<dynamic>? ?? [];
       String? iaId;

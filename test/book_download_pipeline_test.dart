@@ -253,17 +253,33 @@ void main() {
               <p class="author">by George R. R. Martin</p>
             </div>
           </div>
+          <div class="col-md-6">
+            <div class="search-card">
+              <a href="/document/dune-pdf-6smolg23boj0" title="Dune [PDF]">
+                <img data-cfsrc="https://vdoc.pub/cover/dune-pdf-6smolg23boj0.jpg" />
+                <h4 class="document-title">Dune [PDF]</h4>
+              </a>
+              <span class="author">Frank Herbert</span>
+            </div>
+          </div>
         </div>
       ''';
 
       final novels = extractor.parseHtml(html);
-      expect(novels.length, 1);
+      expect(novels.length, 2);
       final got = novels.first;
       expect(got.title, 'A Game of Thrones');
       expect(got.author, 'George R. R. Martin');
       expect(got.isFullBook, isTrue);
       expect(got.bookFormat, 'epub');
       expect(got.bookDownloadUrl, 'https://vdoc.pub/download/a-game-of-thrones-george-r-r-martin-12345');
+
+      final dune = novels.last;
+      expect(dune.title, 'Dune');
+      expect(dune.author, 'Frank Herbert');
+      expect(dune.coverUrl, 'https://vdoc.pub/cover/dune-pdf-6smolg23boj0.jpg');
+      expect(dune.bookFormat, 'pdf');
+      expect(dune.bookDownloadUrl, 'https://vdoc.pub/download/dune-pdf-6smolg23boj0');
     });
   });
 

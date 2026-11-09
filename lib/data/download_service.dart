@@ -8,6 +8,7 @@ import '../core/services/webview_session_manager.dart';
 import '../core/utils/chapter_range_parser.dart';
 import '../extractors/source_registry.dart';
 import '../extractors/bespoke/openlibrary_extractor.dart';
+import '../extractors/bespoke/vdocpub_extractor.dart';
 import 'storage_service.dart';
 
 enum DownloadStatus {
@@ -262,7 +263,19 @@ class DownloadService extends ChangeNotifier {
           'Novels-World supports EPUB digital editions. Please choose an EPUB edition of this title.',
         );
       }
-    } else if ((novel.sourceId == 'vdocpub' || novel.sourceId == 'oceanofpdf') &&
+    } else if (novel.sourceId == 'vdocpub') {
+      try {
+        final extractor = SourceRegistry.getSource('vdocpub');
+        if (extractor is VdocPubExtractor) {
+          if (effectiveUrl.contains('/download/')) {
+            final directUrl = await extractor.resolveDirectDownloadUrl(effectiveUrl);
+            if (directUrl != null && directUrl.isNotEmpty) {
+              effectiveUrl = directUrl;
+            }
+          }
+        }
+      } catch (_) {}
+    } else if (novel.sourceId == 'oceanofpdf' &&
         (novel.bookDownloadUrl == null || novel.bookDownloadUrl!.isEmpty)) {
       try {
         final extractor = SourceRegistry.getSource(novel.sourceId);

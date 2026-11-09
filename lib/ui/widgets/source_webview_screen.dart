@@ -33,7 +33,6 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
   int _cookieCount = 0;
   bool _hasSyncedCookies = false;
   Timer? _clearancePollTimer;
-  bool _autoDismissed = false;
 
   @override
   void initState() {
@@ -128,7 +127,11 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                 urlLower.contains('.epub?') ||
                 urlLower.contains('/download/epub') ||
                 urlLower.contains('epub-download') ||
-                urlLower.contains('/get.php?md5=')) {
+                urlLower.contains('/get.php?md5=') ||
+                urlLower.contains('/dl/') ||
+                urlLower.contains('/download/file') ||
+                urlLower.contains('download_file') ||
+                urlLower.contains('attachment')) {
               _handleEpubDownload(request.url);
               return NavigationDecision.prevent;
             }
@@ -138,50 +141,19 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
       )
       ..loadRequest(Uri.parse(widget.initialUrl));
 
-    // Monitor for clearance resolution so user doesn't have to manually press 'Save & Return'
+    // Monitor for clearance resolution and sync cookies continuously
     _clearancePollTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) async {
-      if (!mounted || _autoDismissed) return;
+      if (!mounted) return;
       try {
         final currentUrl = await _controller.currentUrl();
         if (currentUrl == null || currentUrl.isEmpty) return;
         await _syncCookies(currentUrl);
 
         final title = await _controller.getTitle() ?? '';
-        final titleLower = title.toLowerCase();
-        final isStillChallenged = titleLower.contains('just a moment') ||
-            titleLower.contains('attention required') ||
-            titleLower.contains('cloudflare');
-
-        final hasClearance = WebViewSessionManager.instance.hasClearanceCookie(currentUrl);
-
         if (mounted && title.isNotEmpty && title != _pageTitle) {
           setState(() {
             _pageTitle = title;
           });
-        }
-
-        if ((hasClearance || (!isStillChallenged && _cookieCount > 0)) && !_autoDismissed) {
-          _autoDismissed = true;
-          _clearancePollTimer?.cancel();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.white, size: 18),
-                    const SizedBox(width: 8),
-                    Text('Verification cleared! Session saved for ${widget.sourceName}.'),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF10B981),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-            await Future.delayed(const Duration(milliseconds: 700));
-            if (mounted) {
-              Navigator.pop(context, true);
-            }
-          }
         }
       } catch (_) {}
     });

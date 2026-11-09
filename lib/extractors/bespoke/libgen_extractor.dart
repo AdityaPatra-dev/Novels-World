@@ -97,7 +97,8 @@ class LibGenExtractor implements NovelSource {
     final currentBase = base ?? _activeMirror;
     final doc = html_parser.parse(html);
     final rows = doc.querySelectorAll('table#tablelibgen tr, table.table-striped tr, table.c tr, tbody tr, tr');
-    final List<Novel> epubResults = [];
+    final List<Novel> englishEpubs = [];
+    final List<Novel> otherEpubs = [];
     final List<Novel> otherResults = [];
 
     for (final row in rows) {
@@ -121,6 +122,15 @@ class LibGenExtractor implements NovelSource {
         }
       }
 
+      var language = 'English';
+      if (cells.length > 4) {
+        final langText = cells[4].text.trim();
+        if (langText.isNotEmpty && langText.toLowerCase() != 'language') {
+          language = langText;
+        }
+      }
+      final isEnglish = language.toLowerCase().contains('english') || language.toLowerCase() == 'en';
+
       var format = 'epub';
       for (final c in cells) {
         final txt = c.text.trim().toLowerCase();
@@ -138,15 +148,21 @@ class LibGenExtractor implements NovelSource {
       final md5Hash = md5Match?.group(1);
       if (md5Hash == null || md5Hash.isEmpty) continue;
 
-      // Extract edition ID if present (e.g. edition.php?id=137287439)
       final rowHtml = row.innerHtml;
-      final editionMatch = RegExp(r'edition\.php\?id=(\d+)').firstMatch(rowHtml);
-      final editionId = editionMatch?.group(1);
+
+      // Extract fiction database ID badge (e.g. <span class="badge badge-secondary">f 10105216</span> or bf 10105216)
+      final fictMatch = RegExp(r'>\s*f\s*(\d+)\s*<', caseSensitive: false).firstMatch(rowHtml) ??
+          RegExp(r'\bf\s*(\d+)', caseSensitive: false).firstMatch(rowHtml);
+      final fictId = fictMatch?.group(1);
 
       // Extract library database ID badge (e.g. <span class="badge badge-secondary">l 1510172</span>)
-      final libMatch = RegExp(r'>\s*l\s*(\d+)\s*<').firstMatch(rowHtml) ??
-          RegExp(r'l\s*(\d+)').firstMatch(rowHtml);
+      final libMatch = RegExp(r'>\s*l\s*(\d+)\s*<', caseSensitive: false).firstMatch(rowHtml) ??
+          RegExp(r'\bl\s*(\d+)', caseSensitive: false).firstMatch(rowHtml);
       final libId = libMatch?.group(1);
+
+      // Extract edition ID if present (e.g. edition.php?id=137287439)
+      final editionMatch = RegExp(r'edition\.php\?id=(\d+)').firstMatch(rowHtml);
+      final editionId = editionMatch?.group(1);
 
       // Extract ISBN if available in row (e.g. 0786430575; 9780786430574)
       final isbnMatch = RegExp(r'(?:97[89][-\s]*)?[0-9]{9}[0-9xX]', caseSensitive: false).firstMatch(rowHtml);
@@ -162,8 +178,12 @@ class LibGenExtractor implements NovelSource {
         }
       }
 
-      // Compute standard LibGen library cover path or edition cover
-      if (coverUrl.isEmpty && libId != null && int.tryParse(libId) != null) {
+      // Compute standard LibGen fiction or library cover path or edition cover
+      if (coverUrl.isEmpty && fictId != null && int.tryParse(fictId) != null) {
+        final fNum = int.parse(fictId);
+        final bucket = (fNum ~/ 1000) * 1000;
+        coverUrl = '$currentBase/fictioncovers/$bucket/$md5Hash.jpg';
+      } else if (coverUrl.isEmpty && libId != null && int.tryParse(libId) != null) {
         final lNum = int.parse(libId);
         final bucket = (lNum ~/ 1000) * 1000;
         coverUrl = '$currentBase/covers/$bucket/$md5Hash.jpg';
@@ -184,7 +204,7 @@ class LibGenExtractor implements NovelSource {
         sourceId: id,
         title: title,
         author: author,
-        description: 'Format: ${format.toUpperCase()}',
+        description: 'Language: $language • Format: ${format.toUpperCase()}',
         coverUrl: coverUrl,
         sourceUrl: bookPageUrl,
         status: 'COMPLETED',
@@ -193,15 +213,25 @@ class LibGenExtractor implements NovelSource {
         bookFormat: format,
       );
 
-      if (epubResults.any((n) => n.id == item.id) || otherResults.any((n) => n.id == item.id)) continue;
+      if (englishEpubs.any((n) => n.id == item.id) ||
+          otherEpubs.any((n) => n.id == item.id) ||
+          otherResults.any((n) => n.id == item.id)) {
+        continue;
+      }
 
       if (format.toLowerCase() == 'epub') {
-        epubResults.add(item);
+        if (isEnglish) {
+          englishEpubs.add(item);
+        } else {
+          otherEpubs.add(item);
+        }
       } else {
         otherResults.add(item);
       }
     }
-    return epubResults.isNotEmpty ? epubResults : otherResults;
+
+    final allEpubs = [...englishEpubs, ...otherEpubs];
+    return allEpubs.isNotEmpty ? allEpubs : otherResults;
   }
 
   @override
@@ -269,7 +299,7 @@ class LibGenExtractor implements NovelSource {
     }
 
     // Cover image extraction
-    final coverImg = doc.querySelector('img[src*="covers/"], img[src*="cover"], img[src*="/editioncovers/"], img[src*="/comicscovers/"]');
+    final coverImg = doc.querySelector('img[src*="fictioncovers/"], img[src*="covers/"], img[src*="cover"], img[src*="/editioncovers/"], img[src*="/comicscovers/"]');
     var coverUrl = '';
     if (coverImg != null) {
       final src = coverImg.attributes['src'] ?? '';
@@ -278,7 +308,21 @@ class LibGenExtractor implements NovelSource {
       }
     }
 
-    // Fallback: extract editioncover or lib cover path or ISBN from page HTML
+    // Fallback: extract fiction cover, editioncover or lib cover path or ISBN from page HTML
+    if (coverUrl.isEmpty) {
+      final fBadgeMatch = RegExp(r'>\s*f\s*(\d+)\s*<', caseSensitive: false).firstMatch(response.body) ??
+          RegExp(r'\bf\s*(\d+)', caseSensitive: false).firstMatch(response.body);
+      final md5Match = RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(response.body) ??
+          RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(novelUrl);
+      if (fBadgeMatch != null && md5Match != null) {
+        final fNum = int.tryParse(fBadgeMatch.group(1)!);
+        if (fNum != null) {
+          final bucket = (fNum ~/ 1000) * 1000;
+          coverUrl = '$_activeMirror/fictioncovers/$bucket/${md5Match.group(1)}.jpg';
+        }
+      }
+    }
+
     if (coverUrl.isEmpty) {
       final edMatch = RegExp(r'/editioncovers/(\d+)/(\d+)\.jpg').firstMatch(response.body);
       if (edMatch != null) {
@@ -348,11 +392,43 @@ class LibGenExtractor implements NovelSource {
       detectedFormat = formatMatch.group(1)!.toLowerCase();
     }
 
+    // Extract rich metadata for description/synopsis
+    final descParts = <String>[];
+    final bodyText = response.body;
+
+    final pubMatch = RegExp(r'Publisher:\s*([^<\n\r|]+)', caseSensitive: false).firstMatch(bodyText);
+    if (pubMatch != null && pubMatch.group(1)!.trim().isNotEmpty) {
+      descParts.add('Publisher: ${pubMatch.group(1)!.trim()}');
+    }
+    final yearMatch = RegExp(r'Year:\s*([^<\n\r|]+)', caseSensitive: false).firstMatch(bodyText);
+    if (yearMatch != null && yearMatch.group(1)!.trim().isNotEmpty) {
+      descParts.add('Published: ${yearMatch.group(1)!.trim()}');
+    }
+    final seriesMatch = RegExp(r'Series:\s*([^<\n\r|]+)', caseSensitive: false).firstMatch(bodyText);
+    if (seriesMatch != null && seriesMatch.group(1)!.trim().isNotEmpty) {
+      descParts.add('Series: ${seriesMatch.group(1)!.trim()}');
+    }
+    final isbnMatch = RegExp(r'isbn\s*=\s*\{([^}]+)\}', caseSensitive: false).firstMatch(bodyText) ??
+        RegExp(r'ISBN:\s*([^<\n\r|]+)', caseSensitive: false).firstMatch(bodyText);
+    if (isbnMatch != null && isbnMatch.group(1)!.trim().isNotEmpty) {
+      descParts.add('ISBN: ${isbnMatch.group(1)!.trim()}');
+    }
+
+    final commentMatch = RegExp(r'Comment\(s\):\s*([^<]+)', caseSensitive: false).firstMatch(bodyText);
+    if (commentMatch != null && commentMatch.group(1)!.trim().isNotEmpty) {
+      descParts.add(commentMatch.group(1)!.trim());
+    }
+
+    final description = descParts.isNotEmpty
+        ? descParts.join('\n\n')
+        : 'Complete digital book edition from Library Genesis. Format: ${detectedFormat.toUpperCase()}.';
+
     return Novel(
       id: novelUrl,
       sourceId: id,
       title: title,
       author: author,
+      description: description,
       coverUrl: coverUrl,
       sourceUrl: novelUrl,
       status: 'COMPLETED',

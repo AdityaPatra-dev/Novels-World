@@ -152,11 +152,18 @@ class OceanofPdfExtractor implements NovelSource {
             '';
       }
 
+      var description = '';
+      final summaryElem = article.querySelector('.entry-summary, p');
+      if (summaryElem != null && summaryElem.text.trim().isNotEmpty) {
+        description = summaryElem.text.trim();
+      }
+
       novels.add(Novel(
         id: '${id}_${novelUrl.hashCode.abs()}',
         sourceId: id,
         title: title,
         author: parsedAuthor,
+        description: description,
         coverUrl: coverUrl,
         sourceUrl: novelUrl,
         status: 'COMPLETED',
@@ -201,6 +208,31 @@ class OceanofPdfExtractor implements NovelSource {
       }
     }
 
+    // Extract synopsis paragraphs from .entry-content
+    final descParagraphs = <String>[];
+    for (final p in doc.querySelectorAll('.entry-content p')) {
+      final t = p.text.trim();
+      if (t.isEmpty) continue;
+      final lower = t.toLowerCase();
+      // Skip meta paragraphs and download links
+      if (lower.startsWith('before download') ||
+          lower.startsWith('download ') ||
+          lower.startsWith('full book name') ||
+          lower.startsWith('author name') ||
+          lower.startsWith('series:') ||
+          lower.startsWith('isbn #') ||
+          lower.startsWith('date of publication') ||
+          lower.startsWith('genre:') ||
+          lower.startsWith('file size') ||
+          lower.startsWith('pdf / epub file name') ||
+          lower.startsWith('[pdf]') ||
+          lower.startsWith('[epub]')) {
+        continue;
+      }
+      descParagraphs.add(t);
+    }
+    final description = descParagraphs.isNotEmpty ? descParagraphs.join('\n\n') : '';
+
     final ogImg = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
     var coverUrl = ogImg?.attributes['content'] ?? '';
 
@@ -238,6 +270,7 @@ class OceanofPdfExtractor implements NovelSource {
       sourceId: id,
       title: title,
       author: author,
+      description: description,
       coverUrl: coverUrl,
       sourceUrl: novelUrl,
       status: 'COMPLETED',

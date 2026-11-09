@@ -76,6 +76,12 @@ class NovelCard extends StatelessWidget {
                                 kIsWeb ? getWebProxiedImageUrl(cleanUrl) : cleanUrl,
                                 headers: _imageHeaders,
                                 fit: BoxFit.cover,
+                                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                                  if (wasSynchronouslyLoaded || frame != null) {
+                                    return child;
+                                  }
+                                  return _buildPlaceholder();
+                                },
                                 errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
                               ))
                         : _buildPlaceholder(),

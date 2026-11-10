@@ -214,7 +214,7 @@ class VdocPubExtractor implements NovelSource {
 
       // Fallback cover if thumbnail is empty
       if (coverUrl.isEmpty) {
-        coverUrl = '$baseUrl/cover/$docId.jpg';
+        coverUrl = 'https://img.vdoc.pub/img/detail/$docId.jpg';
       }
 
       // Format detection
@@ -291,7 +291,7 @@ class VdocPubExtractor implements NovelSource {
           title: title,
           author: 'Unknown Author',
           description: 'Format: ${format.toUpperCase()}',
-          coverUrl: '$baseUrl/cover/$docId.jpg',
+          coverUrl: 'https://img.vdoc.pub/img/detail/$docId.jpg',
           sourceUrl: fullUrl,
           status: 'COMPLETED',
           isFullBook: true,
@@ -338,16 +338,65 @@ class VdocPubExtractor implements NovelSource {
     }
 
     final doc = html_parser.parse(htmlBody);
-    final rawTitle = doc.querySelector('h1, .document-title, meta[property="og:title"]')?.text.trim() ??
-        doc.querySelector('meta[property="og:title"]')?.attributes['content'] ??
-        'Unknown Book';
-    final title = _cleanVdocTitle(rawTitle);
 
-    var author = doc.querySelector('.author, [itemprop="author"]')?.text.trim() ?? 'Unknown Author';
+    // 1. Robust Title Extraction:
+    // vdoc.pub uses <meta name="og:title"> and <h3 class="cs_title"> instead of <h1>
+    String rawTitle = '';
+    final metaTitle = doc.querySelector('meta[name="og:title"], meta[property="og:title"], meta[name="twitter:title"]')?.attributes['content']?.trim();
+    if (metaTitle != null && metaTitle.isNotEmpty) {
+      rawTitle = metaTitle;
+    }
+    if (rawTitle.isEmpty) {
+      final h = doc.querySelector('h3.cs_title, h1, h2, h3, .document-title, .book-title')?.text.trim();
+      if (h != null && h.isNotEmpty) {
+        rawTitle = h;
+      }
+    }
+    if (rawTitle.isEmpty) {
+      final pageTitle = doc.querySelector('title')?.text.trim();
+      if (pageTitle != null && pageTitle.isNotEmpty) {
+        rawTitle = pageTitle
+            .replaceAll(RegExp(r'\s*-\s*vdoc\.pub.*$', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\s*\[(?:PDF|EPUB|MOBI|AZW3)\]', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\s*\[[a-z0-9]{8,25}\]', caseSensitive: false), '')
+            .trim();
+      }
+    }
+    final segments = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).toList();
+    final docId = segments.isNotEmpty ? segments.last : '${novelUrl.hashCode.abs()}';
+
+    if (rawTitle.isEmpty || rawTitle.toLowerCase() == 'unknown book' || rawTitle.toLowerCase() == 'untitled') {
+      final cleanSlug = docId
+          .replaceAll(RegExp(r'-[a-z0-9]{8,25}$', caseSensitive: false), '')
+          .replaceAll(RegExp(r'-(?:pdf|epub|mobi)$', caseSensitive: false), '');
+      rawTitle = cleanSlug.split('-').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '').join(' ');
+    }
+    final title = _cleanVdocTitle(rawTitle.isNotEmpty ? rawTitle : 'Unknown Book');
+
+    // 2. Author Extraction:
+    // vdoc.pub displays author in list items prefixed with "Authors:" (e.g. <li>Authors: Hudson, Sindy</li>)
+    String author = 'Unknown Author';
+    for (final item in doc.querySelectorAll('li, .list-inline-item, tr, p, div')) {
+      final text = item.text.trim();
+      final m = RegExp(r'Authors?:\s*(.+)', caseSensitive: false).firstMatch(text);
+      if (m != null) {
+        final a = m.group(1)!.trim().replaceAll(RegExp(r'\s+'), ' ');
+        if (a.isNotEmpty && !a.toLowerCase().contains('pages') && !a.toLowerCase().contains('views')) {
+          author = a;
+          break;
+        }
+      }
+    }
     if (author == 'Unknown Author') {
-      final authorMeta = doc.querySelector('meta[name="author"]')?.attributes['content'];
+      final authorMeta = doc.querySelector('meta[name="author"]')?.attributes['content']?.trim();
       if (authorMeta != null && authorMeta.isNotEmpty) {
         author = authorMeta;
+      }
+    }
+    if (author == 'Unknown Author') {
+      final authorEl = doc.querySelector('.author, [itemprop="author"]')?.text.trim();
+      if (authorEl != null && authorEl.isNotEmpty) {
+        author = authorEl;
       }
     }
 
@@ -359,14 +408,12 @@ class VdocPubExtractor implements NovelSource {
       }
     }
 
-    final ogImg = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
-    var coverUrl = ogImg?.attributes['content'] ?? '';
-
-    final segments = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).toList();
-    final docId = segments.isNotEmpty ? segments.last : '${novelUrl.hashCode.abs()}';
+    // 3. Cover Image:
+    final ogImg = doc.querySelector('meta[name="og:image"], meta[property="og:image"], meta[name="twitter:image"]');
+    var coverUrl = ogImg?.attributes['content']?.trim() ?? '';
 
     if (coverUrl.isEmpty) {
-      final img = doc.querySelector('.cover-image img, .document-cover img, img.img-fluid, .cover img, img');
+      final img = doc.querySelector('img[src*="img/detail/"], img[src*="img.vdoc.pub"], .cover-image img, .document-cover img, img.img-fluid, .cover img, img');
       if (img != null) {
         var src = img.attributes['data-cfsrc'] ??
             img.attributes['data-src'] ??
@@ -384,7 +431,7 @@ class VdocPubExtractor implements NovelSource {
     }
 
     if (coverUrl.isEmpty) {
-      coverUrl = '$baseUrl/cover/$docId.jpg';
+      coverUrl = 'https://img.vdoc.pub/img/detail/$docId.jpg';
     }
 
     var detectedFormat = 'epub';

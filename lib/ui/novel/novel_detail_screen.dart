@@ -157,14 +157,24 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
               }
             }
             String bestTitle = TextCleaner.cleanNovelTitle(_novel.title);
-            if (bestTitle.isEmpty || bestTitle == 'Unknown Novel' || bestTitle == 'Untitled') {
+            if (bestTitle.isEmpty ||
+                bestTitle.toLowerCase() == 'unknown novel' ||
+                bestTitle.toLowerCase() == 'unknown book' ||
+                bestTitle.toLowerCase() == 'untitled') {
               if (TextCleaner.isValidNovelTitle(cachedDetails.title, _novel.sourceUrl)) {
                 bestTitle = TextCleaner.cleanNovelTitle(cachedDetails.title);
+              }
+            }
+            String bestAuthor = _novel.author.trim();
+            if (bestAuthor.isEmpty || bestAuthor.toLowerCase() == 'unknown author') {
+              if (cachedDetails.author.isNotEmpty && cachedDetails.author.toLowerCase() != 'unknown author') {
+                bestAuthor = cachedDetails.author.trim();
               }
             }
             _novel = cachedDetails.copyWith(
               id: _novel.id,
               title: bestTitle.isNotEmpty ? bestTitle : _novel.title,
+              author: bestAuthor.isNotEmpty ? bestAuthor : _novel.author,
               coverUrl: bestCover.isNotEmpty ? bestCover : _novel.coverUrl,
               inLibrary: context.read<LibraryProvider>().isInLibrary(_novel.id),
             );
@@ -349,12 +359,28 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         final cleanedFetchedTitle = TextCleaner.cleanNovelTitle(fullNovel.title);
         final isFetchedTitleValid = TextCleaner.isValidNovelTitle(cleanedFetchedTitle, _novel.sourceUrl);
         String bestTitle = TextCleaner.cleanNovelTitle(_novel.title);
-        if (bestTitle.isEmpty || bestTitle == 'Unknown Novel' || bestTitle == 'Untitled') {
+        if (bestTitle.isEmpty ||
+            bestTitle.toLowerCase() == 'unknown novel' ||
+            bestTitle.toLowerCase() == 'unknown book' ||
+            bestTitle.toLowerCase() == 'untitled') {
           if (isFetchedTitleValid) {
             bestTitle = cleanedFetchedTitle;
           }
-        } else if (isFetchedTitleValid && cleanedFetchedTitle.isNotEmpty) {
+        } else if (isFetchedTitleValid &&
+            cleanedFetchedTitle.isNotEmpty &&
+            cleanedFetchedTitle.toLowerCase() != 'unknown book' &&
+            cleanedFetchedTitle.toLowerCase() != 'unknown novel' &&
+            cleanedFetchedTitle.toLowerCase() != 'untitled') {
           bestTitle = cleanedFetchedTitle;
+        }
+
+        String bestAuthor = _novel.author.trim();
+        if (bestAuthor.isEmpty || bestAuthor.toLowerCase() == 'unknown author') {
+          if (fullNovel.author.isNotEmpty && fullNovel.author.toLowerCase() != 'unknown author') {
+            bestAuthor = fullNovel.author.trim();
+          }
+        } else if (fullNovel.author.isNotEmpty && fullNovel.author.toLowerCase() != 'unknown author') {
+          bestAuthor = fullNovel.author.trim();
         }
 
         String bestCover = fullNovel.coverUrl.trim();
@@ -369,6 +395,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           _novel = fullNovel.copyWith(
             id: _novel.id,
             title: bestTitle.isNotEmpty ? bestTitle : _novel.title,
+            author: bestAuthor.isNotEmpty ? bestAuthor : _novel.author,
             coverUrl: bestCover.isNotEmpty ? bestCover : _novel.coverUrl,
             inLibrary: context.read<LibraryProvider>().isInLibrary(_novel.id),
           );
@@ -447,6 +474,27 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   }
 
   Future<void> _downloadFullBook() async {
+    // If the source requires interactive captcha verification or in-browser form submit (like vdoc.pub and OceanofPDF)
+    if (_novel.sourceId == 'vdocpub' || _novel.sourceId == 'oceanofpdf') {
+      final targetUrl = (_novel.bookDownloadUrl != null && _novel.bookDownloadUrl!.isNotEmpty)
+          ? _novel.bookDownloadUrl!
+          : _novel.sourceUrl;
+      final res = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SourceWebViewScreen(
+            initialUrl: targetUrl,
+            sourceName: _novel.title,
+            targetNovel: _novel,
+          ),
+        ),
+      );
+      if (res == true && mounted) {
+        await _loadCachedDataFirst();
+      }
+      return;
+    }
+
     final downloadService = context.read<DownloadService>();
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -472,11 +520,18 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final isVerification = e.toString().contains('HTML verification') ||
+            e.toString().contains('protection page') ||
+            e.toString().contains('Cloudflare');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Download failed: $e'),
-            backgroundColor: Colors.redAccent,
-            duration: const Duration(seconds: 6),
+            content: Text(
+              isVerification
+                  ? 'Verification challenge required. Please solve in browser to download.'
+                  : 'Download failed: $e',
+            ),
+            backgroundColor: isVerification ? const Color(0xFFD97706) : Colors.redAccent,
+            duration: const Duration(seconds: 8),
             action: SnackBarAction(
               label: 'Open Browser',
               textColor: Colors.white,
@@ -491,11 +546,12 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                     builder: (context) => SourceWebViewScreen(
                       initialUrl: targetUrl,
                       sourceName: _novel.title,
+                      targetNovel: _novel,
                     ),
                   ),
                 );
                 if (res == true && mounted) {
-                  _downloadFullBook();
+                  await _loadCachedDataFirst();
                 }
               },
             ),

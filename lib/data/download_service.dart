@@ -271,10 +271,17 @@ class DownloadService extends ChangeNotifier {
             final directUrl = await extractor.resolveDirectDownloadUrl(effectiveUrl);
             if (directUrl != null && directUrl.isNotEmpty) {
               effectiveUrl = directUrl;
+            } else {
+              throw const FormatException(
+                'vdoc.pub requires solving an interactive verification to download this book. '
+                'Please open in the In-App Browser to solve the challenge or verify session.',
+              );
             }
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        if (e is FormatException) rethrow;
+      }
     } else if (novel.sourceId == 'oceanofpdf' &&
         (novel.bookDownloadUrl == null || novel.bookDownloadUrl!.isEmpty)) {
       try {

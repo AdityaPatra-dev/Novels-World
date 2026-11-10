@@ -22,19 +22,27 @@ Map<String, String> getCoverImageHeaders(String coverUrl, [String? sourceUrl]) {
     'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
   };
   final coverUri = Uri.tryParse(coverUrl);
-  if (coverUri != null && coverUri.origin.isNotEmpty && !coverUri.scheme.startsWith('file')) {
+  if (coverUri != null &&
+      (coverUri.scheme == 'http' || coverUri.scheme == 'https') &&
+      coverUri.origin.isNotEmpty) {
     headers['Referer'] = '${coverUri.origin}/';
   } else if (sourceUrl != null && sourceUrl.isNotEmpty) {
-    final origin = Uri.tryParse(sourceUrl)?.origin;
-    if (origin != null && origin.isNotEmpty) {
-      headers['Referer'] = '$origin/';
+    final sourceUri = Uri.tryParse(sourceUrl);
+    if (sourceUri != null &&
+        (sourceUri.scheme == 'http' || sourceUri.scheme == 'https') &&
+        sourceUri.origin.isNotEmpty) {
+      headers['Referer'] = '${sourceUri.origin}/';
     }
   }
+  String? cookie;
   if (sourceUrl != null && sourceUrl.isNotEmpty) {
-    final cookie = WebViewSessionManager.instance.getCookieHeader(sourceUrl);
-    if (cookie != null && cookie.isNotEmpty) {
-      headers['Cookie'] = cookie;
-    }
+    cookie = WebViewSessionManager.instance.getCookieHeader(sourceUrl);
+  }
+  if ((cookie == null || cookie.isEmpty) && coverUri != null) {
+    cookie = WebViewSessionManager.instance.getCookieHeader(coverUri.toString());
+  }
+  if (cookie != null && cookie.isNotEmpty) {
+    headers['Cookie'] = cookie;
   }
   return headers;
 }

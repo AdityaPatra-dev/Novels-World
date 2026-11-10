@@ -113,5 +113,14 @@ void main() {
       expect(TextCleaner.cleanNovelTitle('The Beginning After The End'), equals('The Beginning After The End'));
       expect(TextCleaner.cleanNovelTitle('A Game of Thrones'), equals('A Game of Thrones'));
     });
+
+    test('isValidNovelTitle rejects placeholder and unknown titles', () {
+      expect(TextCleaner.isValidNovelTitle('Unknown Book', 'https://vdoc.pub/doc/123'), isFalse);
+      expect(TextCleaner.isValidNovelTitle('Unknown Novel', 'https://vdoc.pub/doc/123'), isFalse);
+      expect(TextCleaner.isValidNovelTitle('Unknown Author', 'https://vdoc.pub/doc/123'), isFalse);
+      expect(TextCleaner.isValidNovelTitle('Untitled', 'https://vdoc.pub/doc/123'), isFalse);
+      expect(TextCleaner.isValidNovelTitle('No Title', 'https://vdoc.pub/doc/123'), isFalse);
+      expect(TextCleaner.isValidNovelTitle('How to Draw Fantasy', 'https://vdoc.pub/doc/123'), isTrue);
+    });
   });
 }

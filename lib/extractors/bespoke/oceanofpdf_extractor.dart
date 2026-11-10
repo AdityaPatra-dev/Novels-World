@@ -200,11 +200,26 @@ class OceanofPdfExtractor implements NovelSource {
     final (title, parsedAuthor) = _parseTitleAndAuthor(rawTitle);
 
     var author = parsedAuthor;
-    for (final p in doc.querySelectorAll('.entry-content p, .entry-content strong')) {
+    for (final p in doc.querySelectorAll('.entry-content p, .entry-content strong, li, span')) {
       final text = p.text.trim();
-      if (text.toLowerCase().startsWith('author:') || text.toLowerCase().startsWith('by:')) {
-        author = text.replaceFirst(RegExp(r'^(author|by):\s*', caseSensitive: false), '').trim();
-        break;
+      final m = RegExp(r'^(?:author|author name|by):\s*(.+)', caseSensitive: false).firstMatch(text);
+      if (m != null) {
+        final a = m.group(1)!.trim();
+        if (a.isNotEmpty) {
+          author = a;
+          break;
+        }
+      }
+    }
+    if (author == 'Unknown Author') {
+      final authorUrlMatch = RegExp(r'/authors/([^/]+)/').firstMatch(novelUrl);
+      if (authorUrlMatch != null) {
+        final authorSlug = authorUrlMatch.group(1)!;
+        author = authorSlug
+            .split('-')
+            .map((s) => s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : '')
+            .join(' ')
+            .trim();
       }
     }
 

@@ -152,6 +152,16 @@ class TextCleaner {
     final t = title.trim().toLowerCase();
     if (t.length < 2) return false;
 
+    // Filter placeholder / unknown titles
+    if (t == 'unknown book' ||
+        t == 'unknown novel' ||
+        t == 'unknown author' ||
+        t == 'unknown' ||
+        t == 'untitled' ||
+        t == 'no title') {
+      return false;
+    }
+
     // Filter genre/category/panel titles
     if (_genreAndCategoryTitles.contains(t)) return false;
 

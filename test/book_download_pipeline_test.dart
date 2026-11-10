@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:novels_world/core/models/novel.dart';
 import 'package:novels_world/extractors/source_registry.dart';
 import 'package:novels_world/extractors/bespoke/internet_archive_extractor.dart';
@@ -281,6 +283,43 @@ void main() {
       expect(dune.bookFormat, 'pdf');
       expect(dune.bookDownloadUrl, 'https://vdoc.pub/download/dune-pdf-6smolg23boj0');
     });
+
+    test('Parses vdoc.pub live document detail HTML with meta and author lists', () async {
+      const liveHtml = '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta name="og:title" content="How to Draw Fantasy: A Beginner's Guide to Sketching [EPUB]" />
+          <meta name="og:image" content="https://img.vdoc.pub/img/detail/2jufkksl9o20.jpg" />
+          <title>How to Draw Fantasy: A Beginner's Guide to Sketching [EPUB] [2jufkksl9o20] - vdoc.pub</title>
+        </head>
+        <body>
+          <div class="container">
+            <h3 class="cs_title">How to Draw Fantasy: A Beginner's Guide to Sketching</h3>
+            <ul class="list-inline">
+              <li class="list-inline-item">Authors: Sindy Hudson, Mark Smith</li>
+              <li class="list-inline-item">Year: 2021</li>
+              <li class="list-inline-item">Pages: 250</li>
+            </ul>
+            <div class="description">A complete guide to fantasy art sketching.</div>
+            <a href="/download/how-to-draw-fantasy-2jufkksl9o20" class="btn-download">Download</a>
+          </div>
+        </body>
+        </html>
+      ''';
+
+      // We test through a custom mock client that returns liveHtml
+      final mockClient = MockPlatformClient(liveHtml);
+      final customExtractor = VdocPubExtractor(client: mockClient);
+      final details = await customExtractor.getNovelDetails('https://vdoc.pub/documents/how-to-draw-fantasy-2jufkksl9o20');
+
+      expect(details.title, "How to Draw Fantasy: A Beginner's Guide to Sketching");
+      expect(details.author, 'Sindy Hudson, Mark Smith');
+      expect(details.coverUrl, 'https://img.vdoc.pub/img/detail/2jufkksl9o20.jpg');
+      expect(details.bookFormat, 'epub');
+      expect(details.bookDownloadUrl, 'https://vdoc.pub/download/how-to-draw-fantasy-2jufkksl9o20');
+      expect(details.isFullBook, isTrue);
+    });
   });
 
   group('OpenLibraryExtractor Unit Tests', () {
@@ -325,4 +364,21 @@ void main() {
       expect(hobbit.isFullBook, isTrue);
     });
   });
+}
+
+class MockPlatformClient extends http.BaseClient {
+  final String responseBody;
+  final int statusCode;
+
+  MockPlatformClient(this.responseBody, {this.statusCode = 200});
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final bytes = utf8.encode(responseBody);
+    return http.StreamedResponse(
+      Stream.value(bytes),
+      statusCode,
+      headers: {'content-type': 'text/html; charset=utf-8'},
+    );
+  }
 }

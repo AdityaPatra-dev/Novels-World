@@ -544,6 +544,14 @@ class EpubService {
         }
         request.headers.set(HttpHeaders.refererHeader, referer);
 
+        final origin = '${currentUri.scheme}://${currentUri.host}';
+        request.headers.set('Origin', origin);
+        request.headers.set('Sec-Fetch-Dest', 'document');
+        request.headers.set('Sec-Fetch-Mode', 'navigate');
+        request.headers.set('Sec-Fetch-Site', 'same-origin');
+        request.headers.set('Sec-Fetch-User', '?1');
+        request.headers.set('Upgrade-Insecure-Requests', '1');
+
         // Resolve cookie from currentUri, falling back to original source domain
         String? cookie = WebViewSessionManager.instance.getCookieHeader(currentUri.toString());
         if (cookie == null || cookie.isEmpty) {
@@ -607,6 +615,16 @@ class EpubService {
       onProgress?.call(0.95, 'Verifying');
       // Validate magic bytes
       final headerBytes = await tempTmpFile.openRead(0, 4).first;
+      if (headerBytes.length >= 4 &&
+          headerBytes[0] == 0x25 &&
+          headerBytes[1] == 0x50 &&
+          headerBytes[2] == 0x44 &&
+          headerBytes[3] == 0x46) {
+        throw const FormatException(
+          'This book is in PDF format. Novels-World specializes in reflowable EPUB editions. '
+          'Please choose an EPUB edition of this title to read offline.',
+        );
+      }
       if (headerBytes.length < 4 ||
           headerBytes[0] != 0x50 ||
           headerBytes[1] != 0x4B ||

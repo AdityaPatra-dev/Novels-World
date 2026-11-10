@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../../core/models/novel.dart';
 import '../../core/services/epub_service.dart';
 import '../../core/services/webview_session_manager.dart';
 import '../../providers/library_provider.dart';
-import '../novel/novel_detail_screen.dart';
 
 /// In-App WebView screen for resolving Cloudflare / bot-protection challenges,
 /// logging into novel sources, or inspecting the live website directly.
@@ -14,11 +14,13 @@ import '../novel/novel_detail_screen.dart';
 class SourceWebViewScreen extends StatefulWidget {
   final String initialUrl;
   final String sourceName;
+  final Novel? targetNovel;
 
   const SourceWebViewScreen({
     super.key,
     required this.initialUrl,
     required this.sourceName,
+    this.targetNovel,
   });
 
   @override
@@ -32,6 +34,7 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
   String _pageTitle = '';
   int _cookieCount = 0;
   bool _hasSyncedCookies = false;
+  bool _isHandlingDownload = false;
   Timer? _clearancePollTimer;
 
   @override
@@ -87,7 +90,7 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
               }
             } catch (_) {}
 
-            // Inject form download interception for OceanofPDF and vdoc.pub
+            // Inject form and download button interception for OceanofPDF and vdoc.pub
             try {
               await _controller.runJavaScript('''
                 (function() {
@@ -95,13 +98,27 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                     if (f.__nw_bound) return;
                     f.__nw_bound = true;
                     var act = (f.getAttribute('action') || '').toLowerCase();
-                    if (act.includes('epub') || act.includes('download')) {
+                    var inner = (f.innerHTML || '').toLowerCase();
+                    var isDownloadForm = act.includes('epub') || act.includes('download') ||
+                        inner.includes('epub') || inner.includes('download') ||
+                        f.querySelector('input[type="image"], button, input[type="submit"]');
+
+                    if (isDownloadForm) {
                       f.addEventListener('submit', function(e) {
                         try {
-                          var formData = new FormData(f);
+                          e.preventDefault();
+                          var submitBtn = f.querySelector('button[type="submit"], input[type="submit"], input[type="image"], .btn-download, button');
+                          if (submitBtn) {
+                            submitBtn.disabled = true;
+                            if (submitBtn.innerText) submitBtn.innerText = 'Downloading book...';
+                          }
+                          var formData = (e.submitter) ? new FormData(f, e.submitter) : new FormData(f);
                           var parts = [];
                           for (var pair of formData.entries()) {
                             parts.push(encodeURIComponent(pair[0]) + '=' + encodeURIComponent(pair[1]));
+                          }
+                          if (e.submitter && e.submitter.name && !formData.has(e.submitter.name)) {
+                            parts.push(encodeURIComponent(e.submitter.name) + '=' + encodeURIComponent(e.submitter.value || '1'));
                           }
                           var bodyStr = parts.join('&');
                           var fullAction = f.action || window.location.href;
@@ -111,6 +128,23 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                             body: bodyStr
                           }));
                         } catch (err) {}
+                      });
+                    }
+                  });
+
+                  document.querySelectorAll('input[type="image"], button, a').forEach(function(el) {
+                    if (el.__nw_click_bound) return;
+                    el.__nw_click_bound = true;
+                    var str = (el.src || el.href || el.value || el.innerText || '').toLowerCase();
+                    if (str.includes('epub') && (str.includes('download') || str.includes('button') || el.tagName === 'A')) {
+                      el.addEventListener('click', function(e) {
+                        var form = el.closest('form');
+                        if (!form && el.href) {
+                          NovelsWorldDownload.postMessage(JSON.stringify({
+                            action: el.href,
+                            method: 'GET'
+                          }));
+                        }
                       });
                     }
                   });
@@ -131,7 +165,12 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                 urlLower.contains('/dl/') ||
                 urlLower.contains('/download/file') ||
                 urlLower.contains('download_file') ||
-                urlLower.contains('attachment')) {
+                urlLower.contains('/download-file') ||
+                urlLower.contains('download-file') ||
+                urlLower.contains('?download=') ||
+                urlLower.contains('&download=') ||
+                urlLower.contains('attachment') ||
+                (urlLower.contains('download') && (urlLower.contains('hash=') || urlLower.contains('token=')))) {
               _handleEpubDownload(request.url);
               return NavigationDecision.prevent;
             }
@@ -166,6 +205,9 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
   }
 
   Future<void> _handleEpubDownload(String url, {String method = 'GET', String? postBody}) async {
+    if (_isHandlingDownload) return;
+    _isHandlingDownload = true;
+
     final scaffold = ScaffoldMessenger.of(context);
     scaffold.showSnackBar(
       const SnackBar(
@@ -180,7 +222,7 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
             Text('Streaming & importing EPUB book...'),
           ],
         ),
-        duration: Duration(seconds: 15),
+        duration: Duration(seconds: 25),
       ),
     );
 
@@ -198,27 +240,20 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
         method: method,
         body: postBody,
         headers: headers,
+        originalNovel: widget.targetNovel,
       );
       if (mounted) {
         await context.read<LibraryProvider>().saveToLibrary(novel);
+        if (!mounted) return;
         scaffold.hideCurrentSnackBar();
         scaffold.showSnackBar(
           SnackBar(
             content: Text('Successfully imported "${novel.title}"!'),
             backgroundColor: const Color(0xFF10B981),
-            duration: const Duration(seconds: 6),
-            action: SnackBarAction(
-              label: 'Read Now',
-              textColor: Colors.white,
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => NovelDetailScreen(novel: novel)),
-                );
-              },
-            ),
+            duration: const Duration(seconds: 4),
           ),
         );
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -227,8 +262,15 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
           SnackBar(
             content: Text('Failed to import EPUB: $e'),
             backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 6),
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isHandlingDownload = false;
+        });
       }
     }
   }

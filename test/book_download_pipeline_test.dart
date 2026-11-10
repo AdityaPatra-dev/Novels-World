@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:novels_world/core/models/novel.dart';
+import 'package:novels_world/core/services/epub_service.dart';
 import 'package:novels_world/extractors/source_registry.dart';
 import 'package:novels_world/extractors/bespoke/internet_archive_extractor.dart';
 import 'package:novels_world/extractors/bespoke/libgen_extractor.dart';
@@ -362,6 +364,66 @@ void main() {
       expect(hobbit.title, 'The Hobbit');
       expect(hobbit.author, 'J.R.R. Tolkien');
       expect(hobbit.isFullBook, isTrue);
+    });
+  });
+
+  group('EpubService and PDF Universal Importer Tests', () {
+    test('PdfBookParser extracts text and chapters from valid PDF bytes', () {
+      final contentStream = 'BT /F1 12 Tf 72 712 Td (Chapter 1: The Adventure Begins) Tj ET\n'
+          'BT /F1 12 Tf 72 690 Td [(This is the first paragraph of the PDF book.)] TJ ET';
+      final compressed = zlib.encode(utf8.encode(contentStream));
+
+      final buffer = BytesBuilder();
+      buffer.add(utf8.encode('%PDF-1.4\n'));
+      buffer.add(utf8.encode('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n'));
+      buffer.add(utf8.encode('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n'));
+      buffer.add(utf8.encode('3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>\nendobj\n'));
+      buffer.add(utf8.encode('4 0 obj\n<< /Length ${compressed.length} /Filter /FlateDecode >>\nstream\n'));
+      buffer.add(compressed);
+      buffer.add(utf8.encode('\nendstream\nendobj\n'));
+      buffer.add(utf8.encode('trailer\n<< /Root 1 0 R >>\n%%EOF'));
+
+      final pdfBytes = buffer.toBytes();
+      final pages = PdfBookParser.extractPages(pdfBytes);
+      expect(pages.isNotEmpty, isTrue);
+      expect(pages.first.contains('Chapter 1: The Adventure Begins'), isTrue);
+      expect(pages.first.contains('This is the first paragraph of the PDF book.'), isTrue);
+    });
+
+    test('importBook recognizes PDF signature and returns novel with bookFormat=pdf', () async {
+      final tempDir = await Directory.systemTemp.createTemp('pdf_test_');
+      final pdfFile = File('${tempDir.path}/test_book.pdf');
+
+      final contentStream = 'BT /F1 12 Tf 72 712 Td (Great Story in PDF) Tj ET';
+      final compressed = zlib.encode(utf8.encode(contentStream));
+
+      final buffer = BytesBuilder();
+      buffer.add(utf8.encode('%PDF-1.4\n'));
+      buffer.add(utf8.encode('4 0 obj\n<< /Filter /FlateDecode >>\nstream\n'));
+      buffer.add(compressed);
+      buffer.add(utf8.encode('\nendstream\nendobj\n%%EOF'));
+      await pdfFile.writeAsBytes(buffer.toBytes());
+
+      final dummyNovel = Novel(
+        id: 'vdocpub_12345',
+        sourceId: 'vdocpub',
+        title: 'Fantasy Chronicles',
+        author: 'John Doe',
+        description: 'Epic fantasy novel',
+        coverUrl: 'https://img.vdoc.pub/img/detail/12345.jpg',
+        sourceUrl: 'https://vdoc.pub/documents/fantasy-chronicles-12345',
+        isFullBook: true,
+        bookFormat: 'pdf',
+      );
+
+      final imported = await EpubService().importBook(pdfFile, targetDir: tempDir, originalNovel: dummyNovel);
+      expect(imported.id, 'vdocpub_12345');
+      expect(imported.title, 'Fantasy Chronicles');
+      expect(imported.author, 'John Doe');
+      expect(imported.bookFormat, 'pdf');
+      expect(imported.isFullBook, isTrue);
+
+      await tempDir.delete(recursive: true);
     });
   });
 }

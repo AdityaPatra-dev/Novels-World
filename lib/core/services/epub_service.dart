@@ -14,31 +14,45 @@ import '../models/chapter_content.dart';
 import '../utils/text_cleaner.dart';
 import 'webview_session_manager.dart';
 
-/// Service responsible for parsing, extracting, and importing local EPUB files
+/// Service responsible for parsing, extracting, and importing local EPUB and PDF files
 /// into the Novels-World offline library.
 class EpubService {
   static final EpubService _instance = EpubService._internal();
   factory EpubService() => _instance;
   EpubService._internal();
 
+  /// Universal book importer: automatically detects whether the file is an EPUB archive
+  /// or a PDF document, and unpacks it into the reader database.
+  Future<Novel> importBook(File bookFile, {Directory? targetDir, Novel? originalNovel}) async {
+    final bytes = await bookFile.readAsBytes();
+    if (bytes.length >= 4 &&
+        bytes[0] == 0x25 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x44 &&
+        bytes[3] == 0x46) {
+      return importPdf(bookFile, targetDir: targetDir, originalNovel: originalNovel, bytes: bytes);
+    }
+    return importEpub(bookFile, targetDir: targetDir, originalNovel: originalNovel, bytes: bytes);
+  }
+
   /// Imports an EPUB file, extracts its contents into app documents,
   /// parses its metadata/spine/TOC, and returns a fully initialized [Novel].
-  Future<Novel> importEpub(File epubFile, {Directory? targetDir, Novel? originalNovel}) async {
-    final bytes = await epubFile.readAsBytes();
+  Future<Novel> importEpub(File epubFile, {Directory? targetDir, Novel? originalNovel, List<int>? bytes}) async {
+    final epubBytes = bytes ?? await epubFile.readAsBytes();
 
     // Verify magic bytes: Standard ZIP/EPUB starts with PK\x03\x04 (0x50, 0x4B, 0x03, 0x04)
-    if (bytes.length < 4 ||
-        bytes[0] != 0x50 ||
-        bytes[1] != 0x4B ||
-        bytes[2] != 0x03 ||
-        bytes[3] != 0x04) {
+    if (epubBytes.length < 4 ||
+        epubBytes[0] != 0x50 ||
+        epubBytes[1] != 0x4B ||
+        epubBytes[2] != 0x03 ||
+        epubBytes[3] != 0x04) {
       throw const FormatException('Corrupt or invalid EPUB archive: missing PK signature header');
     }
 
-    final archive = ZipDecoder().decodeBytes(bytes);
+    final archive = ZipDecoder().decodeBytes(epubBytes);
 
     // Compute a stable ID from file content hash or use originalNovel.id
-    final digest = md5.convert(bytes.sublist(0, bytes.length > 8192 ? 8192 : bytes.length)).toString().substring(0, 12);
+    final digest = md5.convert(epubBytes.sublist(0, epubBytes.length > 8192 ? 8192 : epubBytes.length)).toString().substring(0, 12);
     final novelId = (originalNovel != null && originalNovel.id.isNotEmpty)
         ? originalNovel.id
         : 'local_epub_$digest';
@@ -293,7 +307,7 @@ class EpubService {
       status: 'COMPLETED',
       isFullBook: true,
       bookFormat: 'epub',
-      bookSizeBytes: bytes.length,
+      bookSizeBytes: epubBytes.length,
       bookDownloadUrl: originalNovel?.bookDownloadUrl,
     );
 
@@ -306,6 +320,164 @@ class EpubService {
     await metaFile.writeAsString(jsonEncode(metaMap));
 
     return novel;
+  }
+
+  /// Imports a PDF file, parses its text streams and images into reflowable chapters,
+  /// saves metadata and cover, and returns a fully initialized [Novel].
+  Future<Novel> importPdf(File pdfFile, {Directory? targetDir, Novel? originalNovel, List<int>? bytes}) async {
+    final pdfBytes = bytes ?? await pdfFile.readAsBytes();
+
+    if (pdfBytes.length < 4 ||
+        pdfBytes[0] != 0x25 ||
+        pdfBytes[1] != 0x50 ||
+        pdfBytes[2] != 0x44 ||
+        pdfBytes[3] != 0x46) {
+      throw const FormatException('Corrupt or invalid PDF document: missing %PDF signature header');
+    }
+
+    final digest = md5.convert(pdfBytes.sublist(0, pdfBytes.length > 8192 ? 8192 : pdfBytes.length)).toString().substring(0, 12);
+    final novelId = (originalNovel != null && originalNovel.id.isNotEmpty)
+        ? originalNovel.id
+        : 'local_pdf_$digest';
+
+    final baseDir = targetDir ?? await _getImportDirectory();
+    final bookDir = Directory('${baseDir.path}/$novelId');
+    if (!await bookDir.exists()) {
+      await bookDir.create(recursive: true);
+    }
+
+    final chaptersDir = Directory('${bookDir.path}/chapters');
+    if (!await chaptersDir.exists()) {
+      await chaptersDir.create(recursive: true);
+    }
+
+    // Persist a copy of the original PDF document
+    final docCopy = File('${bookDir.path}/document.pdf');
+    if (!await docCopy.exists()) {
+      await docCopy.writeAsBytes(pdfBytes);
+    }
+
+    // Extract text from PDF content streams
+    final pages = PdfBookParser.extractPages(pdfBytes);
+
+    // Group extracted pages into reader chapters (5 pages per chapter)
+    final chapters = <Chapter>[];
+    if (pages.isNotEmpty) {
+      const pagesPerChapter = 5;
+      final totalChapters = (pages.length / pagesPerChapter).ceil();
+      for (int c = 0; c < totalChapters; c++) {
+        final startPage = c * pagesPerChapter;
+        final endPage = (startPage + pagesPerChapter > pages.length) ? pages.length : startPage + pagesPerChapter;
+        final chapterPages = pages.sublist(startPage, endPage);
+        final chapterIndex = c + 1;
+        final chapterTitle = 'Chapter $chapterIndex (Pages ${startPage + 1}-$endPage)';
+        final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
+
+        final sb = StringBuffer();
+        sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+        sb.writeln('<!DOCTYPE html>');
+        sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+        sb.writeln('<head><title>$chapterTitle</title></head>');
+        sb.writeln('<body>');
+        sb.writeln('<h2>$chapterTitle</h2>');
+        for (final pText in chapterPages) {
+          final lines = pText.split('\n');
+          for (final line in lines) {
+            final trimmed = line.trim();
+            if (trimmed.isNotEmpty) {
+              sb.writeln('<p>${_escapeHtml(trimmed)}</p>');
+            }
+          }
+          sb.writeln('<hr/>');
+        }
+        sb.writeln('</body></html>');
+        await chapterFile.writeAsString(sb.toString());
+
+        chapters.add(
+          Chapter(
+            id: '${novelId}_ch_$chapterIndex',
+            novelId: novelId,
+            title: chapterTitle,
+            url: chapterFile.uri.toString(),
+            chapterNumber: chapterIndex.toDouble(),
+          ),
+        );
+      }
+    } else {
+      // Scanned document fallback without OCR text layer
+      final chapterFile = File('${chaptersDir.path}/chapter_1.xhtml');
+      final sb = StringBuffer();
+      sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+      sb.writeln('<!DOCTYPE html>');
+      sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+      sb.writeln('<head><title>Document Overview</title></head>');
+      sb.writeln('<body>');
+      sb.writeln('<h2>Document Overview</h2>');
+      sb.writeln('<p>This digital book was successfully imported. The document contains scanned graphical pages.</p>');
+      sb.writeln('</body></html>');
+      await chapterFile.writeAsString(sb.toString());
+
+      chapters.add(
+        Chapter(
+          id: '${novelId}_ch_1',
+          novelId: novelId,
+          title: 'Document Overview',
+          url: chapterFile.uri.toString(),
+          chapterNumber: 1.0,
+        ),
+      );
+    }
+
+    // Cover image extraction
+    String coverUrl = originalNovel?.coverUrl ?? '';
+    if (coverUrl.isEmpty) {
+      final imgBytes = PdfBookParser.extractFirstImage(pdfBytes);
+      if (imgBytes != null && imgBytes.isNotEmpty) {
+        final coverFile = File('${bookDir.path}/cover.jpg');
+        await coverFile.writeAsBytes(imgBytes);
+        coverUrl = coverFile.uri.toString();
+      }
+    }
+
+    var title = originalNovel?.title ?? '';
+    if (title.isEmpty || title.toLowerCase() == 'unknown book' || title.toLowerCase() == 'untitled') {
+      title = pdfFile.uri.pathSegments.last.replaceAll('.pdf', '');
+    }
+    var author = originalNovel?.author ?? 'Unknown Author';
+
+    final novel = Novel(
+      id: novelId,
+      sourceId: originalNovel?.sourceId ?? 'local_epub',
+      title: title,
+      author: author,
+      description: originalNovel?.description ?? 'Format: PDF',
+      coverUrl: coverUrl,
+      sourceUrl: bookDir.uri.toString(),
+      inLibrary: true,
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookFormat: 'pdf',
+      bookSizeBytes: pdfBytes.length,
+      bookDownloadUrl: originalNovel?.bookDownloadUrl,
+    );
+
+    final metaMap = {
+      'novel': novel.toJson(),
+      'chapters': chapters.map((c) => c.toJson()).toList(),
+    };
+    final metaFile = File('${bookDir.path}/metadata.json');
+    await metaFile.writeAsString(jsonEncode(metaMap));
+
+    return novel;
+  }
+
+  static String _escapeHtml(String text) {
+    return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
   }
 
   /// Reads and parses an XHTML chapter file into cleaned paragraphs.
@@ -615,21 +787,18 @@ class EpubService {
       onProgress?.call(0.95, 'Verifying');
       // Validate magic bytes
       final headerBytes = await tempTmpFile.openRead(0, 4).first;
-      if (headerBytes.length >= 4 &&
+      final isPdf = headerBytes.length >= 4 &&
           headerBytes[0] == 0x25 &&
           headerBytes[1] == 0x50 &&
           headerBytes[2] == 0x44 &&
-          headerBytes[3] == 0x46) {
-        throw const FormatException(
-          'This book is in PDF format. Novels-World specializes in reflowable EPUB editions. '
-          'Please choose an EPUB edition of this title to read offline.',
-        );
-      }
-      if (headerBytes.length < 4 ||
-          headerBytes[0] != 0x50 ||
-          headerBytes[1] != 0x4B ||
-          headerBytes[2] != 0x03 ||
-          headerBytes[3] != 0x04) {
+          headerBytes[3] == 0x46;
+      final isZip = headerBytes.length >= 4 &&
+          headerBytes[0] == 0x50 &&
+          headerBytes[1] == 0x4B &&
+          headerBytes[2] == 0x03 &&
+          headerBytes[3] == 0x04;
+
+      if (!isPdf && !isZip) {
         try {
           final previewBytes = await tempTmpFile.openRead(0, 300).first;
           final previewStr = String.fromCharCodes(previewBytes).toLowerCase();
@@ -642,15 +811,16 @@ class EpubService {
         } catch (e) {
           if (e is FormatException) rethrow;
         }
-        throw const FormatException('Downloaded file is not a valid EPUB archive (corrupted or blocked download).');
+        throw const FormatException('Downloaded file is not a valid book archive (corrupted or blocked download).');
       }
 
-      tempFile = File('${baseDir.path}/temp_dl_$timestamp.epub');
+      final ext = isPdf ? 'pdf' : 'epub';
+      tempFile = File('${baseDir.path}/temp_dl_$timestamp.$ext');
       await tempTmpFile.rename(tempFile.path);
       tempTmpFile = null;
 
       onProgress?.call(0.98, 'Extracting');
-      final novel = await importEpub(tempFile, originalNovel: originalNovel);
+      final novel = await importBook(tempFile, originalNovel: originalNovel);
       onProgress?.call(1.0, 'Completed');
       return novel;
     } finally {
@@ -705,5 +875,170 @@ class EpubService {
       }
     } catch (_) {}
     return dir;
+  }
+}
+
+/// Lightweight, pure-Dart PDF text stream parser and cover image extractor
+class PdfBookParser {
+  static List<String> extractPages(List<int> bytes) {
+    final pages = <String>[];
+    int searchIdx = 0;
+    final streamMarker = [115, 116, 114, 101, 97, 109]; // 'stream'
+    final endStreamMarker = [101, 110, 100, 115, 116, 114, 101, 97, 109]; // 'endstream'
+
+    while (searchIdx < bytes.length) {
+      final streamPos = _indexOf(bytes, streamMarker, searchIdx);
+      if (streamPos == -1) break;
+
+      int lookBackStart = streamPos > 250 ? streamPos - 250 : 0;
+      final headerStr = String.fromCharCodes(bytes.sublist(lookBackStart, streamPos));
+      final isFlate = headerStr.contains('/FlateDecode');
+      final isImage = headerStr.contains('/Image') || headerStr.contains('/DCTDecode');
+
+      int dataStart = streamPos + streamMarker.length;
+      if (dataStart < bytes.length && bytes[dataStart] == 13) dataStart++;
+      if (dataStart < bytes.length && bytes[dataStart] == 10) dataStart++;
+
+      final endPos = _indexOf(bytes, endStreamMarker, dataStart);
+      if (endPos == -1) break;
+
+      int dataEnd = endPos;
+      if (dataEnd > dataStart && bytes[dataEnd - 1] == 10) dataEnd--;
+      if (dataEnd > dataStart && bytes[dataEnd - 1] == 13) dataEnd--;
+
+      final streamData = bytes.sublist(dataStart, dataEnd);
+      searchIdx = endPos + endStreamMarker.length;
+
+      if (isImage) continue;
+
+      List<int>? decompressed;
+      if (isFlate) {
+        try {
+          decompressed = zlib.decode(streamData);
+        } catch (_) {}
+      } else {
+        decompressed = streamData;
+      }
+
+      if (decompressed != null && decompressed.isNotEmpty) {
+        final text = _extractTextFromDecompressed(decompressed);
+        if (text.trim().isNotEmpty) {
+          pages.add(text.trim());
+        }
+      }
+    }
+    return pages;
+  }
+
+  static List<int>? extractFirstImage(List<int> bytes) {
+    int searchIdx = 0;
+    final streamMarker = [115, 116, 114, 101, 97, 109];
+    final endStreamMarker = [101, 110, 100, 115, 116, 114, 101, 97, 109];
+
+    while (searchIdx < bytes.length) {
+      final streamPos = _indexOf(bytes, streamMarker, searchIdx);
+      if (streamPos == -1) break;
+
+      int lookBackStart = streamPos > 300 ? streamPos - 300 : 0;
+      final headerStr = String.fromCharCodes(bytes.sublist(lookBackStart, streamPos));
+      final isJpeg = headerStr.contains('/DCTDecode') || (headerStr.contains('/Subtype') && headerStr.contains('/Image'));
+
+      int dataStart = streamPos + streamMarker.length;
+      if (dataStart < bytes.length && bytes[dataStart] == 13) dataStart++;
+      if (dataStart < bytes.length && bytes[dataStart] == 10) dataStart++;
+
+      final endPos = _indexOf(bytes, endStreamMarker, dataStart);
+      if (endPos == -1) break;
+
+      int dataEnd = endPos;
+      if (dataEnd > dataStart && bytes[dataEnd - 1] == 10) dataEnd--;
+      if (dataEnd > dataStart && bytes[dataEnd - 1] == 13) dataEnd--;
+
+      final streamData = bytes.sublist(dataStart, dataEnd);
+      searchIdx = endPos + endStreamMarker.length;
+
+      if (isJpeg && streamData.length > 5000) {
+        if (streamData.length > 3 && streamData[0] == 0xFF && streamData[1] == 0xD8 && streamData[2] == 0xFF) {
+          return streamData;
+        }
+      }
+    }
+    return null;
+  }
+
+  static String _extractTextFromDecompressed(List<int> decompressed) {
+    final streamStr = latin1.decode(decompressed);
+    final sb = StringBuffer();
+
+    // Tj: (text) Tj
+    final tjRegex = RegExp(r'\(([\s\S]*?)\)\s*Tj');
+    for (final m in tjRegex.allMatches(streamStr)) {
+      sb.writeln(_decodePdfString(m.group(1) ?? ''));
+    }
+
+    // TJ: [(text) -100 (more)] TJ
+    final tjArrayRegex = RegExp(r'\[([\s\S]*?)\]\s*TJ');
+    for (final m in tjArrayRegex.allMatches(streamStr)) {
+      final inner = m.group(1) ?? '';
+      final strMatches = RegExp(r'\(([\s\S]*?)\)').allMatches(inner);
+      final lineBuf = StringBuffer();
+      for (final sm in strMatches) {
+        lineBuf.write(_decodePdfString(sm.group(1) ?? ''));
+      }
+      if (lineBuf.isNotEmpty) {
+        sb.writeln(lineBuf.toString());
+      }
+    }
+
+    // Hex strings: <48656C6C6F> Tj
+    final hexTjRegex = RegExp(r'<([0-9a-fA-F\s]+)>\s*Tj');
+    for (final m in hexTjRegex.allMatches(streamStr)) {
+      sb.writeln(_decodeHexPdfString(m.group(1) ?? ''));
+    }
+
+    return sb.toString();
+  }
+
+  static String _decodePdfString(String raw) {
+    var s = raw
+        .replaceAll(r'\(', '(')
+        .replaceAll(r'\)', ')')
+        .replaceAll(r'\\', r'\')
+        .replaceAll(r'\n', '\n')
+        .replaceAll(r'\r', '\r')
+        .replaceAll(r'\t', '\t');
+
+    // Octal character escapes: \ddd
+    s = s.replaceAllMapped(RegExp(r'\\([0-7]{1,3})'), (m) {
+      final octalStr = m.group(1)!;
+      final code = int.parse(octalStr, radix: 8);
+      return String.fromCharCode(code);
+    });
+    return s;
+  }
+
+  static String _decodeHexPdfString(String hex) {
+    final clean = hex.replaceAll(RegExp(r'\s+'), '');
+    final bytes = <int>[];
+    for (int i = 0; i < clean.length; i += 2) {
+      if (i + 1 < clean.length) {
+        bytes.add(int.parse(clean.substring(i, i + 2), radix: 16));
+      }
+    }
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  static int _indexOf(List<int> source, List<int> pattern, int start) {
+    for (int i = start; i <= source.length - pattern.length; i++) {
+      bool match = true;
+      for (int j = 0; j < pattern.length; j++) {
+        if (source[i + j] != pattern[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return i;
+    }
+    return -1;
   }
 }

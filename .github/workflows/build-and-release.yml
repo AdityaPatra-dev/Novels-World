@@ -245,16 +245,11 @@ jobs:
             * **🪟 Windows (x64):** `Novels-World-Windows-x64.zip`
             * **🍎 macOS (Universal):** `Novels-World-macOS-Universal.zip`
 
-            ### ✨ What's New in v1.6.0
-            * **📚 Full Commercial & Literary Book Support:** Seamlessly search, download, and read complete digital editions of bestsellers (*Harry Potter*, *Dune*, *A Game of Thrones*, *The Hobbit*) and millions of published novels alongside serialized web fiction.
-            * **⚡ 1-Click Whole-Book Downloader Pipeline:** High-speed single-stream atomic `.tmp` downloader with magic byte integrity verification (`PK\x03\x04`), automatic temporary file cleanup, and real-time stage progress reporting (`%`, stage).
-            * **📖 Automated Local Chapter Slicing:** Dedicated EPUB auto-unpacker extracts Table of Contents (TOC), spine, metadata, and chapters into lightweight individual chapters for instant drawer navigation and offline reading.
-            * **🛡️ Tier 3 Flat Monolith Chunking:** Intelligently splits continuous legacy EPUB files without chapter breaks into comfortable ~2,500-word navigable sections, preventing memory exhaustion and UI freezes.
-            * **🌐 6 New Digital Book Repositories:** Direct integration with **Library Genesis** (`libgen.li`), **Internet Archive** (`archive.org`), **OceanofPDF** (`oceanofpdf.com`), **vdoc.pub** (`vdoc.pub`), **Standard Ebooks** (`standardebooks.org`), and **Project Gutenberg** (`gutendex.com`).
-            * **🔒 Silent Headless Cloudflare Bypass:** Automated background Turnstile resolution and cookie harvesting via `WebViewSessionManager` for protected book sources without interactive captchas.
-            * **🗂️ Unified Library & Downloads Shelves:** Dedicated `Books & EPUBs` filter chips, prominent `[BOOK]` badges on cards, real-time whole-book progress cards, and 1-tap `[Start Reading]` / `[Continue Reading]` actions.
-            * **🎙️ Gapless Continuous AI Audiobook Narration:** 0ms latency audio transitions across extracted book chapters with pure Dart Microsoft Edge Neural Engine (v2 DRM).
-            * **📦 Permanent Keystore Signing:** Pre-configured project release signing ensuring frictionless in-app updates and manual APK installs.
+            ### ✨ What's New in v1.6.4
+            * **📄 Universal PDF & EPUB Book Import:** Full support for uploading, parsing, and reflowing both PDF and EPUB digital editions into the Library and reader with automatic chapter extraction and cover art detection.
+            * **🛡️ Enhanced Anti-Spam & Bot Challenge Handling:** Neutralizes misleading 3rd-party sponsored ads on download sources, validates captchas interactively without locking UI, and prevents background connection hangs.
+            * **⚡ Robust Download State Management:** Added automatic timeout safeguards and clean state reset on network/browser errors.
+            * **📚 Expanded Digital Book Ecosystem:** Seamless integration across Open Library, Library Genesis, Internet Archive, Gutenberg, Standard Ebooks, and bespoke digital repositories.
 
   publish-docker:
     name: 🐳 Build & Push Docker Hub Image

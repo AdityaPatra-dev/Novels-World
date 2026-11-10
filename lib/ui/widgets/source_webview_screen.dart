@@ -38,6 +38,7 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
   bool _hasSyncedCookies = false;
   bool _isHandlingDownload = false;
   Timer? _clearancePollTimer;
+  Timer? _downloadTimeoutTimer;
 
   // In-flight in-browser download state
   File? _inFlightDownloadFile;
@@ -118,14 +119,53 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
               return;
             }
 
+            if (type == 'warn') {
+              final msgText = data['message']?.toString() ?? 'Action required';
+              if (mounted) {
+                final scaffold = ScaffoldMessenger.of(context);
+                scaffold.hideCurrentSnackBar();
+                scaffold.showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Colors.white),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            msgText,
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: Colors.amber.shade900,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
+              }
+              return;
+            }
+
             if (type == 'error') {
+              _isHandlingDownload = false;
+              final errMsg = data['message']?.toString() ?? 'Download failed';
               final fallbackUrl = data['fallbackUrl']?.toString();
               final method = (data['fallbackMethod']?.toString() ?? 'GET').toUpperCase();
               final body = data['fallbackBody']?.toString();
-              if (fallbackUrl != null && fallbackUrl.isNotEmpty) {
+
+              // Do not fallback to known ad spam URLs
+              final isAdUrl = fallbackUrl != null &&
+                  (fallbackUrl.contains('isbac.info') ||
+                   fallbackUrl.contains('compress-pdf') ||
+                   fallbackUrl.contains('chuyenthuvi.com') ||
+                   fallbackUrl.contains('doubleclick') ||
+                   fallbackUrl.contains('googleads'));
+
+              if (fallbackUrl != null && fallbackUrl.isNotEmpty && !isAdUrl) {
                 _handleEpubDownload(fallbackUrl, method: method, postBody: body);
               } else {
-                _showDownloadError(data['message']?.toString() ?? 'Download failed');
+                _showDownloadError(errMsg);
               }
               return;
             }
@@ -286,6 +326,21 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                   };
 
                   function bindFormsAndButtons() {
+                    // Hide sponsored download ads like compress-pdf.isbac.info
+                    document.querySelectorAll('a[href*="compress-pdf"], a[href*="isbac.info"], a[href*="pdf-converter"], a[href*="pdf-editor"], a[href*="ads."], a[href*="doubleclick"]').forEach(function(a) {
+                      a.style.display = 'none';
+                    });
+
+                    // Highlight legitimate download form
+                    var realDlForm = document.querySelector('form[action*="download-file"], form[action*="download"]');
+                    if (realDlForm && !realDlForm.__nw_styled) {
+                      realDlForm.__nw_styled = true;
+                      realDlForm.style.border = '2px solid #10B981';
+                      realDlForm.style.padding = '16px';
+                      realDlForm.style.borderRadius = '8px';
+                      realDlForm.style.backgroundColor = '#F0FDF4';
+                    }
+
                     document.querySelectorAll('form').forEach(function(f) {
                       if (f.__nw_bound) return;
                       f.__nw_bound = true;
@@ -297,6 +352,26 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                       if (isDl) {
                         f.addEventListener('submit', function(e) {
                           try {
+                            // Check if captcha is present and unsolved
+                            var hVal = (f.querySelector('[name="h-captcha-response"]') || {}).value || '';
+                            var gVal = (f.querySelector('[name="g-recaptcha-response"]') || {}).value || '';
+                            var hasCaptcha = f.querySelector('.h-captcha') || f.querySelector('.g-recaptcha') ||
+                                             f.querySelector('iframe[src*="hcaptcha"]') || f.querySelector('iframe[src*="recaptcha"]') ||
+                                             f.querySelector('[name="h-captcha-response"]') || f.querySelector('[name="g-recaptcha-response"]');
+                            if (hasCaptcha && !hVal.trim() && !gVal.trim()) {
+                              e.preventDefault();
+                              var captchaBox = f.querySelector('.h-captcha, .g-recaptcha, iframe[src*="captcha"]');
+                              if (captchaBox) {
+                                captchaBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                captchaBox.style.outline = '3px solid #EF4444';
+                              }
+                              NovelsWorldDownload.postMessage(JSON.stringify({
+                                type: 'warn',
+                                message: 'Please tap the "I am human" checkbox to solve the captcha before clicking Download.'
+                              }));
+                              return;
+                            }
+
                             e.preventDefault();
                             var submitBtn = f.querySelector('button[type="submit"], input[type="submit"], input[type="image"], .btn-download, button');
                             if (submitBtn) {
@@ -329,6 +404,11 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                                     !str.includes('download app') && !str.includes('download chrome');
                       if (isDlBtn) {
                         el.addEventListener('click', function(e) {
+                          // Ignore fake ad buttons
+                          if (el.href && (el.href.includes('compress-pdf') || el.href.includes('isbac.info') || el.href.includes('doubleclick'))) {
+                            e.preventDefault();
+                            return;
+                          }
                           var form = el.closest('form');
                           if (!form && el.href && (el.href.startsWith('http') || el.href.startsWith('/'))) {
                             var targetUrl = el.href.startsWith('http') ? el.href : new URL(el.href, window.location.origin).href;
@@ -353,6 +433,15 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
           },
           onNavigationRequest: (NavigationRequest request) {
             final urlLower = request.url.toLowerCase();
+            // Block sponsored ad redirects
+            if (urlLower.contains('compress-pdf') ||
+                urlLower.contains('isbac.info') ||
+                urlLower.contains('doubleclick') ||
+                urlLower.contains('googleads') ||
+                urlLower.contains('/ads/')) {
+              return NavigationDecision.prevent;
+            }
+
             if (urlLower.endsWith('.epub') ||
                 urlLower.endsWith('.pdf') ||
                 urlLower.contains('.epub?') ||
@@ -363,8 +452,6 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
                 urlLower.contains('/dl/') ||
                 urlLower.contains('/download/file') ||
                 urlLower.contains('download_file') ||
-                urlLower.contains('/download-file') ||
-                urlLower.contains('download-file') ||
                 urlLower.contains('?download=') ||
                 urlLower.contains('&download=') ||
                 urlLower.contains('attachment') ||
@@ -399,6 +486,7 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
   @override
   void dispose() {
     _clearancePollTimer?.cancel();
+    _downloadTimeoutTimer?.cancel();
     try {
       _inFlightDownloadSink?.close();
     } catch (_) {}
@@ -429,6 +517,7 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
 
   void _showDownloadError(String message) {
     if (!mounted) return;
+    _downloadTimeoutTimer?.cancel();
     final scaffold = ScaffoldMessenger.of(context);
     scaffold.hideCurrentSnackBar();
     scaffold.showSnackBar(
@@ -448,6 +537,17 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
     _isHandlingDownload = true;
     _showDownloadProgressSnackBar('Connecting to book server via browser session...');
 
+    _downloadTimeoutTimer?.cancel();
+    _downloadTimeoutTimer = Timer(const Duration(seconds: 25), () {
+      if (mounted && _isHandlingDownload && _receivedChunks == 0) {
+        setState(() {
+          _isHandlingDownload = false;
+        });
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        _showDownloadError('Download request timed out. Please ensure captcha is solved and retry.');
+      }
+    });
+
     final escapedUrl = jsonEncode(url);
     final escapedMethod = jsonEncode(method);
     final escapedBody = postBody != null ? jsonEncode(postBody) : 'null';
@@ -461,6 +561,7 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
   }
 
   Future<void> _processDownloadedFile(File file, {String? filename}) async {
+    _downloadTimeoutTimer?.cancel();
     final scaffold = ScaffoldMessenger.of(context);
     try {
       _showDownloadProgressSnackBar('Extracting & importing novel into library...');
@@ -498,8 +599,8 @@ class _SourceWebViewScreenState extends State<SourceWebViewScreen> {
   }
 
   Future<void> _handleEpubDownload(String url, {String method = 'GET', String? postBody}) async {
-    if (_isHandlingDownload) return;
     _isHandlingDownload = true;
+    _downloadTimeoutTimer?.cancel();
     _showDownloadProgressSnackBar('Streaming & importing book...');
 
     final scaffold = ScaffoldMessenger.of(context);

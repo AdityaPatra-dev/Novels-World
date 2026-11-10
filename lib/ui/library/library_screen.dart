@@ -202,16 +202,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
         final path = files.first.path!;
         if (!mounted) return;
         final scaffold = ScaffoldMessenger.of(context);
-        if (!path.toLowerCase().endsWith('.epub')) {
+        final lower = path.toLowerCase();
+        if (!lower.endsWith('.epub') && !lower.endsWith('.pdf')) {
           scaffold.showSnackBar(
-            const SnackBar(content: Text('Please select an .epub file (e.g. book.epub)')),
+            const SnackBar(content: Text('Please select an .epub or .pdf file (e.g. book.epub, novel.pdf)')),
           );
           return;
         }
+        final isPdf = lower.endsWith('.pdf');
         scaffold.showSnackBar(
-          const SnackBar(content: Text('Importing EPUB book...')),
+          SnackBar(content: Text(isPdf ? 'Importing PDF book...' : 'Importing EPUB book...')),
         );
-        final novel = await EpubService().importEpub(File(path));
+        final novel = await EpubService().importBook(File(path));
         if (!mounted) return;
         await context.read<LibraryProvider>().saveToLibrary(novel);
         scaffold.showSnackBar(

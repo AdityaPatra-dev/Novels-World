@@ -245,11 +245,11 @@ jobs:
             * **🪟 Windows (x64):** `Novels-World-Windows-x64.zip`
             * **🍎 macOS (Universal):** `Novels-World-macOS-Universal.zip`
 
-            ### ✨ What's New in v1.6.4
-            * **📄 Universal PDF & EPUB Book Import:** Full support for uploading, parsing, and reflowing both PDF and EPUB digital editions into the Library and reader with automatic chapter extraction and cover art detection.
-            * **🛡️ Enhanced Anti-Spam & Bot Challenge Handling:** Neutralizes misleading 3rd-party sponsored ads on download sources, validates captchas interactively without locking UI, and prevents background connection hangs.
-            * **⚡ Robust Download State Management:** Added automatic timeout safeguards and clean state reset on network/browser errors.
-            * **📚 Expanded Digital Book Ecosystem:** Seamless integration across Open Library, Library Genesis, Internet Archive, Gutenberg, Standard Ebooks, and bespoke digital repositories.
+            ### ✨ What's New in v1.7.0
+            * **🌍 Multilingual Offline Audio & Chapter Downloads:** Full multilingual downloader supporting 70+ languages, offline studio audio narrator selection, native preview voice samples, and language tagging (`offline`, `audio_hi`).
+            * **📦 Portable Backup & Migration (.zip):** Seamlessly export and import downloaded novels and audiobooks in monolithic zip or structured 1.5GB batches with zero data loss across re-installs.
+            * **🎙️ Dynamic Multilingual Voice Settings:** Reader voice options automatically adjust to the active reading language with native language sample greetings.
+            * **📖 Complete Source Pagination Architecture:** Resolved pagination ellipsis truncation across ReadWN (EmpireCMS fy.php), LightNovelWP (KolNovel editorial tables & Themesia KnoxT), NovelFull, and bespoke sources, guaranteeing access to complete novel catalogues (10,000+ chapters).
 
   publish-docker:
     name: 🐳 Build & Push Docker Hub Image

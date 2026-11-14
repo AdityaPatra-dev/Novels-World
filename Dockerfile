@@ -21,7 +21,7 @@ RUN flutter build web --release --no-wasm-dry-run
 # ==============================================================================
 FROM nginx:alpine-slim
 
-ARG APP_VERSION=1.3.0
+ARG APP_VERSION=1.7.0
 LABEL maintainer="Aditya Patra <adityapatraraj@gmail.com>"
 LABEL org.opencontainers.image.title="Novels World"
 LABEL org.opencontainers.image.description="Modern, feature-rich web novel reader & AI audiobook progressive web application."

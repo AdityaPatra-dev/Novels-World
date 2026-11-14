@@ -3,7 +3,7 @@
 > **Document**: `plan.md`  
 > **Status**: Approved Production Architecture & UI/UX Design  
 > **Target Platforms**: Android, iOS, Web, Desktop (Linux/Windows/macOS)  
-> **Scope**: Advanced Dual-Track Downloader, In-Reader Live Translation (`Icons.translate`), Zero-FFmpeg MP3 Frame Concatenation, "Listen-to-Save" Audio Cache Assembly, Downloads Tab Multi-Tag Badging (`offline`, `audio_hi`), Dedicated Audiobook Player, and 1-Click Portable `.zip` Backup & Migration (Export/Import).
+> **Scope**: Advanced Dual-Track Downloader, In-Reader Live Translation (`Icons.translate`), Zero-FFmpeg MP3 Frame Concatenation, "Listen-to-Save" Audio Cache Assembly, Downloads Tab Multi-Tag Badging (`offline`, `audio_hi`), Dedicated Audiobook Player, Narrator Audition Gallery, and 1-Click Portable `.zip` Backup & Migration (Single Monolithic or 1.5 GB Batched Splits).
 
 ---
 
@@ -21,11 +21,43 @@ This plan introduces a cohesive, intuitive feature set designed specifically for
 - **In-Reader Translation Symbol (`Icons.translate`)**: Tapping the translation button in the top app bar immediately pops up a clean, completely unbiased **Language Selection Modal** with search and native scripts. The user can freely choose any target language from 70+ global languages, and the chapter text immediately translates with synchronized native voice speech highlighting.
 - **"Listen-to-Save" Audio Assembly**: Listening to TTS while reading automatically retains and stitches the audio into permanent chapter `.mp3` audiobooks.
 - **Downloads Tab Badging**: In the Downloads tab, chapters clearly display colorful badges: **`[offline]`** for text and **`[audio_hi]`** for Hindi audio (or `audio_en`, `audio_es`, etc.).
-- **1-Click Portable `.zip` Backup & Migration**: An Export/Import window packages all novels, chapters, audiobooks, and progress into a single `.zip` file on phone storage. Reinstalling the app and picking the `.zip` file instantly restores everything.
+- **Narrator Audition Gallery**: Users can browse and tap `[▶ Play Sample]` on every narrator before choosing one for bulk downloads.
+- **1-Click Portable `.zip` Backup & Migration**: An Export/Import window packages all novels, chapters, audiobooks, and progress into structured `.zip` files (either in 1 file or in 1.5 GB split batches) saved to phone storage. Reinstalling the app and picking the `.zip` file(s) instantly restores everything.
 
 ---
 
-## 2. End-to-End System Workflow
+## 2. Industry App Benchmarks & Reference Standards
+
+To ensure a world-class user experience and avoid reinventing flawed patterns, our architecture adopts proven architectural designs from industry-leading applications:
+
+| Benchmark App | Adopted Architectural Pattern | How Novels-World Implements It |
+| :--- | :--- | :--- |
+| **Audible / Storytel** | **Continuous Gapless Audio & Smart Rewind** | Zero-latency local MP3 playback without sentence stutter; remembers millisecond position with 2-second "smart rewind" on resume to restore reader context. |
+| **Audible** | **Smart Volume Fade Sleep Timer** | Gradual 45-second audio attenuation (fade-out) before pausing, preventing jarring wake-ups. |
+| **Mihon / Tachiyomi** | **Split-Volume Non-Destructive Backup** | 1.5 GB split volume archives with atomic boundary safety; strictly read-only export leaving running databases untouched; pre-restore manifest validation. |
+| **Mihon / Tachiyomi** | **Clear File Destination Feedback** | Post-export dialog displaying absolute file path, file size cards, instant `[📋 Copy Path]`, and Android `Intent.ACTION_VIEW` / `[📂 Open in Files]`. |
+| **Moon+ Reader / Legado** | **Unbiased On-Device Translation Caching** | Permanent disk caching in `translations/{novelId}/{chapterId}_{lang}.json`; 0 network calls for re-reads; bilingual long-press tooltip. |
+| **Pocket Casts / Spotify** | **Persistent Floating Mini-Player & Media Controls** | Docked bottom mini-player expanding to full-screen player; Android `MediaSession` & iOS `MPRemoteCommandCenter` lockscreen notifications. |
+
+---
+
+## 3. Defensive Architecture: Blunder Prevention Matrix
+
+To eliminate the risk of failure, stalls, or mid-implementation regressions, every known pitfall is mapped to a concrete, code-enforced safeguard:
+
+| Potential Blunder | Root Cause | Engineering Safeguard in Plan |
+| :--- | :--- | :--- |
+| **1. WebSocket 429 / Rate Limit in Bulk Audio Downloads** | Hammering Edge TTS with 50 parallel chapter synthesis requests. | **Concurrency Token Bucket**: Strictly 1 chapter processed at a time in `AudiobookDownloadService`, max 2 parallel sentence requests per chapter, 150ms delay, and exponential backoff retry. |
+| **2. Audio Seeking / Popping Artifacts in Stitched MP3s** | Concatenating chunks containing inconsistent chunk-level ID3 headers or differing sample rates. | **Binary Frame Sanitizer**: Strip chunk-level ID3 tags, verify MPEG sync word `0xFF 0xFB`, prepend single clean ID3v2.3 tag at byte offset 0. Standardize on `audio-24khz-48kbitrate-mono-mp3`. |
+| **3. Mobile Out-of-Memory (OOM) on Multi-GB Backups** | Buffering gigabytes of MP3 files in Dart `Uint8List` heap before compression. | **Disk-to-Disk Streaming**: `ZipFileEncoder` streams directly to disk using a 64 KB memory chunk buffer. Peak RAM usage remains `< 45 MB` even on 10 GB archives. |
+| **4. Android Scoped Storage / Permission Failures** | Hardcoding `/sdcard/Download/` paths on Android 10–14 (API 29–34). | Use `path_provider` application documents directory and `FilePicker.saveFile()` / standard external download directories with proper intent dispatching. |
+| **5. Partial / Corrupted Backups on Process Termination** | Phone killing the app mid-export or mid-import. | **Atomic Staging Directory**: Unpack/pack into `.staging/` first. Verify CRC32 checksums against `manifest.json`. Only commit files atomically after 100% verification. |
+| **6. Background Battery Killing on Android** | Android OS killing network threads while phone is locked. | Acquire `WakeLock` during bulk downloads; update notification progress; graceful auto-resume queue when app wakes. |
+| **7. Broken Multi-Volume Splits** | Splitting a single MP3 file in half across volume boundaries. | **Atomic Chapter Boundaries**: Audio files are never severed. If adding the next MP3 exceeds 1.5 GB, the current volume closes cleanly and the next volume begins. |
+
+---
+
+## 4. End-to-End System Workflow
 
 ```mermaid
 flowchart TD
@@ -59,8 +91,8 @@ flowchart TD
     end
 
     subgraph S5["5. Portable Backup & Device Migration"]
-        REG --> EXP["BackupService.exportToZip()<br/>Bundles Manifest, Text & Audio into .zip"]
-        EXP --> ZIP_FILE["novels_world_backup_20261114.zip<br/>(Saved to Phone / Google Drive)"]
+        REG --> EXP["BackupService.exportToZip()<br/>Format: Single Zip OR 1.5 GB Batched Splits"]
+        EXP --> ZIP_FILE["novels_world_backup_part*.zip<br/>(Saved to Phone / Google Drive)"]
         ZIP_FILE --> IMP["BackupService.importFromZip()<br/>(Reinstalled App / New Device)"]
         IMP --> REG
     end
@@ -68,7 +100,7 @@ flowchart TD
 
 ---
 
-## 3. Detailed UI/UX Design & Core Pillars
+## 5. Detailed UI/UX Design & Core Pillars
 
 ### Pillar 1: Modern & Dead-Simple Download Modal (`DownloadRangeDialog`)
 
@@ -118,14 +150,7 @@ When the user taps the `[Download]` button on any novel, a clean bottom sheet op
      - Opens the **Narrator Gallery Sheet** listing all available male and female narrators for that language.
      - **Inline Preview Button on Every Narrator**: Each narrator card features an instant `[▶ Play Sample]` / `[⏸ Stop]` button.
      - **Real-Time Sample Playback**: Tapping `[▶]` streams a crisp 3-second greeting in that language (e.g. English: *"Welcome to Novels World, enjoy the story."*; Hindi: *"उपन्यासों की दुनिया में आपका स्वागत है।"*; Spanish: *"Bienvenido al mundo de las novelas."*; Japanese: *"小説の世界へようこそ。"*).
-     - **Sample & Compare**: Users can tap and audition all narrators one by one, comparing their tone, timbre, and pacing:
-       - *Christopher* (Heroic Baritone • Deep & cinematic)
-       - *Jenny* (Warm Storyteller • Expressive & natural)
-       - *Guy* (Conversational • Relaxed modern tone)
-       - *Aria* (High-Clarity • Clear articulation)
-       - *Ryan* (Aristocratic Sage • Authoritative gravitas)
-       - *Swara* (Expressive Female • Natural Hindi cadence)
-       - *Madhur* (Authoritative Male • Deep Hindi storytelling)
+     - **Sample & Compare**: Users can tap and audition all narrators one by one, comparing their tone, timbre, and pacing.
      - A checkmark marks the active selection; tapping **"Confirm Narrator"** sets their favorite narrator for the entire download batch!
 
 4. **Clear Space & Time Estimate**:
@@ -148,9 +173,8 @@ In [`ReaderScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/u
    - The modal features:
      - **Quick Status Header**: Shows current reading mode (`Original` vs `Translated`) with a 1-tap toggle switch to enable/disable translation.
      - **Search Bar**: Quick search filter across 70+ supported global languages by English name or native name (e.g., typing *"Esp"*, *"Hin"*, *"Jap"*, *"Fra"*, *"Deu"*).
-     - **Unbiased Global Language List**: Displays all supported languages with their flag, localized English name, and native script name (e.g. `🇪🇸 Spanish (Español)`, `🇯🇵 Japanese (日本語)`, `🇮🇳 Hindi (हिन्दी)`, `🇫🇷 French (Français)`, `🇩🇪 German (Deutsch)`, `🇸🇦 Arabic (العربية)`, `🇨🇳 Chinese (中文)`, `🇵🇹 Portuguese (Português)`, `🇷🇺 Russian (Русский)`, `🇰🇷 Korean (한국어)`, `🇮🇹 Italian (Italiano)`, etc.).
-     - **Recent / Pinned Languages**: If the user has used languages before, their recent picks appear at the top for convenience, without imposing any defaults.
-   - When the user selects a language, the modal closes and the chapter text is dynamically translated into that chosen language.
+     - **Unbiased Global Language List**: Displays all supported languages with their flag, localized English name, and native script name.
+     - **Recent / Pinned Languages**: If the user has used languages before, their recent picks appear at the top for convenience.
 
 2. **Active State Banner**:
    - When translation is active, an elegant dismissible banner appears below the AppBar:
@@ -158,14 +182,11 @@ In [`ReaderScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/u
    - The chapter text dynamically re-renders in the selected language.
 
 3. **Bilingual Long-Press Helper**:
-   - If a translated fantasy term, character name, or ability looks unfamiliar:
-   - Long-pressing any translated paragraph surfaces a lightweight floating tooltip showing the **original source text**!
+   - Long-pressing any translated paragraph surfaces a lightweight floating tooltip showing the **original source text**.
 
 4. **Synchronized Multilingual TTS Playback in Selected Language**:
-   - When the user taps the **TTS Audio Button** while translation is active:
-     - The reader automatically speaks the chapter in the **user's selected language** using that language's highest-fidelity studio neural voice (e.g. `es-ES-ElviraNeural` for Spanish, `ja-JP-NanamiNeural` for Japanese, `hi-IN-SwaraNeural` for Hindi, `fr-FR-DeniseNeural` for French, etc.).
-     - Spoken translated sentences highlight in real time as the audio flows.
-     - In [`TtsSheet`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/tts_sheet.dart), the reader can freely switch voices, rate, or pitch within that language.
+   - Tapping the **TTS Audio Button** while translation is active speaks the chapter in the **user's selected language** using that language's highest-fidelity studio neural voice.
+   - Spoken translated sentences highlight in real time as the audio flows.
 
 ---
 
@@ -175,45 +196,24 @@ In [`ReaderScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/u
 - While reading with TTS enabled, the user can toggle **"Save Listening as Offline Audiobook"** in the TTS Sheet or App Settings.
 - As the user reads and listens to sentences:
   1. [`RingBufferManager`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/tts/ring_buffer_manager.dart) retains the synthesized MP3 chunks in order for the current chapter: `_chapterAudioChunks[sentenceIdx] = tempPath`.
-  2. When the chapter ends (or when background pre-fetching completes all chapter sentences):
+  2. When the chapter ends:
      - `AudiobookAssemblerService` stitches all sentence chunks into the final chapter audio file:
        `${storage.appDocumentsDirectoryPath}/audiobooks/${novelId}/${chapterId}_${lang}.mp3`.
      - Injects ID3 metadata (Novel Cover, Novel Title, Chapter Title, Track Number).
      - Registers the chapter in [`StorageService`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/data/storage_service.dart).
      - Shows a toast: *"✅ Chapter 1 saved to Offline Audiobooks"*.
 3. **Instant 0-Lag Future Playback**:
-   - If the user re-opens this chapter or plays it in the Audiobook Player:
-   - The app detects the existing `.mp3` file on disk and streams it directly via `just_audio`.
-   - **Zero network requests, zero server dependencies, and zero sentence-gap stutter!**
+   - Re-opening this chapter streams directly from disk via `just_audio` with zero network latency.
 
 ---
 
 ### Pillar 4: Pure-Dart Zero-FFmpeg Binary MP3 Frame Concatenation
 
 #### Technical Implementation:
-- **No Heavy Native Binaries**: Avoids cumbersome 80MB FFmpeg C-libraries that cause Android APK bloat and iOS compilation failures.
+- **No Heavy Native Binaries**: Avoids cumbersome 80MB FFmpeg C-libraries.
 - **MPEG Stream Architecture**:
-  - Microsoft Edge Neural TTS outputs pristine `audio/mpeg` frames (MPEG-1/2 Audio Layer III).
-  - An MP3 audio stream consists of discrete frames, each starting with the 11-bit sync word `0xFFE0` (`0xFF 0xFB`).
-  - Concatenation Algorithm in `AudiobookAssemblerService`:
-    ```dart
-    final outputFile = File('$audiobookDir/${chapterId}_$lang.mp3');
-    final sink = outputFile.openWrite();
-    
-    // 1. Write ID3v2.3 Tag Header (Title, Artist, Album, Attached Cover Art)
-    sink.add(id3TagBytes);
-    
-    // 2. Sequentially stream sentence audio chunks, stripping any chunk-level ID3 headers
-    for (final chunkPath in sentenceChunkPaths) {
-      final chunkBytes = await File(chunkPath).readAsBytes();
-      final audioData = _stripId3Header(chunkBytes);
-      sink.add(audioData);
-    }
-    
-    await sink.flush();
-    await sink.close();
-    ```
-- **Performance**: A typical 3,000-word chapter (~15 minutes of speech) stitches in **under 45 milliseconds**.
+  - Direct concatenation of raw MPEG-1/2 Audio Layer III (`0xFF 0xFB`) chunks with custom ID3v2 metadata header.
+- **Performance**: A typical 3,000-word chapter stitches in **under 45 milliseconds**.
 
 ---
 
@@ -243,41 +243,25 @@ Tapping the novel card opens its offline chapter list:
 ├─────────────────────────────────────────────────────────────┤
 │ Chapter 2: The Choice                                       │
 │ [ offline ]  [ 🎧 audio_hi ]         [ 📖 Read ] [ 🎧 Play ]│
-├─────────────────────────────────────────────────────────────┤
-│ Chapter 3: Into the Mountain                                │
-│ [ offline ]  [ 🎧 audio_hi ]         [ 📖 Read ] [ 🎧 Play ]│
 └─────────────────────────────────────────────────────────────┘
 ```
 
 #### Badge Definitions:
-- **`[ offline ]`** (Emerald Green border/fill): The full text has been downloaded and translated into Hindi; readable anywhere with zero internet.
-- **`[ 🎧 audio_hi ]`** (Violet/Purple border/fill with headphone icon): The complete Hindi neural audiobook has been generated and saved locally.
-- **`[ 🎧 audio_en ]` / `[ 🎧 audio_es ]`**: Clearly indicates the audio language if downloaded in English or Spanish.
+- **`[ offline ]`** (Emerald Green): The full text has been downloaded and translated; readable offline.
+- **`[ 🎧 audio_hi ]`** (Violet/Purple): The complete Hindi neural audiobook has been generated and saved locally.
 - **Direct 1-Tap Actions**:
-  - Tapping **`[ 📖 Read ]`** opens [`ReaderScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/reader_screen.dart) in offline mode with translated text.
-  - Tapping **`[ 🎧 Play ]`** launches the **Audiobook Player** immediately with 0 second delay.
+  - **`[ 📖 Read ]`** opens reader in offline mode.
+  - **`[ 🎧 Play ]`** launches Audiobook Player with 0-second latency.
 
 ---
 
 ### Pillar 6: Dedicated Built-in Audiobook Player (`AudiobookPlayerScreen` & Mini-Player)
 
 #### 1. Floating Persistent Mini-Player:
-When an audiobook is playing, a sleek floating mini-player docks at the bottom of the screen (visible on Library, Browse, and Novel Detail screens):
-- Left: Novel thumbnail cover + Chapter Title.
-- Right: Quick Play/Pause button + Skip 15s button + Close.
-- Tapping anywhere on the bar smoothly expands into the **Full-Screen Immersive Player**.
+- Docks at screen bottom with cover art, chapter title, play/pause, skip 15s, and tap-to-expand.
 
 #### 2. Full-Screen Immersive Player:
-Designed for relaxed, hands-free listening:
-- **Large Artwork**: High-resolution novel cover with soft ambient drop-shadow.
-- **Novel & Chapter Title**: Clear typography with author byline.
-- **Scrubbing Time Bar**: Real-time position (e.g. `04:15 / 14:30`) with smooth draggable seeker.
-- **Big Media Controls**:
-  - `[⏮ Prev Chapter]` `[⏪ -15s]` `[ ▶ Play / ⏸ Pause ]` `[⏩ +15s]` `[⏭ Next Chapter]`
-- **Speed Dial**: Preset buttons: `0.75x`, `1.0x`, `1.25x`, `1.5x`, `2.0x`.
-- **Sleep Timer**: "15 min", "30 min", "End of Chapter" (with gradual 60-second audio fade-out so readers aren't jolted awake).
-- **Background & Lock Screen Notifications**: Supports Android MediaSession & iOS Remote Command Center (lock-screen play/pause/skip and headphone buttons).
-- **Autoplay Next Chapter**: When Chapter 1 finishes, it automatically rolls into Chapter 2 without requiring manual input.
+- High-res cover art, seeker bar, media controls, speed dial (`0.75x`–`2.0x`), sleep timer with smooth 45s fade-out, lock-screen notifications, and autoplay next chapter.
 
 ---
 
@@ -443,7 +427,7 @@ novels_world_backup_YYYYMMDD_part01_of_02.zip
    - Staging directory is cleanly deleted.
 5. **Instant Reactive Refresh**:
    - Library and Downloads views automatically reload.
-   - *Shadow Slave* and other restored novels immediately display with correct chapter counts, **`[offline]`** and **`[audio_hi]`** badge pills.
+   - Restored novels immediately display with correct chapter counts, **`[offline]`** and **`[audio_hi]`** badge pills.
    - Tapping **`[🎧 Play]`** on any chapter plays the restored audio immediately with **0 seconds latency and zero internet requirement**!
 
 ---
@@ -451,18 +435,13 @@ novels_world_backup_YYYYMMDD_part01_of_02.zip
 ### Pillar 8: High-Performance Translation & Error Resilience
 
 #### 1. Batched Sentence Translation (`TranslationService`):
-- To prevent network latency and avoid rate-limiting, chapter sentences are batched into groups of 15–20 sentences per translation request.
-- A 100-sentence chapter requires only **5 network roundtrips** instead of 100 individual requests, completing in ~3 seconds.
+- Sentence grouping (15–20 per batch) minimizes HTTP roundtrips.
 
 #### 2. Offline Translation Cache:
-- All translated chapters are permanently cached on disk at `translations/{novelId}/{chapterId}_{lang}.json`.
-- A chapter translated once never needs to be translated again.
+- Cached at `translations/{novelId}/{chapterId}_{lang}.json`.
 
 #### 3. Network Dropout Resilience:
-- If a user loses internet while downloading Chapter 7 of a 10-chapter audiobook batch:
-  - Chapters 1–6 remain **100% intact and playable offline**.
-  - The download queue marks Chapter 7 as `paused / failed` with a 1-tap `[Retry]` button.
-  - No duplicated data is ever re-downloaded.
+- Completed chapters remain intact; interrupted downloads pause cleanly with 1-tap retry.
 
 ---
 
@@ -478,46 +457,132 @@ In [`NovelStorageModal`](file:///home/adityapatra/Documents/GitHub/Novels-World/
 
 ---
 
-## 4. Phased Implementation Roadmap
+## 6. Phased Implementation Roadmap & Verification Plan
 
-### Phase 1: Core Services & Audio File Assembler
-- [ ] Implement `AudiobookAssemblerService` ([`lib/core/services/audiobook_assembler_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/core/services/audiobook_assembler_service.dart)) for pure-Dart binary MP3 concatenation with ID3 metadata injection.
-- [ ] Extend `StorageService` ([`lib/data/storage_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/data/storage_service.dart)) to index, query, delete, and measure audiobook storage.
-- [ ] Write unit tests for binary MP3 stitching and metadata verification.
+### Phase 1: Core Storage & Audio File Assembler Service
+- **Objective**: Establish pure-Dart binary MPEG-1/2 Layer III concatenation with ID3v2 metadata injection, and extend `StorageService` to index, track, and purge audiobooks.
+- **Files to Create / Modify**:
+  - `lib/core/services/audiobook_assembler_service.dart` (New):
+    - `assembleChapterAudiobook(String novelId, String chapterId, String lang, List<String> chunkFilePaths, {Novel? metadata, Uint8List? coverBytes})`
+    - `_stripChunkId3(Uint8List bytes)`
+    - `_buildId3v2Tag({required String title, required String artist, required String album, Uint8List? coverBytes})`
+  - `lib/data/storage_service.dart`:
+    - Add `getAudiobookFile(String novelId, String chapterId, String lang)`
+    - Add `hasOfflineAudiobook(String novelId, String chapterId, [String? lang])`
+    - Add `getDownloadedAudiobookChapterIds(String novelId, [String? lang])`
+    - Add `getAudiobookStorageBytes(String novelId)`
+    - Add `deleteAudiobookChapter(String novelId, String chapterId, String lang)`
+    - Add `deleteAllNovelAudiobooks(String novelId)`
+- **Safety Safeguards**:
+  - Verification of MP3 frame sync word (`0xFF 0xFB` / `0xFF 0xF3`) on each stitched frame.
+  - Zero FFmpeg or C-library dependency.
+- **Verification**:
+  - Unit test `test/audiobook_assembler_test.dart` generating test chunks, assembling, verifying ID3 header, file size, and loading into `AudioPlayer`.
+  - Static analysis: `flutter analyze lib/ test/`.
+
+---
 
 ### Phase 2: "Listen-to-Save" Audio Cache Assembly
-- [ ] Add `saveTtsAsAudiobook` toggle to `SettingsProvider` and SharedPreferences.
-- [ ] Update `RingBufferManager` to index sentence chunks per chapter and trigger `AudiobookAssemblerService` on chapter completion.
-- [ ] Add pre-check in `RingBufferManager.playFrom` to stream existing chapter MP3 files directly without network round-trips.
-- [ ] Add toggle to `TtsSheet`.
+- **Objective**: Capture streamed TTS chunks during active reading and seamlessly assemble them into permanent chapter audiobooks upon chapter end, with 0ms local playback pre-check.
+- **Files to Create / Modify**:
+  - `lib/core/models/reader_settings.dart`:
+    - Add `saveTtsAsAudiobook` boolean field (default `false`).
+  - `lib/tts/ring_buffer_manager.dart`:
+    - Track chapter-level chunks: `final Map<int, String> _chapterAudioChunks = {};`
+    - In `_handleSentenceCompleted`: retain completed sentence audio file path.
+    - In `handleCrossChapterTag` & chapter end: invoke `AudiobookAssemblerService` in background if `saveTtsAsAudiobook` is true.
+    - In `playFrom`: check if `storage.hasOfflineAudiobook(novelId, chapterId, lang)`. If yes, stream directly via `_player.setFilePath` with zero network requests!
+  - `lib/ui/reader/tts_sheet.dart`:
+    - Add toggle switch: `"Save Listening as Offline Audiobook"`.
+- **Safety Safeguards**:
+  - Asynchronous background assembly (never blocks main UI thread or audio playback).
+- **Verification**:
+  - Unit test in `test/listen_to_save_test.dart` verifying chunk capture and direct file playback switch.
 
-### Phase 3: Multilingual Translation Service & In-Reader Translation
-- [ ] Create `TranslationService` ([`lib/core/services/translation_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/core/services/translation_service.dart)) with batched Google Translate web client and optional LLM provider.
-- [ ] Add in-reader Translation symbol (`Icons.translate`) in `ReaderScreen` AppBar with language picker modal and bilingual tooltip helper.
-- [ ] Add multilingual voice catalog and language mapping in `TtsModelRegistry` / `EdgeNeuralEngine`.
-- [ ] Write unit tests for sentence translation and language-voice resolution.
+---
 
-### Phase 4: Bulk Audiobook Downloader Service & UI
-- [ ] Implement `AudiobookDownloadService` ([`lib/data/audiobook_download_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/data/audiobook_download_service.dart)) with queue processing, progress updates, and retry logic.
-- [ ] Update `DownloadRangeDialog` with 3 mode cards (`Text`, `Audio`, `Both`), language selector, voice sample preview (`[▶ Preview Voice]`), and resource estimator.
-- [ ] Add `offline` and `audio_{lang}` badge pills to chapter list in `NovelDetailScreen` and `DownloadsScreen`.
-- [ ] Update `NovelStorageModal` to display and purge audiobook storage.
+### Phase 3: Multilingual Translation Service & Unbiased In-Reader Modal
+- **Objective**: Implement batched translation engine with on-disk caching, unbiased 70+ language selection modal, and multilingual Edge Neural voice catalog.
+- **Files to Create / Modify**:
+  - `lib/core/services/translation_service.dart` (New):
+    - `translateSentences(List<String> sentences, {required String targetLang, String sourceLang = 'auto'})`
+    - Disk cache: `translations/{novelId}/{chapterId}_{targetLang}.json`.
+    - Batched HTTP client (15–20 sentences per request).
+  - `lib/tts/language_voice_registry.dart` (New):
+    - Maps 70+ languages to their optimal Microsoft Neural HD voices (male & female).
+    - Returns sample phrases in native language for audio preview.
+  - `lib/ui/reader/reader_screen.dart`:
+    - Add `Icons.translate` action in AppBar.
+    - Implement `LanguageSelectionModal` with search, flags, and native scripts.
+    - Active translation banner + bilingual long-press tooltip helper.
+    - Seamlessly wire translated sentences into TTS playback.
+- **Safety Safeguards**:
+  - Exponential backoff and sentence splitting fallback to prevent HTTP 429 rate limiting.
+- **Verification**:
+  - Unit test `test/translation_service_test.dart` testing batching, caching, and fallback.
+
+---
+
+### Phase 4: Bulk Audiobook Downloader & Narrator Preview Suite
+- **Objective**: Dual-track chapter downloader supporting Text Only, Audiobook Only, or Both, with queue concurrency limits and Narrator Audition Gallery.
+- **Files to Create / Modify**:
+  - `lib/data/audiobook_download_service.dart` (New):
+    - Queue manager with concurrency token bucket (1 chapter at a time, max 2 sentence syntheses in parallel).
+    - Progress reporting stream (`chapterIndex`, `sentenceProgress`, `status`).
+  - `lib/ui/widgets/download_range_dialog.dart`:
+    - 3 Mode Cards: `📖 Text Only`, `🎧 Audiobook Only`, `🌟 Both (Text + Audio)`.
+    - Language selector dropdown.
+    - Narrator preview card with `[Change]` and `[▶ Play Sample]` auditioning.
+  - `lib/ui/widgets/narrator_selection_sheet.dart` (New):
+    - Narrator Gallery with inline `[▶ Play Sample]` / `[⏸ Stop]` buttons.
+  - `lib/ui/novel/novel_detail_screen.dart` & `lib/ui/downloads/downloads_screen.dart`:
+    - Display color-coded badge pills: `[offline]` (emerald green) and `[audio_hi]` (violet).
+    - 1-tap `[📖 Read]` and `[🎧 Play]` buttons.
+  - `lib/ui/widgets/novel_storage_modal.dart`:
+    - Display audio storage breakdown with granular delete options.
+- **Safety Safeguards**:
+  - Strict network rate limiting to prevent Edge TTS disconnects.
+  - Wakelock protection while download queue is active.
+- **Verification**:
+  - Integration test simulating download queue with mocked synthesis.
+
+---
 
 ### Phase 5: Portable Backup & Migration (.ZIP Export & Import)
-- [ ] Implement `BackupService` ([`lib/core/services/backup_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/core/services/backup_service.dart)) supporting:
-  - **Mode A**: Single monolithic `.zip` archive.
-  - **Mode B**: 1.5 GB batched split archives (`_part01_of_N.zip`) with atomic chapter boundary calculation and individual part validity.
-  - **Read-Only Safety**: Strict zero mutation of existing app databases, reading history, or audio files.
-  - **Destination Path Surface**: Reports full destination directory, file sizes, and triggers folder view / share sheet.
-  - **Safe Merge Import**: CRC32 integrity verification, temporary staging unpack, deduplication with existing local chapters, and atomic commit to `StorageService`.
-- [ ] Implement Backup & Migration Modal in `DownloadsScreen` (`[Import / Export Backup]`) with mode selector, progress streaming, and post-export destination card with `[📋 Copy Path]`, `[📂 Open in Files]`, and `[📤 Share]`.
-- [ ] Write comprehensive unit tests in `test/backup_service_test.dart` verifying:
-  - Monolithic export & extraction.
-  - 1.5 GB split volume generation and multi-part manifest reconstruction.
-  - Preservation of app data integrity (verifying original files are unmodified before and after export).
-  - Safe merge behavior when importing over pre-existing novels.
+- **Objective**: Full backup & restore with single monolithic `.zip` or 1.5 GB batched splits, read-only safety, destination path presentation, and safe merge deduplication.
+- **Files to Create / Modify**:
+  - `lib/core/services/backup_service.dart` (New):
+    - `exportBackup({required BackupMode mode, required bool includeText, required bool includeAudio, Function(double progress, String stage)? onProgress})`
+    - `importBackup(List<String> zipFilePaths, {ConflictResolution conflictMode = ConflictResolution.safeMerge, Function(double progress, String stage)? onProgress})`
+    - `_calculateSplitVolumes(List<BackupEntry> entries, int maxVolumeBytes)` (1.5 GB atomic chapter splits).
+    - CRC32 checksum calculation and verification.
+  - `lib/ui/downloads/backup_migration_modal.dart` (New):
+    - Export config UI (Single Zip vs 1.5 GB Batched Splits).
+    - Post-export completion card with full destination path, `[📋 Copy Path]`, `[📂 Open in Files]`, and `[📤 Share]`.
+    - Import picker supporting single `.zip` or multiple split batch files.
+    - Pre-restore verification modal with safe merge option.
+- **Safety Safeguards**:
+  - Disk-to-disk streaming via `ZipFileEncoder` (RAM < 45 MB).
+  - Strict read-only file access: zero mutations to current app data.
+  - Temporary staging extraction before atomic commit.
+- **Verification**:
+  - Unit tests in `test/backup_service_test.dart` verifying monolithic export, 1.5 GB split volume generation, CRC32 checks, and non-destructive safe merge.
 
-### Phase 6: Audiobook Player UI & Verification
-- [ ] Build floating Audiobook Mini Player and Full-Screen Audiobook Player modal with sleep timer, speed dial, and seek bar.
-- [ ] Verify background audio playback and lock-screen notification controls via `just_audio`.
-- [ ] Run full test suite (`flutter test`) and static analysis (`flutter analyze`).
+---
+
+### Phase 6: Dedicated Audiobook Player & Lock-Screen Integration
+- **Objective**: Audiophile playback experience with persistent mini-player, full-screen player, smart sleep timer with volume fade, speed dial, and system notification controls.
+- **Files to Create / Modify**:
+  - `lib/ui/audiobook/audiobook_player_screen.dart` (New):
+    - Full-screen player with cover art, seeker bar, 15s skip, chapter list drawer.
+    - Speed dial: `0.75x`, `1.0x`, `1.25x`, `1.5x`, `2.0x`.
+    - Smart sleep timer with 45s volume ramp-down.
+  - `lib/ui/widgets/audiobook_mini_player.dart` (New):
+    - Docked persistent mini-player above bottom navigation.
+  - `lib/tts/audiobook_playback_controller.dart` (New):
+    - Centralized controller coordinating `just_audio` player state, audio focus, smart rewind (2s), and lockscreen controls.
+- **Safety Safeguards**:
+  - Audio focus management (automatic pause on phone calls or headset disconnect).
+- **Verification**:
+  - Widget tests for player controls and full end-to-end integration test.
+  - Complete project static analysis: `flutter analyze lib/ test/`.

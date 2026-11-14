@@ -331,40 +331,160 @@ class ReadWnExtractor implements NovelSource {
       onBatchLoaded?.call(List.from(chapters));
     }
 
-    // Check for pagination on ReadWn (e.g. .pagination a, #chpagedlist a, fy.php pages)
+    // Check for pagination on ReadWn (e.g. fy.php pages, .pagination a, #chpagedlist, select)
     final doc = html_parser.parse(body);
-    final pageLinks = doc.querySelectorAll(
-      '.pagination a, ul.pagination li a, .pages-container a, .page-item a, #chpagedlist a, .paging a, a[href*="fy.php"], a[href*="page="]',
-    );
-    final pageUrls = <String>[];
 
-    for (final a in pageLinks) {
-      final href = a.attributes['href'] ?? '';
-      if (href.isNotEmpty) {
-        final clean = _cleanUrl(href);
-        if (clean != novelUrl && !pageUrls.contains(clean)) {
-          pageUrls.add(clean);
-        }
+    // 1. Check for fy.php EmpireCMS pagination (e.g. WuxiaBox, FanMTL, WuxiaSpace)
+    String wjm = '';
+    final fyLink = doc.querySelector('a[href*="fy.php"]');
+    if (fyLink != null) {
+      final href = fyLink.attributes['href'] ?? '';
+      final match = RegExp(r'wjm=([^&]+)').firstMatch(href);
+      if (match != null) {
+        wjm = match.group(1)!;
+      }
+    }
+    if (wjm.isEmpty) {
+      final segs = Uri.tryParse(novelUrl)?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
+      if (segs.isNotEmpty) {
+        wjm = segs.last.replaceAll('.html', '');
       }
     }
 
-    // Follow discovered page URLs up to 60 pages
-    for (final pUrl in pageUrls.take(60)) {
-      try {
-        final resp = await _client.get(Uri.parse(pUrl), headers: _headers);
-        if (resp.statusCode == 200) {
-          final pageChs = parseChapterList(novelUrl, resp.body);
-          if (pageChs.isEmpty) continue;
-          for (final ch in pageChs) {
-            if (!seenUrls.contains(ch.url)) {
-              seenUrls.add(ch.url);
-              chapters.add(ch);
+    int maxFyPage = 0;
+    final fyAnchors = doc.querySelectorAll('a[href*="fy.php"]');
+    for (final a in fyAnchors) {
+      final href = a.attributes['href'] ?? '';
+      final m = RegExp(r'page=(\d+)').firstMatch(href);
+      if (m != null) {
+        final p = int.tryParse(m.group(1)!);
+        if (p != null && p > maxFyPage) maxFyPage = p;
+      }
+      final textNum = int.tryParse(a.text.trim());
+      if (textNum != null && textNum > maxFyPage) {
+        maxFyPage = textNum;
+      }
+    }
+
+    if (wjm.isNotEmpty && maxFyPage > 0) {
+      // In fy.php: page=1 is page 2, page=2 is page 3, ..., up to maxFyPage
+      const int batchSize = 5;
+      for (int i = 1; i <= maxFyPage && i <= 150; i += batchSize) {
+        final end = (i + batchSize - 1) > maxFyPage ? maxFyPage : (i + batchSize - 1);
+        final futures = <Future<http.Response>>[];
+        for (int p = i; p <= end; p++) {
+          final pUrl = '$baseUrl/e/extend/fy.php?page=$p&wjm=$wjm';
+          futures.add(_client.get(Uri.parse(pUrl), headers: _headers));
+        }
+
+        try {
+          final responses = await Future.wait(futures);
+          bool hasNewChapters = false;
+          for (final resp in responses) {
+            if (resp.statusCode == 200 && resp.body.isNotEmpty) {
+              final pageChs = parseChapterList(novelUrl, resp.body);
+              for (final ch in pageChs) {
+                if (!seenUrls.contains(ch.url)) {
+                  seenUrls.add(ch.url);
+                  chapters.add(ch);
+                  hasNewChapters = true;
+                }
+              }
             }
           }
-          onBatchLoaded?.call(List.from(chapters));
+          if (hasNewChapters) {
+            onBatchLoaded?.call(List.from(chapters));
+          }
+        } catch (_) {
+          break;
         }
-      } catch (_) {
-        break;
+      }
+    } else {
+      // 2. Fallback for non-fy.php pagination (dropdown select options, page links, or numbered URLs)
+      final pageUrls = <String>[];
+
+      // A. Check for dropdown select options (#chpagedlist, select.pages-select)
+      final selectOptions = doc.querySelectorAll(
+        '#chpagedlist option, select.pages-select option, .pages-container select option, select[name="pages"] option, select option',
+      );
+      for (final opt in selectOptions) {
+        final val = opt.attributes['value'] ?? '';
+        if (val.isNotEmpty && (val.contains('.html') || val.contains('page='))) {
+          final clean = _cleanUrl(val);
+          if (clean != novelUrl && !pageUrls.contains(clean)) {
+            pageUrls.add(clean);
+          }
+        }
+      }
+
+      // B. Parse pagination links and detect sequential page pattern if ellipsis exists
+      final pageLinks = doc.querySelectorAll(
+        '.pagination a, ul.pagination li a, .pages-container a, .page-item a, #chpagedlist a, .paging a, a[href*="page="]',
+      );
+
+      int maxGenericPage = 1;
+      String? pageUrlPattern;
+
+      for (final a in pageLinks) {
+        final href = a.attributes['href'] ?? '';
+        if (href.isNotEmpty) {
+          final clean = _cleanUrl(href);
+          if (clean != novelUrl && !pageUrls.contains(clean)) {
+            pageUrls.add(clean);
+          }
+
+          final text = a.text.trim();
+          final textNum = int.tryParse(text);
+          if (textNum != null && textNum > maxGenericPage) maxGenericPage = textNum;
+
+          final match = RegExp(r'page=(\d+)').firstMatch(href) ?? RegExp(r'_(\d+)\.html').firstMatch(href);
+          if (match != null) {
+            final pNum = int.tryParse(match.group(1)!);
+            if (pNum != null && pNum > maxGenericPage) maxGenericPage = pNum;
+
+            if (pageUrlPattern == null) {
+              if (href.contains('page=')) {
+                pageUrlPattern = clean.replaceAll(RegExp(r'page=\d+'), 'page={page}');
+              } else if (href.contains(RegExp(r'_\d+\.html'))) {
+                pageUrlPattern = clean.replaceAll(RegExp(r'_\d+\.html'), '_{page}.html');
+              }
+            }
+          }
+        }
+      }
+
+      // If a pageUrlPattern was identified and maxGenericPage > 1, expand any missing middle pages
+      if (pageUrlPattern != null && maxGenericPage > 1) {
+        for (int p = 2; p <= maxGenericPage && p <= 150; p++) {
+          final generated = pageUrlPattern.replaceAll('{page}', p.toString());
+          if (!pageUrls.contains(generated)) {
+            pageUrls.add(generated);
+          }
+        }
+      }
+
+      // Fetch discovered page URLs sequentially
+      for (final pUrl in pageUrls.take(150)) {
+        try {
+          final resp = await _client.get(Uri.parse(pUrl), headers: _headers);
+          if (resp.statusCode == 200) {
+            final pageChs = parseChapterList(novelUrl, resp.body);
+            if (pageChs.isEmpty) continue;
+            bool added = false;
+            for (final ch in pageChs) {
+              if (!seenUrls.contains(ch.url)) {
+                seenUrls.add(ch.url);
+                chapters.add(ch);
+                added = true;
+              }
+            }
+            if (added) {
+              onBatchLoaded?.call(List.from(chapters));
+            }
+          }
+        } catch (_) {
+          break;
+        }
       }
     }
 
@@ -387,7 +507,7 @@ class ReadWnExtractor implements NovelSource {
     final novelId = '${id}_$novelSlug';
 
     final links = doc.querySelectorAll(
-      '.chapter-list a, .chapters a, ul.list a, a.chapter, ul.chapter-list li a, .novel-chapters a, ul li a[href*="/novel/"]',
+      '.chapter-list a, .chapters a, ul.list a, a.chapter, ul.chapter-list li a, .novel-chapters a, ul li a[href*="/novel/"], a[href*="/novel/"]',
     );
     int order = 0;
     for (final l in links) {

@@ -665,26 +665,124 @@ class LightNovelWpExtractor implements NovelSource {
 
       // Check for pagination links on LightNovelWP
       final doc = html_parser.parse(body);
-      final pageLinks = doc.querySelectorAll('.pagination a, .page-numbers a, ul.pagination li a');
-      for (final a in pageLinks) {
-        final href = a.attributes['href'] ?? '';
-        if (href.isNotEmpty) {
-          final clean = _cleanUrl(href);
-          if (clean != novelUrl) {
-            try {
-              final pResp = await _client.get(Uri.parse(clean), headers: _headers);
-              if (pResp.statusCode == 200) {
-                final pageChs = parseChapterList(novelUrl, pResp.body);
-                for (final ch in pageChs) {
-                  if (!seenUrls.contains(ch.url)) {
-                    seenUrls.add(ch.url);
-                    chapters.add(ch);
-                  }
+
+      // 1. KolNovel Arabic LightNovelWP pagination (chapter_page=1, chapter_page=2, ...)
+      if (body.contains('chapter_page=') || doc.querySelector('a[href*="chapter_page="]') != null) {
+        int maxChapterPage = 1;
+        final chPageLinks = doc.querySelectorAll('a[href*="chapter_page="]');
+        for (final a in chPageLinks) {
+          final href = a.attributes['href'] ?? '';
+          final m = RegExp(r'chapter_page=(\d+)').firstMatch(href);
+          if (m != null) {
+            final p = int.tryParse(m.group(1)!);
+            if (p != null && p > maxChapterPage) maxChapterPage = p;
+          }
+        }
+
+        int curPage = 2;
+        while (curPage <= maxChapterPage && curPage <= 100) {
+          final sep = novelUrl.contains('?') ? '&' : '?';
+          final pUrl = '$novelUrl${sep}chapter_volume=__kol_all__&chapter_search&chapter_order=newest&chapter_page=$curPage#chapters';
+          try {
+            final pResp = await _client.get(Uri.parse(pUrl), headers: _headers);
+            if (pResp.statusCode == 200 && pResp.body.isNotEmpty) {
+              final pageChs = parseChapterList(novelUrl, pResp.body);
+              if (pageChs.isEmpty) break;
+              bool added = false;
+              for (final ch in pageChs) {
+                if (!seenUrls.contains(ch.url)) {
+                  seenUrls.add(ch.url);
+                  chapters.add(ch);
+                  added = true;
                 }
+              }
+              if (added) {
                 onBatchLoaded?.call(List.from(chapters));
               }
-            } catch (_) {}
+              // Check if this page reveals higher page numbers
+              final nextDoc = html_parser.parse(pResp.body);
+              for (final a in nextDoc.querySelectorAll('a[href*="chapter_page="]')) {
+                final href = a.attributes['href'] ?? '';
+                final m = RegExp(r'chapter_page=(\d+)').firstMatch(href);
+                if (m != null) {
+                  final p = int.tryParse(m.group(1)!);
+                  if (p != null && p > maxChapterPage) maxChapterPage = p;
+                }
+              }
+            } else {
+              break;
+            }
+          } catch (_) {
+            break;
           }
+          curPage++;
+        }
+      } else {
+        // 2. Standard LightNovelWP / Themesia pagination (e.g. KnoxT, .page-numbers, .pagination)
+        final pageLinks = doc.querySelectorAll(
+          '.pagination a, .page-numbers a, ul.pagination li a, .eplister .pagination a, [class*="pagination"] a',
+        );
+        int maxPage = 1;
+        String? pageUrlPattern;
+        final pageUrls = <String>[];
+
+        for (final a in pageLinks) {
+          final href = a.attributes['href'] ?? '';
+          if (href.isNotEmpty) {
+            final clean = _cleanUrl(href);
+            if (clean != novelUrl && !pageUrls.contains(clean)) {
+              pageUrls.add(clean);
+            }
+
+            final text = a.text.trim();
+            final textNum = int.tryParse(text);
+            if (textNum != null && textNum > maxPage) maxPage = textNum;
+
+            final match = RegExp(r'/page/(\d+)').firstMatch(href) ?? RegExp(r'page=(\d+)').firstMatch(href);
+            if (match != null) {
+              final p = int.tryParse(match.group(1)!);
+              if (p != null && p > maxPage) maxPage = p;
+
+              if (pageUrlPattern == null) {
+                if (href.contains('/page/')) {
+                  pageUrlPattern = clean.replaceAll(RegExp(r'/page/\d+/?'), '/page/{page}/');
+                } else if (href.contains('page=')) {
+                  pageUrlPattern = clean.replaceAll(RegExp(r'page=\d+'), 'page={page}');
+                }
+              }
+            }
+          }
+        }
+
+        // If an ellipsis caused gaps between page 1 and maxPage, generate all missing middle pages
+        if (pageUrlPattern != null && maxPage > 1) {
+          for (int p = 2; p <= maxPage && p <= 100; p++) {
+            final generated = pageUrlPattern.replaceAll('{page}', p.toString());
+            if (!pageUrls.contains(generated)) {
+              pageUrls.add(generated);
+            }
+          }
+        }
+
+        for (final pUrl in pageUrls.take(100)) {
+          try {
+            final pResp = await _client.get(Uri.parse(pUrl), headers: _headers);
+            if (pResp.statusCode == 200) {
+              final pageChs = parseChapterList(novelUrl, pResp.body);
+              if (pageChs.isEmpty) continue;
+              bool added = false;
+              for (final ch in pageChs) {
+                if (!seenUrls.contains(ch.url)) {
+                  seenUrls.add(ch.url);
+                  chapters.add(ch);
+                  added = true;
+                }
+              }
+              if (added) {
+                onBatchLoaded?.call(List.from(chapters));
+              }
+            }
+          } catch (_) {}
         }
       }
     }
@@ -825,6 +923,44 @@ class LightNovelWpExtractor implements NovelSource {
         releaseDate: dateSpan.isNotEmpty ? dateSpan : null,
       ));
       orderIndex++;
+    }
+
+    if (chapterItems.isEmpty) {
+      // KolNovel (Arabic LightNovelWP) editorial chapter table & groups
+      final kolAnchors = document.querySelectorAll(
+        '.kol-series-editorial__chapter-table a, .kol-series-editorial__chapter-groups a, .kol-series-editorial__chapter-index a, [class*="chapter-table"] a',
+      );
+      for (final a in kolAnchors) {
+        final href = a.attributes['href'] ?? '';
+        if (href.isEmpty) continue;
+        if (href.contains('chapter_page=') || href.contains('chapter_volume=') || href.startsWith('#')) {
+          continue;
+        }
+
+        var chapterTitle = a.text.trim();
+        chapterTitle = chapterTitle.replaceAll(RegExp(r'\s+'), ' ').trim();
+        if (chapterTitle.isEmpty) continue;
+
+        final chapterSlug = Uri.tryParse(href)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull ??
+            '${chapters.length + 1}';
+        final chapterId = '${novelId}_$chapterSlug';
+
+        double? chapterNumber;
+        final numMatch = RegExp(r'(?:فصل|الفصل|Chapter|Ch\.?)\s*(\d+(?:\.\d+)?)', caseSensitive: false).firstMatch(chapterTitle) ??
+            RegExp(r'(\d+(?:\.\d+)?)').firstMatch(chapterTitle);
+        if (numMatch != null) {
+          chapterNumber = double.tryParse(numMatch.group(1)!);
+        }
+
+        chapters.add(Chapter(
+          id: chapterId,
+          novelId: novelId,
+          url: _cleanUrl(href),
+          title: chapterTitle,
+          chapterNumber: chapterNumber ?? (orderIndex + 1.0),
+        ));
+        orderIndex++;
+      }
     }
 
     if (chapters.length > 1) {

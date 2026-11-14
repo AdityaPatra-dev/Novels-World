@@ -624,34 +624,58 @@ class NovelFullExtractor implements NovelSource {
     );
     if (paginationLinks.isNotEmpty) {
       int maxPage = 1;
+      String? pageUrlPattern;
+
       for (final a in paginationLinks) {
         final text = a.text.trim();
         final p = int.tryParse(text);
         if (p != null && p > maxPage) maxPage = p;
         final href = a.attributes['href'] ?? '';
-        final pageMatch = RegExp(r'page=(\d+)').firstMatch(href);
+        final clean = _cleanUrl(href);
+
+        final pageMatch = RegExp(r'page=(\d+)').firstMatch(href) ??
+            RegExp(r'/page/(\d+)').firstMatch(href) ??
+            RegExp(r'page-(\d+)').firstMatch(href);
         if (pageMatch != null) {
           final pMatch = int.tryParse(pageMatch.group(1)!);
           if (pMatch != null && pMatch > maxPage) maxPage = pMatch;
         }
+
+        if (pageUrlPattern == null && href.isNotEmpty) {
+          if (clean.contains('page=')) {
+            pageUrlPattern = clean.replaceAll(RegExp(r'page=\d+'), 'page={page}');
+          } else if (clean.contains('/page/')) {
+            pageUrlPattern = clean.replaceAll(RegExp(r'/page/\d+/?'), '/page/{page}/');
+          } else if (clean.contains('page-')) {
+            pageUrlPattern = clean.replaceAll(RegExp(r'page-\d+'), 'page-{page}');
+          }
+        }
       }
 
       if (maxPage > 1) {
-        // Fetch remaining pages (up to 60 pages / 6,000 chapters)
-        for (int p = 2; p <= maxPage && p <= 60; p++) {
-          final sep = novelUrl.contains('?') ? '&' : '?';
-          final pUrl = '$novelUrl${sep}page=$p';
+        // Fetch remaining pages (up to 100 pages / 10,000 chapters)
+        for (int p = 2; p <= maxPage && p <= 100; p++) {
+          final pUrl = pageUrlPattern != null
+              ? pageUrlPattern.replaceAll('{page}', p.toString())
+              : '$novelUrl${novelUrl.contains('?') ? '&' : '?'}page=$p';
           try {
             final pResp = await _client.get(Uri.parse(pUrl), headers: _headers);
             if (pResp.statusCode == 200) {
               final pageChs = parseChapterList(novelUrl, pResp.body);
               if (pageChs.isEmpty) break;
+              bool added = false;
               for (final ch in pageChs) {
                 if (!seenUrls.contains(ch.url)) {
                   seenUrls.add(ch.url);
                   chapters.add(ch);
+                  added = true;
                 }
               }
+              if (added) {
+                onBatchLoaded?.call(List.from(chapters));
+              }
+            } else {
+              break;
             }
           } catch (_) {
             break;

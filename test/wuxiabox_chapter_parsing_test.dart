@@ -70,5 +70,35 @@ void main() {
       expect(content.paragraphs.length, equals(3));
       expect(content.paragraphs[0], equals('Standard paragraph one with good prose.'));
     });
+
+    test('Correctly parses chapters from ReadWn fy.php pagination fragments', () {
+      final extractor = ReadWnExtractor(
+        id: 'wuxiabox',
+        name: 'WuxiaBox',
+        baseUrl: 'https://www.wuxiabox.com',
+        lang: 'en',
+      );
+
+      const fyHtml = '''
+<div>
+  <a href="/novel/shadow-slave_101.html">#101 - The First Nightmare Continues</a>
+  <a href="/novel/shadow-slave_102.html">#102 - Darkness Falling</a>
+  <a href="/novel/shadow-slave_103.html">#103 - Echoes in the Dark</a>
+  <a href="/e/extend/fy.php?page=1&wjm=shadow-slave">&lt;&lt;</a>
+  <a href="/e/extend/fy.php?page=3&wjm=shadow-slave">&gt;&gt;</a>
+</div>
+''';
+
+      final chapters = extractor.parseChapterList(
+        'https://www.wuxiabox.com/novel/shadow-slave.html',
+        fyHtml,
+      );
+
+      expect(chapters.length, equals(3));
+      expect(chapters[0].title, equals('#101 - The First Nightmare Continues'));
+      expect(chapters[0].url, equals('https://www.wuxiabox.com/novel/shadow-slave_101.html'));
+      expect(chapters[1].title, equals('#102 - Darkness Falling'));
+      expect(chapters[2].title, equals('#103 - Echoes in the Dark'));
+    });
   });
 }

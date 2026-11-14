@@ -275,8 +275,56 @@ class AllFreeNovelExtractor implements NovelSource {
     }
 
     if (chapters.isNotEmpty) {
-      onBatchLoaded?.call(chapters);
+      onBatchLoaded?.call(List.from(chapters));
     }
+
+    // Check if there are sub-pages of chapter listings on AllFreeNovel
+    final pagLinks = doc.querySelectorAll('#PageList .pagination a, .pagination a, ul.pagination li a, .pages-nav a');
+    final subPageUrls = <String>[];
+    for (final a in pagLinks) {
+      final href = a.attributes['href'];
+      if (href != null && href.isNotEmpty) {
+        final full = _resolveUrl(href);
+        if (full != novelUrl && !subPageUrls.contains(full)) {
+          subPageUrls.add(full);
+        }
+      }
+    }
+
+    for (final pUrl in subPageUrls) {
+      try {
+        final subHtml = await _fetchHtml(pUrl);
+        final subDoc = html_parser.parse(subHtml);
+        final subContainer = subDoc.querySelector('#PageList');
+        if (subContainer != null) {
+          final subAnchors = subContainer.querySelectorAll('a[href*="/Page/Story/"]');
+          bool added = false;
+          for (final a in subAnchors) {
+            final href = a.attributes['href'];
+            if (href == null || href.isEmpty) continue;
+            final fullUrl = _resolveUrl(href);
+            if (chapters.any((c) => c.url == fullUrl)) continue;
+
+            final rawTitle = a.text.trim();
+            final title = rawTitle.isNotEmpty ? rawTitle : 'Page $index';
+
+            chapters.add(Chapter(
+              id: '${id}_${slug}_$index',
+              novelId: novelId,
+              title: title,
+              url: fullUrl,
+              chapterNumber: index.toDouble(),
+            ));
+            index++;
+            added = true;
+          }
+          if (added) {
+            onBatchLoaded?.call(List.from(chapters));
+          }
+        }
+      } catch (_) {}
+    }
+
     return chapters;
   }
 

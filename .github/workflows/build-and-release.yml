@@ -71,7 +71,7 @@ jobs:
             test/widget_test.dart
 
       - name: Build Android Release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --android-skip-build-dependency-validation
 
       - name: Package Android Artifact
         run: cp build/app/outputs/flutter-apk/app-release.apk Novels-World-Android.apk

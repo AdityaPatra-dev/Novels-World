@@ -215,32 +215,136 @@ All audiobook files are stored in a sandboxed, clean directory structure that au
 
 ---
 
-### Pillar 6: User Interface & User Experience Design
+### Pillar 6: Advanced Download Modal with Dual-Track Language & Audio Controls
+
+#### The User Scenario:
+> *"When a user goes to a source, selects a novel (e.g., Shadow Slave) and clicks Download, it asks which chapters to download as before, but now has: Select Language, Download Audio toggle, and Audio Language selector. If the user downloads 10 chapters of Shadow Slave with Hindi text and Hindi audio, the novel card gets created in the Downloads tab. When the user taps Shadow Slave in the Downloads tab, they see the chapter list, and the 10 downloaded chapters carry explicit badges: `offline` and `audio_hi`."*
+
+#### 1. Enhanced Download Range Modal ([`DownloadRangeDialog`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/widgets/download_range_dialog.dart)):
+- **Chapter Scope**:
+  - Chapter range input (e.g., `1-10`, `1-40, 50-60`) or preset chips (`Next 10 unread`, `Next 25`, `All`).
+- **Text Language Configuration**:
+  - Dropdown: `[Original Language]` or any target language (e.g., `Hindi`, `Spanish`, `French`, `Japanese`, `German`, `Arabic`, etc.).
+  - When a translated language is chosen, the downloader translates each chapter paragraph using [`TranslationService`](#pillar-4-multilingual-translation--dual-track-visual--audio-reading-experience) and saves it as an offline translated chapter (`chapters/{novelId}/{chapterId}_{lang}.json`).
+- **Audio Download Toggle**:
+  - Switch: `[🎧 Download Audio too]` (Default: OFF).
+  - When enabled:
+    - **Audio Language**: Auto-matches text language (e.g., `Hindi`), but can be customized independently (e.g., English text + Hindi audio).
+    - **Voice Selector**: Automatically filters and displays available studio voices for that language (e.g. `hi-IN-SwaraNeural` / `hi-IN-MadhurNeural`).
+    - **Speed & Quality**: Default 1.0x, high-fidelity MP3.
+- **Estimated Resource Preview**:
+  - Live calculation showing:
+    - Text size: ~150 KB for 10 chapters.
+    - Audio size: ~12 MB for 10 chapters (~1.2 MB per chapter).
+    - Estimated generation time with background progress bar.
+
+---
+
+### Pillar 7: Downloads Tab Presentation & Multi-Tag Badging (`offline`, `audio_hi`)
+
+#### 1. Novel Card in Downloads Tab ([`DownloadsScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/downloads/downloads_screen.dart)):
+- When *Shadow Slave* is downloaded with Hindi text & audio:
+  - Appears in the **Downloads tab** with cover, title, author, and dual status chips:
+    - `[📄 10 Chapters]`
+    - `[🎧 10 Audiobooks (HI)]`
+  - Total storage badge reflects combined text + audio size.
+
+#### 2. Chapter List Presentation & Badges:
+- Tapping *Shadow Slave* in the Downloads tab opens its comprehensive chapter list.
+- Each chapter item clearly indicates its offline capabilities with color-coded chip badges:
+  - **`offline`** badge (Emerald Green border/fill): Indicates offline text is available for reading without internet.
+  - **`audio_hi`** badge (Violet/Purple border/fill with headphone icon `[🎧 audio_hi]`): Indicates offline Hindi audiobook is generated and stored on device.
+  - If a chapter has English audio instead, it displays `[🎧 audio_en]`; if Spanish, `[🎧 audio_es]`.
+- **Direct 1-Tap Actions**:
+  - Tapping the chapter title opens [`ReaderScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/reader_screen.dart) in offline mode displaying the Hindi text.
+  - Tapping the `audio_hi` badge launches the **Audiobook Player** immediately with 0 internet and 0 buffering.
+
+---
+
+### Pillar 8: Portable Backup & Migration (.ZIP Export & Import)
+
+#### The User Scenario:
+> *"Suppose the user wants to delete or reinstall the application, or move to a new phone, but wants to keep all downloaded novels and audiobooks. We add an export window that bundles all downloaded novels, text chapters, and audiobooks into a structured `.zip` archive saved to their phone. When re-installing the app, they select Import, choose the `.zip`, and all novels, chapters, `offline` and `audio_hi` tags, and audiobooks are instantly restored."*
+
+#### 1. Backup Directory & Internal Zip Specification:
+Using pure-Dart `package:archive/archive.dart` (`ZipEncoder` / `ZipDecoder`) with zero native C dependencies:
+
+```
+novels_world_backup_YYYYMMDD_HHMM.zip
+├── manifest.json                                  <-- App version, backup date, novel registry index
+├── settings.json                                  <-- Reader preferences, active voices, translation prefs
+└── novels/
+    └── shadow_slave/
+        ├── metadata.json                          <-- Novel model (title, author, genres, cover URL, source)
+        ├── cover.jpg                              <-- Cached cover image binary
+        ├── chapters/
+        │   ├── chapter_1.json                     <-- Original text content
+        │   ├── chapter_1_hi.json                  <-- Translated Hindi text content
+        │   └── ...
+        └── audio/
+            ├── chapter_1_hi.mp3                   <-- Complete assembled Hindi audiobook MP3
+            ├── chapter_2_hi.mp3
+            └── ...
+```
+
+#### 2. Export Workflow (`BackupService.exportToZip`):
+1. In [`DownloadsScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/downloads/downloads_screen.dart), add an **[Import / Export Backup]** icon button in the AppBar (`Icons.archive_outlined`).
+2. Tapping opens the **Backup & Migration Modal**:
+   - Shows total backup contents: e.g. "3 Novels, 45 Text Chapters, 30 Audiobooks (~42 MB)".
+   - Tapping **[Export Backup (.zip)]**:
+     1. Creates the `manifest.json` indexing all downloaded novels, chapter lists, and language tags.
+     2. Collects all chapter JSONs and `.mp3` files from `chapters/` and `audiobooks/`.
+     3. Streams files into `ZipEncoder` with a live progress dialog (`0% -> 100%`).
+     4. Prompts user via `FilePicker.platform.saveFile(...)` to save `novels_world_backup_<date>.zip` anywhere on their device (e.g. Downloads, Google Drive, SD Card).
+     5. Displays success toast: *"Backup saved successfully!"*.
+
+#### 3. Import Workflow (`BackupService.importFromZip`):
+1. Inside the Backup & Migration Modal, user taps **[Import Backup (.zip)]**.
+2. Opens system file picker via `FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['zip'])`.
+3. The user picks their previously saved `.zip` archive.
+4. **Extraction & Restoration Pipeline**:
+   1. Validates `manifest.json` and schema compatibility.
+   2. Unpacks novel metadata and re-registers novels in [`StorageService`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/data/storage_service.dart) and Library.
+   3. Unpacks text chapters into `${storage.appDocumentsDirectoryPath}/chapters/`.
+   4. Unpacks translated chapters into `${storage.appDocumentsDirectoryPath}/translations/`.
+   5. Unpacks `.mp3` audio files into `${storage.appDocumentsDirectoryPath}/audiobooks/{novelId}/`.
+   6. Reconstructs downloaded ID sets: `downloaded_novels`, `downloaded_chapters_{novelId}`, and `downloaded_audiobooks_{novelId}`.
+5. Re-renders UI:
+   - Both **Library** and **Downloads** tabs refresh instantly.
+   - The user sees *Shadow Slave* right there in the Downloads tab.
+   - Tapping it shows all chapters with their **`offline`** and **`audio_hi`** badges.
+   - Both reading and audio playback work 100% offline immediately!
+
+---
+
+### Pillar 9: User Interface & User Experience Design
 
 #### 1. Download Range Dialog ([`DownloadRangeDialog`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/widgets/download_range_dialog.dart)):
-- Add an action selector segment:
+- Segmented mode selector:
   - `[📄 Download Text]` (Standard offline reading)
   - `[🎧 Download Audiobook]` (Audiobook generation)
-- When `[🎧 Download Audiobook]` is selected:
-  - Surfaces a voice selector dropdown (prefilled with current active voice).
-  - Surfaces a **Translation Option**: `"Audio Language: [Original] | [Translate to English / Spanish / Japanese / etc.]"`.
-  - Estimates total audio duration and file size (e.g. ~1.2 MB per chapter).
+  - `[⚡ Download Text + Audio]` (Unified batch)
+- When audio or translation is enabled:
+  - Surfaces:
+    - Text Language Selector (`Original`, `Hindi`, `Spanish`, etc.).
+    - Audio Language & Voice Selector (`Hindi` -> `hi-IN-SwaraNeural`).
+    - Chapter Range selector (`Next 10 unread`, custom range).
+    - Progress dialog with dual progress bars (Text Translation + Audio Synthesis).
 
-#### 2. Novel Detail Screen ([`NovelDetailScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/novel/novel_detail_screen.dart)):
-- Beside each chapter item in the list:
-  - If text is downloaded: green checkmark icon.
-  - If audiobook is downloaded: purple headphones icon `[🎧]`.
-  - Tapping the headphone icon plays that chapter in the Audiobook Player immediately.
+#### 2. Novel Detail & Downloads Chapter Badges:
+- Beside each chapter item:
+  - `[offline]` green badge for downloaded text.
+  - `[audio_hi]` / `[audio_en]` purple badge for downloaded audio.
+  - Tapping the audio badge launches the player directly.
 
 #### 3. Reader TTS Settings Sheet ([`TtsSheet`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/tts_sheet.dart)):
-- Add a new card switch:
-  - **"Save Listening as Offline Audiobook"** (Switch: ON/OFF)
+- Add card switch:
+  - **"Save Listening as Offline Audiobook"** (ON/OFF).
   - Subtitle: *"Automatically combines streamed audio chunks into permanent offline chapter audiobooks as you read."*
 
 #### 4. Persistent Floating Audiobook Mini-Player:
-- When playing an audiobook in the background:
-  - Bottom persistent mini-bar (Novel Cover, Chapter Title, Play/Pause, +15s, -15s, Close).
-  - Tapping opens the full-screen immersive player with waveform, speed dial, and chapter drawer.
+- Persistent bottom bar (Novel Cover, Chapter Title, Play/Pause, +15s, -15s, Close).
+- Tapping opens the full-screen immersive player with waveform, speed dial, and chapter drawer.
 
 ---
 
@@ -259,16 +363,23 @@ All audiobook files are stored in a sandboxed, clean directory structure that au
 
 ### Phase 3: Multilingual & Translation Service
 - [ ] Create `TranslationService` ([`lib/core/services/translation_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/core/services/translation_service.dart)) with Google Translate web client and optional LLM provider.
+- [ ] Add in-reader Translation symbol (`Icons.translate`) in `ReaderScreen` AppBar with language picker modal.
 - [ ] Add multilingual voice catalog and language mapping in `TtsModelRegistry` / `EdgeNeuralEngine`.
 - [ ] Write unit tests for sentence translation and language-voice resolution.
 
 ### Phase 4: Bulk Audiobook Downloader Service & UI
 - [ ] Implement `AudiobookDownloadService` ([`lib/data/audiobook_download_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/data/audiobook_download_service.dart)) with queue processing, progress updates, and retry logic.
-- [ ] Update `DownloadRangeDialog` with `[Download Audiobook]` tab and translation dropdown.
-- [ ] Add audiobook badges `[🎧]` to chapter list in `NovelDetailScreen`.
+- [ ] Update `DownloadRangeDialog` with language selector, audio toggle, and voice selector.
+- [ ] Add `offline` and `audio_{lang}` badge pills to chapter list in `NovelDetailScreen` and `DownloadsScreen`.
 - [ ] Update `NovelStorageModal` to display and purge audiobook storage.
 
-### Phase 5: Audiobook Player UI & Verification
+### Phase 5: Portable Backup & Migration (.ZIP Export & Import)
+- [ ] Implement `BackupService` ([`lib/core/services/backup_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/core/services/backup_service.dart)) using `package:archive` (`ZipEncoder` & `ZipDecoder`).
+- [ ] Add Backup & Migration Modal in `DownloadsScreen` (`[Import / Export Backup]`).
+- [ ] Verify export creates valid `.zip` with manifest, novels, text chapters, and audio files.
+- [ ] Verify import seamlessly extracts, restores preferences, novel cards, badges, and offline playback.
+
+### Phase 6: Audiobook Player UI & Verification
 - [ ] Build floating Audiobook Mini Player and Full-Screen Audiobook Player modal.
 - [ ] Verify background audio playback and notification controls via `just_audio`.
 - [ ] Run full test suite (`flutter test`) and static analysis (`flutter analyze`).

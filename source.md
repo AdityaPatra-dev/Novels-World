@@ -27,8 +27,8 @@
 
 | Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Royal Road** | `https://www.royalroad.com` | Bespoke (Extractor already drafted) | The #1 global platform for LitRPG, Progression Fantasy, and Isekai. 50,000+ top-tier original web fictions. | [ ] Working |
-| **Scribble Hub** | `https://www.scribblehub.com` | Bespoke (Extractor already drafted) | High-volume original web serials, LitRPG, Isekai, and Romance Fantasy. Sister site of NovelUpdates. | [ ] Working |
+| **Royal Road** | `https://www.royalroad.com` | Bespoke (`RoyalRoadExtractor`) | The #1 global platform for LitRPG, Progression Fantasy, and Isekai. 50,000+ top-tier original web fictions. Fully supported with WebView bot-protection fallback. | [x] Working |
+| **Scribble Hub** | `https://www.scribblehub.com` | Bespoke (`ScribbleHubExtractor`) | High-volume original web serials, LitRPG, Isekai, and Romance Fantasy. Sister site of NovelUpdates. Fully supported with WebView bot-protection fallback. | [x] Working |
 | **SpaceBattles (Creative Writing)** | `https://forums.spacebattles.com/forums/creative-writing.18/` | XenForo Forum Threadmarks | Massive repository of epic original sci-fi, Worm fanfiction/clones, space opera, and LitRPG quest serials. | [ ] Working |
 | **Sufficient Velocity** | `https://forums.sufficientvelocity.com/forums/user-fiction.2/` | XenForo Forum Threadmarks | Sprawling serialized fiction, quest-based LitRPG, and high-concept fantasy with built-in chapter threadmarks. | [ ] Working |
 | **Neovel** | `https://neovel.io` | Modern SPA / REST API | Dedicated modern indie webfiction platform featuring LitRPG, Isekai, and fantasy in multiple languages. | [ ] Working |
@@ -45,10 +45,10 @@
 
 | Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Standard Ebooks** | `https://standardebooks.org` | Open Git / Static HTML / OPDS | High-typography, beautifully typeset public domain modern editions. High fantasy, gothic fantasy, classical worlds. | [ ] Working |
-| **Baen Free Library** | `https://www.baen.com/allbooks/category/index/id/2012` | Clean HTML / Free Catalog | Legitimate free, full-length fantasy and sci-fi novels from commercial authors (Mercedes Lackey, David Weber, etc.). | [ ] Working |
-| **Faded Page** | `https://www.fadedpage.com` | Clean HTML & EPUB archive | Canadian public domain archive covering post-1928 masterworks: Tolkien predecessors, C.S. Lewis, George Orwell, Lord Dunsany. | [ ] Working |
-| **Open Library** | `https://openlibrary.org` | Internet Archive REST API | Millions of digitized books with public open editions across epic fantasy, history, and mythology. | [ ] Working |
+| **Standard Ebooks** | `https://standardebooks.org` | Open Git / Static HTML / OPDS | High-typography, beautifully typeset public domain modern editions. High fantasy, gothic fantasy, classical worlds. Fully working with direct EPUB pipeline. | [x] Working |
+| **Baen Free Library** | `https://www.baen.com/allbooks/category/index/id/2012` | Clean HTML / Free Catalog | Legitimate free, full-length fantasy and sci-fi novels from commercial authors (Mercedes Lackey, David Weber, etc.). | [ ] Inspected |
+| **Faded Page** | `https://www.fadedpage.com` | Clean HTML & EPUB archive | Canadian public domain archive covering post-1928 masterworks (Sylvia Plath, Hemingway, Orwell). Note: EPUB downloads gated behind Google reCAPTCHA. | [!] reCAPTCHA Gated |
+| **Open Library** | `https://openlibrary.org` | Internet Archive REST API | Millions of digitized books with public open editions across epic fantasy, history, and mythology. Fully working in app. | [x] Working |
 | **ManyBooks Fantasy** | `https://manybooks.net/categories/fantasy` | Clean CMS / EPUB | Over 10,000+ curated fantasy novels categorized by epic, historical, and dark fantasy. | [ ] Working |
 | **Global Grey Ebooks** | `https://www.globalgreyebooks.com/category/fiction-fantasy/` | WordPress / Static | Cleanly edited classic fantasy, folklore, myths, and speculative epics with zero ad clutter. | [ ] Working |
 | **Feedbooks Public Domain** | `https://www.feedbooks.com/publicdomain` | OPDS / Clean HTML | High quality curated public domain fantasy and adventure collections. | [ ] Working |
@@ -62,13 +62,13 @@
 
 | Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Clarkesworld Magazine** | `https://clarkesworldmagazine.com` | Clean WordPress / Semantic HTML | Multi-Hugo & Nebula award-winning monthly sci-fi magazine. Features the highest caliber of contemporary space opera & hard sci-fi. | [ ] Working |
-| **Lightspeed Magazine** | `https://www.lightspeedmagazine.com` | WordPress Clean Reader | Premier digital sci-fi & fantasy monthly publication. Huge searchable archive of hard sci-fi novellas and novelettes. | [ ] Working |
-| **Daily Science Fiction** | `https://dailysciencefiction.com` | Static HTML archive | Thousands of daily standalone sci-fi stories and mini-novellas covering time travel, aliens, and future tech. | [ ] Working |
-| **Strange Horizons** | `https://strangehorizons.com` | Semantic HTML / Weekly | Hugo-nominated speculative fiction, sociological sci-fi, and futuristic cyberpunk stories published weekly since 2000. | [ ] Working |
-| **Apex Magazine** | `https://apex-magazine.com` | WordPress / Fiction | Dark sci-fi, biotechnology horror, and near-future cyberpunk speculative fiction. | [ ] Working |
-| **Escape Pod** | `https://escapepod.org` | WordPress / Text + Audio | The world's premier weekly science fiction short fiction venue with full text releases accompanying each audio release. | [ ] Working |
-| **Uncanny Magazine** | `https://www.uncannymagazine.com` | Clean WordPress | Hugo-winning modern space opera, AI, and diverse speculative fiction stories and novellas. | [ ] Working |
+| **Clarkesworld Magazine** | `https://clarkesworldmagazine.com` | Bespoke (`ClarkesworldExtractor`) | Multi-Hugo & Nebula award-winning monthly sci-fi magazine. Features the highest caliber of contemporary space opera & hard sci-fi. | [x] Working |
+| **Lightspeed Magazine** | `https://www.lightspeedmagazine.com` | Bespoke (`LightspeedExtractor`) | Premier digital sci-fi & fantasy monthly publication. Huge searchable archive of hard sci-fi novellas and novelettes. | [x] Working |
+| **Daily Science Fiction** | `https://dailysciencefiction.com` | Static HTML archive | Previously daily sci-fi stories; currently parked/inactive domain. | [-] Offline/Parked |
+| **Strange Horizons** | `https://strangehorizons.com` | Semantic HTML / Weekly | Hugo-nominated speculative fiction, sociological sci-fi, and futuristic cyberpunk stories published weekly since 2000. | [ ] Inspected |
+| **Apex Magazine** | `https://apex-magazine.com` | WordPress / Fiction | Dark sci-fi, biotechnology horror, and near-future cyberpunk speculative fiction. | [ ] Inspected |
+| **Escape Pod** | `https://escapepod.org` | WordPress / Text + Audio | The world's premier weekly science fiction short fiction venue with full text releases accompanying each audio release. | [ ] Inspected |
+| **Uncanny Magazine** | `https://www.uncannymagazine.com` | Bespoke (`UncannyExtractor`) | Hugo-winning modern space opera, AI, and diverse speculative fiction stories and novellas. | [x] Working |
 | **Free SF Online** | `https://www.freesfonline.net` | Indexer / Directory | Exhaustive catalog index linking thousands of legally free science fiction stories by major authors across the web. | [ ] Working |
 
 ---
@@ -93,11 +93,11 @@
 
 | Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **AllFreeNovel** | `https://allfreenovel.com` | Bespoke (Already in app) | 40,000+ popular romance, contemporary fiction, romantic suspense, billionaire, and dark romance titles. | [ ] Working |
-| **Novel12** | `https://novel12.com` | High-Capacity Aggregator | Over 50,000+ romance, contemporary fiction, YA, and thriller books with clean chapter pagination. | [ ] Working |
-| **Novel80** | `https://novel80.com` | High-Capacity Aggregator | Massive collection of popular published romance, historical romance, and urban fantasy series. | [ ] Working |
-| **ReadNovelsOnline** | `https://readnovelsonline.com` | Custom Web Portal | High-volume library of popular modern romance, werewolf/shifter fantasy, and romantic suspense. | [ ] Working |
-| **Novel24** | `https://novel24.com` | NovelFull-variant | Broad general fiction catalog with heavy focus on romance, vampire/paranormal romance, and teen fiction. | [ ] Working |
+| **AllFreeNovel** | `https://allfreenovel.com` | Bespoke (Already in app) | 40,000+ popular romance, contemporary fiction, romantic suspense, billionaire, and dark romance titles. | [x] Working |
+| **Novel12** | `https://novel12.com` | High-Capacity Aggregator | Over 50,000+ romance, contemporary fiction, YA titles. Note: Currently encountering infinite redirect loop. | [-] Redirect Loop |
+| **Novel80** | `https://novel80.com` | High-Capacity Aggregator | Massive collection of popular published romance series. Note: Currently encountering infinite redirect loop. | [-] Redirect Loop |
+| **ReadNovelsOnline** | `https://readnovelsonline.com` | Custom Web Portal | High-volume library of popular modern romance. Note: DNS/Connection timeout. | [-] Timed Out |
+| **Novel24** | `https://novel24.com` | NovelFull-variant | Broad general fiction catalog with heavy focus on romance. Note: Protected by dynamic JS JWT cookie verification. | [!] JS JWT Protected |
 | **Booknet English** | `https://booknet.com/en` | Commercial Portal / Free Tiers | Hotbed for modern indie romance: billionaire romance, dark fantasy, and Romantasy web serials. | [ ] Working |
 | **Inkitt** | `https://www.inkitt.com` | React SPA / REST API | Thousands of crowd-favorite indie romance novels, werewolf/mafia romance, and viral fantasy stories. | [ ] Working |
 
@@ -112,7 +112,7 @@
 | **Reactor Mag (formerly Tor.com)** | `https://reactormag.com/fiction/` | WordPress / Semantic HTML | The industry pinnacle of modern speculative novellas, Hugo/Nebula award winners, and standalone short fiction. | [ ] Working |
 | **Beneath Ceaseless Skies** | `https://www.beneath-ceaseless-skies.com` | Bi-weekly Literary Digest | World-renowned magazine publishing character-driven literary fantasy and short novellas in secondary worlds. | [ ] Working |
 | **Flash Fiction Online** | `https://www.flashfictiononline.com` | WordPress / Quick Reads | Curated 500-1,000 word stories across sci-fi, literary, and fantasy. Perfect for casual mobile reading. | [ ] Working |
-| **East of the Web** | `https://www.eastoftheweb.com/short-stories/` | Static HTML | Premier library of curated short stories and novellas across literary, sci-fi, romance, and crime. | [ ] Working |
+| **East of the Web** | `https://www.eastoftheweb.com/short-stories/` | Bespoke (`EastOfTheWebExtractor`) | Premier library of curated short stories and novellas across literary, sci-fi, romance, and crime. | [x] Working |
 | **American Literature (Short Stories)** | `https://americanliterature.com/short-stories/` | Clean HTML | Tens of thousands of complete classic short stories, novellas, and literary fiction works with clean formatting. | [ ] Working |
 
 ---
@@ -135,23 +135,23 @@
 
 | Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **ReadNovelFull** | `https://readnovelfull.com` | NovelFull Family (In App) | 55,000+ top translated Chinese, Korean, and Japanese webnovels. | [ ] Working |
-| **NovelFull** | `https://novelfull.com` | NovelFull Family (In App) | 50,000+ popular webnovels with fast server response and full chapter archives. | [ ] Working |
-| **FreeWebNovel** | `https://freewebnovel.com` | NovelFull Family (In App) | 45,000+ webnovels, light novels, and Korean fantasy novels. | [ ] Working |
-| **LibRead** | `https://libread.com` | NovelFull Family (In App) | 40,000+ clean catalog web novels with minimal ad intrusion. | [ ] Working |
-| **NovelFire** | `https://novelfire.net` | NovelFull Family (In App) | 38,000+ Korean hunter and Xianxia novels with active updates. | [ ] Working |
-| **WuxiaBox** | `https://www.wuxiabox.com` | ReadWN Family (In App) | 45,000+ high-speed raw machine-translated cultivation and urban novels. | [ ] Working |
-| **NovelCool** | `https://novelcool.com` | Bespoke (In App) | Manhwa/Manga novel source adaptations, Japanese LNs, and Korean web novels. | [ ] Working |
-| **LightNovelWorld** | `https://www.lightnovelworld.co` | Modern SPA / SSR | Premium web novel reader mirroring top trending light novels and translated serials. | [ ] Working |
-| **BoxNovel** | `https://boxnovel.com` | WordPress Madara | Popular light novel and translated Korean webnovel portal. | [ ] Working |
-| **Woopread** | `https://woopread.com` | WordPress Madara | High-quality human translations of popular Korean fantasy and Otome novels. | [ ] Working |
-| **RainOfSnow** | `https://rainofsnow.com` | WordPress Madara | Dedicated group translating Korean web fiction, Romance Fantasy, and Xianxia. | [ ] Working |
-| **Foxaholic** | `https://foxaholic.com` | WordPress Madara | High-traffic hub hosting hundreds of active translation projects for Chinese/Korean novels. | [ ] Working |
-| **Chrysanthemum Garden** | `https://chrysanthemumgarden.com` | WordPress Bespoke | The premier translation group for Danmei, BL, and cultivation web novels. | [ ] Working |
-| **Re:Library** | `https://re-library.com` | WordPress Fictioneer | High quality Japanese light novel translations with clean semantic reader formatting. | [ ] Working |
-| **AsuraScans** | `https://asurascans.com` | Bespoke (In App) | Source web novels for top Manhwa titles (Solo Leveling style, Necromancers, Gates). | [ ] Working |
-| **RoliaScan** | `https://roliascan.com` | Bespoke (In App) | Korean Otome Isekai, Villainess, and Romance Fantasy translations. | [ ] Working |
-| **Kakuyomu** | `https://kakuyomu.jp` | Kadokawa Official (In App) | Official Japanese webnovel platform with 100,000+ raw Japanese light novels. | [ ] Working |
+| **ReadNovelFull** | `https://readnovelfull.com` | NovelFull Family (In App) | 55,000+ top translated Chinese, Korean, and Japanese webnovels. | [x] Working |
+| **NovelFull** | `https://novelfull.com` | NovelFull Family (In App) | 50,000+ popular webnovels with fast server response and full chapter archives. | [x] Working |
+| **FreeWebNovel** | `https://freewebnovel.com` | NovelFull Family (In App) | 45,000+ webnovels, light novels, and Korean fantasy novels. | [x] Working |
+| **LibRead** | `https://libread.com` | NovelFull Family (In App) | 40,000+ clean catalog web novels with minimal ad intrusion. | [x] Working |
+| **NovelFire** | `https://novelfire.net` | NovelFull Family (In App) | 38,000+ Korean hunter and Xianxia novels with active updates. | [x] Working |
+| **WuxiaBox** | `https://www.wuxiabox.com` | ReadWN Family (In App) | 45,000+ high-speed raw machine-translated cultivation and urban novels. | [x] Working |
+| **NovelCool** | `https://novelcool.com` | Bespoke (In App) | Manhwa/Manga novel source adaptations, Japanese LNs, and Korean web novels. | [x] Working |
+| **LightNovelWorld** | `https://www.lightnovelworld.co` | Modern SPA / SSR | Premium web novel reader mirroring top trending light novels and translated serials. | [ ] Inspected |
+| **BoxNovel** | `https://boxnovel.com` | WordPress Madara | Popular light novel and translated Korean webnovel portal. Note: Protected by Cloudflare challenge. | [!] Cloudflare Protected |
+| **Woopread** | `https://woopread.com` | Bespoke (`WoopReadExtractor`) | High-quality human translations of popular Korean fantasy and Otome novels. Fully supported Next.js reader. | [x] Working |
+| **RainOfSnow** | `https://rainofsnow.com` | WordPress Madara | Dedicated group translating Korean web fiction, Romance Fantasy, and Xianxia. Note: Protected by Cloudflare challenge. | [!] Cloudflare Protected |
+| **Foxaholic** | `https://foxaholic.com` | WordPress Madara | High-traffic hub hosting hundreds of active translation projects for Chinese/Korean novels. | [ ] Inspected |
+| **Chrysanthemum Garden** | `https://chrysanthemumgarden.com` | WordPress Bespoke | The premier translation group for Danmei, BL, and cultivation web novels. | [ ] Inspected |
+| **Re:Library** | `https://re-library.com` | Bespoke (`ReLibraryExtractor`) | High quality Japanese light novel translations with clean semantic reader formatting and comprehensive volume TOCs. | [x] Working |
+| **AsuraScans** | `https://asurascans.com` | Bespoke (In App) | Source web novels for top Manhwa titles (Solo Leveling style, Necromancers, Gates). | [x] Working |
+| **RoliaScan** | `https://roliascan.com` | Bespoke (In App) | Korean Otome Isekai, Villainess, and Romance Fantasy translations. | [x] Working |
+| **Kakuyomu** | `https://kakuyomu.jp` | Kadokawa Official (In App) | Official Japanese webnovel platform with 100,000+ raw Japanese light novels. | [x] Working |
 
 ---
 

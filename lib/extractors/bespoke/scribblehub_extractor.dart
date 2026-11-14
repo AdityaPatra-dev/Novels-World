@@ -54,6 +54,37 @@ class ScribbleHubExtractor implements NovelSource {
     return url;
   }
 
+  Future<String> _fetchHtml(String url) async {
+    String htmlBody = '';
+    try {
+      final response = await _client.get(Uri.parse(url), headers: _headers);
+      if (response.statusCode == 200 &&
+          !response.body.contains('Just a moment...') &&
+          !response.body.contains('challenge-running') &&
+          !response.body.contains('cf-chl-')) {
+        htmlBody = response.body;
+      }
+    } catch (_) {}
+
+    if (htmlBody.isEmpty) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
+      if (wvHtml != null && wvHtml.isNotEmpty) {
+        htmlBody = wvHtml;
+      }
+    }
+
+    if (htmlBody.isEmpty ||
+        htmlBody.contains('Just a moment...') ||
+        htmlBody.contains('challenge-running') ||
+        htmlBody.contains('cf-chl-')) {
+      throw const HttpException(
+        'Cloudflare challenge encountered on ScribbleHub. Open in WebView to solve.',
+      );
+    }
+
+    return htmlBody;
+  }
+
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
     final cleanQuery = Uri.encodeComponent(query);
@@ -61,14 +92,8 @@ class ScribbleHubExtractor implements NovelSource {
         ? '$baseUrl/?s=$cleanQuery&post_type=fictionposts'
         : '$baseUrl/page/$page/?s=$cleanQuery&post_type=fictionposts';
 
-    final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw HttpException('HTTP ${response.statusCode} on ScribbleHub');
-    }
-    if (response.body.contains('Just a moment...')) {
-      throw const HttpException('Cloudflare bot protection active on ScribbleHub. Please try another source.');
-    }
-    return parseNovelList(response.body);
+    final html = await _fetchHtml(targetUrl);
+    return parseNovelList(html);
   }
 
   @override
@@ -77,14 +102,8 @@ class ScribbleHubExtractor implements NovelSource {
         ? '$baseUrl/series-ranking/'
         : '$baseUrl/series-ranking/?paged=$page';
 
-    final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw HttpException('HTTP ${response.statusCode} on ScribbleHub');
-    }
-    if (response.body.contains('Just a moment...')) {
-      throw const HttpException('Cloudflare bot protection active on ScribbleHub. Please try another source.');
-    }
-    return parseNovelList(response.body);
+    final html = await _fetchHtml(targetUrl);
+    return parseNovelList(html);
   }
 
   @override
@@ -93,14 +112,8 @@ class ScribbleHubExtractor implements NovelSource {
         ? '$baseUrl/latest-series/'
         : '$baseUrl/latest-series/?paged=$page';
 
-    final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw HttpException('HTTP ${response.statusCode} on ScribbleHub');
-    }
-    if (response.body.contains('Just a moment...')) {
-      throw const HttpException('Cloudflare bot protection active on ScribbleHub. Please try another source.');
-    }
-    return parseNovelList(response.body);
+    final html = await _fetchHtml(targetUrl);
+    return parseNovelList(html);
   }
 
   List<Novel> parseNovelList(String htmlContent) {
@@ -156,11 +169,8 @@ class ScribbleHubExtractor implements NovelSource {
       throw Exception('Invalid novel URL: $novelUrl is a genre or category link.');
     }
 
-    final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load Scribble Hub novel details: HTTP ${response.statusCode}');
-    }
-    return parseNovelDetails(novelUrl, response.body);
+    final html = await _fetchHtml(novelUrl);
+    return parseNovelDetails(novelUrl, html);
   }
 
   Novel parseNovelDetails(String novelUrl, String htmlContent) {
@@ -225,13 +235,9 @@ class ScribbleHubExtractor implements NovelSource {
       throw Exception('Invalid novel URL: $novelUrl is a genre or category link.');
     }
 
-    final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load Scribble Hub chapter list: HTTP ${response.statusCode}');
-    }
-
-    final document = html_parser.parse(response.body);
-    var chapters = parseChapterList(novelUrl, response.body);
+    final html = await _fetchHtml(novelUrl);
+    final document = html_parser.parse(html);
+    var chapters = parseChapterList(novelUrl, html);
 
     final mypostIdEl = document.querySelector('#mypostid');
     final postId = mypostIdEl?.attributes['value'];
@@ -347,11 +353,8 @@ class ScribbleHubExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load Scribble Hub chapter content: HTTP ${response.statusCode}');
-    }
-    return parseChapterContent(chapterUrl, response.body);
+    final html = await _fetchHtml(chapterUrl);
+    return parseChapterContent(chapterUrl, html);
   }
 
   ChapterContent parseChapterContent(String chapterUrl, String htmlContent) {

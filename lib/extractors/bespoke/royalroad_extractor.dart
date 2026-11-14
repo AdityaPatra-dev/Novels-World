@@ -54,47 +54,57 @@ class RoyalRoadExtractor implements NovelSource {
     return url;
   }
 
+  Future<String> _fetchHtml(String url) async {
+    String htmlBody = '';
+    try {
+      final response = await _client.get(Uri.parse(url), headers: _headers);
+      if (response.statusCode == 200 &&
+          !response.body.contains('Just a moment...') &&
+          !response.body.contains('challenge-running') &&
+          !response.body.contains('cf-chl-')) {
+        htmlBody = response.body;
+      }
+    } catch (_) {}
+
+    if (htmlBody.isEmpty) {
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
+      if (wvHtml != null && wvHtml.isNotEmpty) {
+        htmlBody = wvHtml;
+      }
+    }
+
+    if (htmlBody.isEmpty ||
+        htmlBody.contains('Just a moment...') ||
+        htmlBody.contains('challenge-running') ||
+        htmlBody.contains('cf-chl-')) {
+      throw const HttpException(
+        'Cloudflare challenge encountered on Royal Road. Open in WebView to solve.',
+      );
+    }
+
+    return htmlBody;
+  }
+
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
     final cleanQuery = Uri.encodeComponent(query);
     final targetUrl = '$baseUrl/fictions/search?title=$cleanQuery&page=$page';
-
-    final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw HttpException('HTTP ${response.statusCode} on Royal Road.');
-    }
-    if (response.body.contains('Just a moment...')) {
-      throw const HttpException('Royal Road Cloudflare protection is active. Please select another source.');
-    }
-    return parseNovelList(response.body);
+    final html = await _fetchHtml(targetUrl);
+    return parseNovelList(html);
   }
 
   @override
   Future<List<Novel>> getPopular({int page = 1}) async {
     final targetUrl = '$baseUrl/fictions/weekly-popular?page=$page';
-
-    final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw HttpException('HTTP ${response.statusCode} on Royal Road.');
-    }
-    if (response.body.contains('Just a moment...')) {
-      throw const HttpException('Royal Road Cloudflare protection is active. Please select another source.');
-    }
-    return parseNovelList(response.body);
+    final html = await _fetchHtml(targetUrl);
+    return parseNovelList(html);
   }
 
   @override
   Future<List<Novel>> getLatest({int page = 1}) async {
     final targetUrl = '$baseUrl/fictions/latest-updates?page=$page';
-
-    final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw HttpException('HTTP ${response.statusCode} on Royal Road.');
-    }
-    if (response.body.contains('Just a moment...')) {
-      throw const HttpException('Royal Road Cloudflare protection is active. Please select another source.');
-    }
-    return parseNovelList(response.body);
+    final html = await _fetchHtml(targetUrl);
+    return parseNovelList(html);
   }
 
   List<Novel> parseNovelList(String htmlContent) {
@@ -150,11 +160,8 @@ class RoyalRoadExtractor implements NovelSource {
       throw Exception('Invalid fiction URL: $novelUrl is a genre or category link.');
     }
 
-    final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load Royal Road fiction details: HTTP ${response.statusCode}');
-    }
-    return parseNovelDetails(novelUrl, response.body);
+    final html = await _fetchHtml(novelUrl);
+    return parseNovelDetails(novelUrl, html);
   }
 
   Novel parseNovelDetails(String novelUrl, String htmlContent) {
@@ -219,11 +226,8 @@ class RoyalRoadExtractor implements NovelSource {
       throw Exception('Invalid fiction URL: $novelUrl is a genre or category link.');
     }
 
-    final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load Royal Road chapter list: HTTP ${response.statusCode}');
-    }
-    final chs = parseChapterList(novelUrl, response.body);
+    final html = await _fetchHtml(novelUrl);
+    final chs = parseChapterList(novelUrl, html);
     if (chs.isNotEmpty) onBatchLoaded?.call(chs);
     return chs;
   }
@@ -286,11 +290,8 @@ class RoyalRoadExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load Royal Road chapter content: HTTP ${response.statusCode}');
-    }
-    return parseChapterContent(chapterUrl, response.body);
+    final html = await _fetchHtml(chapterUrl);
+    return parseChapterContent(chapterUrl, html);
   }
 
   ChapterContent parseChapterContent(String chapterUrl, String htmlContent) {

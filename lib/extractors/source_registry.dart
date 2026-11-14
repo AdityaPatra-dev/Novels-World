@@ -17,6 +17,14 @@ import 'bespoke/standard_ebooks_extractor.dart';
 import 'bespoke/oceanofpdf_extractor.dart';
 import 'bespoke/vdocpub_extractor.dart';
 import 'bespoke/openlibrary_extractor.dart';
+import 'bespoke/royalroad_extractor.dart';
+import 'bespoke/scribblehub_extractor.dart';
+import 'bespoke/woopread_extractor.dart';
+import 'bespoke/relibrary_extractor.dart';
+import 'bespoke/clarkesworld_extractor.dart';
+import 'bespoke/lightspeed_extractor.dart';
+import 'bespoke/eastoftheweb_extractor.dart';
+import 'bespoke/uncanny_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -42,6 +50,14 @@ class SourceRegistry {
     'novelcool': NovelCoolExtractor(),
     'roliascan': RoliaScanExtractor(),
     'asurascans': AsuraScansExtractor(),
+    'royalroad': RoyalRoadExtractor(),
+    'scribblehub': ScribbleHubExtractor(),
+    'woopread': WoopReadExtractor(),
+    'relibrary': ReLibraryExtractor(),
+    'clarkesworld': ClarkesworldExtractor(),
+    'lightspeed': LightspeedExtractor(),
+    'eastoftheweb': EastOfTheWebExtractor(),
+    'uncannymagazine': UncannyExtractor(),
     'local_epub': LocalEpubExtractor(),
 
     // ==========================================

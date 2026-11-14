@@ -92,9 +92,9 @@ When the user taps the `[Download]` button on any novel, a clean bottom sheet op
 │ 🌐 Text Language:                                           │
 │ [ 🇮🇳 हिन्दी (Hindi)                               ▼ ]     │
 │                                                             │
-│ 🎧 Audio Settings:                                          │
-│ Voice: [ Swara (Expressive Female - Hindi)        ▼ ]       │
-│        [ ▶ Preview Voice (3s sample) ]                      │
+│ 🎧 Audio & Narrator Settings:                               │
+│ Narrator: [ Swara (Warm Storyteller - Female)    [Change] ] │
+│           [ ▶ Play Sample ]  "नमस्ते! उपन्यासों की दुनिया"  │
 │                                                             │
 │ ℹ️ Summary:                                                  │
 │ 10 Chapters • ~120 KB Text • ~12.4 MB Audio                 │
@@ -109,10 +109,25 @@ When the user taps the `[Download]` button on any novel, a clean bottom sheet op
    - `📖 Text Only`: Fast offline text reading (~10 KB/chapter).
    - `🎧 Audiobook Only`: Studio audio without translating text (~1.2 MB/chapter).
    - `🌟 Both (Text + Audio)`: Full visual reading + offline voice narration.
+
 2. **Friendly Language Selector with Native Scripts**:
    - Displays flags and native spellings so anyone can recognize their language: `🇮🇳 हिन्दी (Hindi)`, `🇪🇸 Español (Spanish)`, `🇯🇵 日本語 (Japanese)`, `🇫🇷 Français (French)`, `🇩🇪 Deutsch (German)`, `🇸🇦 العربية (Arabic)`, `🇨🇳 中文 (Chinese)`.
-3. **Voice Sample Preview Button (`[▶ Preview Voice]`)**:
-   - Tapping plays a 3-second friendly greeting in the chosen voice (e.g., *"नमस्ते! यह उपन्यासों की दुनिया है"*) so the user knows exactly how the narrator sounds before downloading.
+
+3. **Browse & Sample All Narrators Before Downloading (`NarratorSelectionSheet`)**:
+   - When the user taps **`[Change]`** or taps the narrator card:
+     - Opens the **Narrator Gallery Sheet** listing all available male and female narrators for that language.
+     - **Inline Preview Button on Every Narrator**: Each narrator card features an instant `[▶ Play Sample]` / `[⏸ Stop]` button.
+     - **Real-Time Sample Playback**: Tapping `[▶]` streams a crisp 3-second greeting in that language (e.g. English: *"Welcome to Novels World, enjoy the story."*; Hindi: *"उपन्यासों की दुनिया में आपका स्वागत है।"*; Spanish: *"Bienvenido al mundo de las novelas."*; Japanese: *"小説の世界へようこそ。"*).
+     - **Sample & Compare**: Users can tap and audition all narrators one by one, comparing their tone, timbre, and pacing:
+       - *Christopher* (Heroic Baritone • Deep & cinematic)
+       - *Jenny* (Warm Storyteller • Expressive & natural)
+       - *Guy* (Conversational • Relaxed modern tone)
+       - *Aria* (High-Clarity • Clear articulation)
+       - *Ryan* (Aristocratic Sage • Authoritative gravitas)
+       - *Swara* (Expressive Female • Natural Hindi cadence)
+       - *Madhur* (Authoritative Male • Deep Hindi storytelling)
+     - A checkmark marks the active selection; tapping **"Confirm Narrator"** sets their favorite narrator for the entire download batch!
+
 4. **Clear Space & Time Estimate**:
    - Prevents surprises by showing exact download size and time before starting.
 

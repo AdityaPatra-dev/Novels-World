@@ -1,3 +1,5 @@
+import 'language_voice_registry.dart';
+
 class VoiceProfile {
   final String id;
   final String displayName;
@@ -299,5 +301,90 @@ class VoiceCalibration {
       (p) => p.id == cleanId || voiceId.contains(p.id) || p.displayName.contains(voiceId),
       orElse: () => profiles.first,
     );
+  }
+
+  /// Returns tailored voice profiles for the specified language [langCode].
+  /// If English ('en'), returns the 8 signature studio personas.
+  /// For any other language (e.g. 'hi', 'es', 'ja', 'fr', etc.), dynamically constructs
+  /// native HD studio profiles from [LanguageVoiceRegistry].
+  static List<VoiceProfile> getProfilesForLanguage(String langCode) {
+    final code = langCode.toLowerCase().trim();
+    if (code == 'en' || code == 'en-us' || code == 'en-gb') {
+      return profiles;
+    }
+
+    final lang = LanguageVoiceRegistry.getByCode(code);
+    final results = <VoiceProfile>[];
+
+    // 1. Female Narrator
+    if (lang.defaultFemaleVoice.isNotEmpty) {
+      final femaleName = lang.defaultFemaleVoice.split('-').last.replaceAll('Neural', '');
+      results.add(
+        VoiceProfile(
+          id: lang.defaultFemaleVoice,
+          displayName: '$femaleName (Studio ${lang.englishName} • Female)',
+          description: 'Expressive, natural native ${lang.englishName} narration with emotional depth',
+          gender: 'Female',
+          accent: lang.flag,
+          basePitch: 1.0,
+          baseSpeed: 1.0,
+          targetVoiceKeywords: [lang.code, 'female'],
+        ),
+      );
+    }
+
+    // 2. Male Narrator
+    if (lang.defaultMaleVoice.isNotEmpty) {
+      final maleName = lang.defaultMaleVoice.split('-').last.replaceAll('Neural', '');
+      results.add(
+        VoiceProfile(
+          id: lang.defaultMaleVoice,
+          displayName: '$maleName (Studio ${lang.englishName} • Male)',
+          description: 'Resonant, authoritative native ${lang.englishName} narrator',
+          gender: 'Male',
+          accent: lang.flag,
+          basePitch: 0.95,
+          baseSpeed: 1.0,
+          targetVoiceKeywords: [lang.code, 'male'],
+        ),
+      );
+    }
+
+    // 3. Any additional voices from lang.voices
+    for (final v in lang.voices) {
+      final voiceId = v.split(' ').first.trim();
+      if (voiceId != lang.defaultFemaleVoice && voiceId != lang.defaultMaleVoice) {
+        final cleanName = voiceId.split('-').last.replaceAll('Neural', '');
+        final isFemale = v.toLowerCase().contains('female');
+        results.add(
+          VoiceProfile(
+            id: voiceId,
+            displayName: '$cleanName (Studio ${lang.englishName} • ${isFemale ? 'Female' : 'Male'})',
+            description: 'Studio AI voice for ${lang.englishName} literature',
+            gender: isFemale ? 'Female' : 'Male',
+            accent: lang.flag,
+            basePitch: 1.0,
+            baseSpeed: 1.0,
+            targetVoiceKeywords: [lang.code],
+          ),
+        );
+      }
+    }
+
+    // 4. System Device Fallback for this language
+    results.add(
+      VoiceProfile(
+        id: 'system_${lang.code}',
+        displayName: 'System Device Voice (${lang.englishName})',
+        description: 'On-device hardware voice synthesizer for ${lang.englishName}. 100% offline.',
+        gender: 'System',
+        accent: 'Device',
+        basePitch: 1.0,
+        baseSpeed: 1.0,
+        targetVoiceKeywords: [lang.code, 'default'],
+      ),
+    );
+
+    return results;
   }
 }

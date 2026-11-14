@@ -14,6 +14,7 @@ import 'engines/sherpa_engine.dart';
 import 'engines/system_fallback_engine.dart';
 import 'sleep_timer_service.dart';
 import 'services/web_speech_interop.dart';
+import 'language_voice_registry.dart';
 
 /// Rock-solid sequential audio playback manager with aggressive background pre-fetching,
 /// zero DSP pitch artifacts, and seamless cross-chapter continuity.
@@ -607,21 +608,29 @@ class RingBufferManager extends ChangeNotifier {
     );
   }
 
-  Future<void> previewVoice(String voice) async {
+  Future<void> previewVoice(String voice, [String? sampleText]) async {
     final wasPlaying = _isPlaying;
     if (wasPlaying) {
       await pause();
     }
 
-    String sample = 'Welcome to Novels World. The journey through the realms begins now.';
-    if (voice.contains('Christopher') || voice.contains('michael')) {
-      sample = 'The ancient gates of the Abyss slowly swung open, echoing through the cavern.';
-    } else if (voice.contains('Jenny') || voice.contains('bella')) {
-      sample = 'She looked across the mist-shrouded valley with a warm smile, ready for the adventure.';
-    } else if (voice.contains('Sonia') || voice.contains('emma')) {
-      sample = 'By royal decree of the high council, the forgotten chronicle shall now be unsealed.';
-    } else if (voice.contains('cjk') || voice.contains('sherpa')) {
-      sample = 'Fellow Daoist, the spiritual Qi of heaven and earth gathers within the Dantian.';
+    String sample = sampleText ?? '';
+    if (sample.isEmpty) {
+      final langCode = voice.contains('-') ? voice.split('-').first.toLowerCase() : currentLanguage;
+      final langConfig = LanguageVoiceRegistry.getByCode(langCode);
+      if (langCode != 'en' && langConfig.samplePhrase.isNotEmpty) {
+        sample = langConfig.samplePhrase;
+      } else if (voice.contains('Christopher') || voice.contains('michael')) {
+        sample = 'The ancient gates of the Abyss slowly swung open, echoing through the cavern.';
+      } else if (voice.contains('Jenny') || voice.contains('bella')) {
+        sample = 'She looked across the mist-shrouded valley with a warm smile, ready for the adventure.';
+      } else if (voice.contains('Sonia') || voice.contains('emma')) {
+        sample = 'By royal decree of the high council, the forgotten chronicle shall now be unsealed.';
+      } else if (voice.contains('cjk') || voice.contains('sherpa')) {
+        sample = 'Fellow Daoist, the spiritual Qi of heaven and earth gathers within the Dantian.';
+      } else {
+        sample = 'Welcome to Novels World. The journey through the realms begins now.';
+      }
     }
 
     await _activeEngine.speakSentenceDirect(

@@ -315,7 +315,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           InkWell(
-                            onTap: () => TtsSheet.showVoiceSwitcherModal(context, ttsManager, settingsProvider),
+                            onTap: () {
+                              final activeLang = reader.isTranslationActive
+                                  ? reader.targetLanguageCode
+                                  : ttsManager.currentLanguage;
+                              TtsSheet.showVoiceSwitcherModal(
+                                context,
+                                ttsManager,
+                                settingsProvider,
+                                currentLanguage: activeLang,
+                                onLanguageChanged: (newLang) {
+                                  if (newLang != 'en') {
+                                    reader.translateCurrentChapter(LanguageVoiceRegistry.getByCode(newLang));
+                                  } else {
+                                    reader.disableTranslation();
+                                  }
+                                },
+                              );
+                            },
                             borderRadius: BorderRadius.circular(8),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -330,7 +347,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                                   Icon(kIsWeb ? Icons.record_voice_over : Icons.psychology, size: 14, color: const Color(0xFF8B5CF6)),
                                   const SizedBox(width: 6),
                                   Text(
-                                    kIsWeb ? 'Voice' : ttsManager.activeEngine.name.split(' ').first,
+                                    reader.isTranslationActive && reader.targetLanguageCode != null
+                                        ? '${LanguageVoiceRegistry.getByCode(reader.targetLanguageCode!).flag} Voice'
+                                        : (kIsWeb ? 'Voice' : ttsManager.activeEngine.name.split(' ').first),
                                     style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,

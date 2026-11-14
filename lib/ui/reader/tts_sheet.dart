@@ -5,7 +5,9 @@ import '../../tts/ring_buffer_manager.dart';
 import '../../tts/tts_model_registry.dart';
 import '../../tts/voice_calibration.dart';
 import '../../tts/services/web_speech_interop.dart';
+import '../../tts/language_voice_registry.dart';
 import '../../providers/settings_provider.dart';
+import 'language_selection_modal.dart';
 
 class TtsSheet {
   static void showSleepTimerModal(BuildContext context, SleepTimerService sleepTimer) {
@@ -98,8 +100,10 @@ class TtsSheet {
   static void showVoiceSwitcherModal(
     BuildContext context,
     RingBufferManager ttsManager,
-    SettingsProvider settingsProvider,
-  ) {
+    SettingsProvider settingsProvider, {
+    String? currentLanguage,
+    void Function(String langCode)? onLanguageChanged,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -108,18 +112,22 @@ class TtsSheet {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (context) {
+        String currentLang = currentLanguage ?? ttsManager.currentLanguage;
+
         return StatefulBuilder(
           builder: (context, setState) {
             final activeEngine = ttsManager.activeEngine;
             final activeVoice = ttsManager.activeVoice;
             final modelInfo = TtsModelRegistry.getModel(activeEngine.id);
+            final langInfo = LanguageVoiceRegistry.getByCode(currentLang);
+            final isEnglish = currentLang == 'en' || currentLang == 'en-us' || currentLang == 'en-gb';
 
-            // Filter voice profiles to match current engine strictly according to modelInfo.voices
-            final relevantProfiles = VoiceCalibration.profiles.where((p) {
+            // Dynamically load voice profiles for the selected language
+            final relevantProfiles = VoiceCalibration.getProfilesForLanguage(currentLang).where((p) {
               if (activeEngine.id == TtsModelRegistry.systemId) {
-                return p.id == 'default';
+                return p.id.startsWith('system') || p.id == 'default';
               }
-              return modelInfo.voices.any((v) => v.startsWith(p.id));
+              return !p.id.startsWith('system');
             }).toList();
 
             final webVoices = kIsWeb ? getWebVoices() : const <Map<String, String>>[];
@@ -160,10 +168,79 @@ class TtsSheet {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Choose an AI reading model and fine-tune your listening experience',
+                        'Choose an AI reading model and speaker calibrated for your language',
                         style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 14),
+
+                      // Language Selector Bar
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1B1B28),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Text(langInfo.flag, style: const TextStyle(fontSize: 20)),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Reading & Voice Language', style: TextStyle(fontSize: 10.5, color: Colors.white60)),
+                                    Text(
+                                      '${langInfo.englishName} (${langInfo.nativeName})',
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            TextButton.icon(
+                              onPressed: () {
+                                LanguageSelectionModal.show(
+                                  context: context,
+                                  currentLanguageCode: currentLang,
+                                  isTranslationActive: currentLang != 'en',
+                                  onLanguageSelected: (lang) {
+                                    setState(() {
+                                      currentLang = lang.code;
+                                    });
+                                    ttsManager.currentLanguage = lang.code;
+                                    final defVoice = lang.defaultFemaleVoice.isNotEmpty
+                                        ? lang.defaultFemaleVoice
+                                        : (lang.defaultMaleVoice.isNotEmpty ? lang.defaultMaleVoice : 'en-US-JennyNeural');
+                                    ttsManager.setVoice(defVoice);
+                                    settingsProvider.updateTtsVoice(activeEngine.id, defVoice);
+                                    onLanguageChanged?.call(lang.code);
+                                  },
+                                  onDisableTranslation: () {
+                                    setState(() {
+                                      currentLang = 'en';
+                                    });
+                                    ttsManager.currentLanguage = 'en';
+                                    ttsManager.setVoice('en-US-ChristopherNeural');
+                                    settingsProvider.updateTtsVoice(activeEngine.id, 'en-US-ChristopherNeural');
+                                    onLanguageChanged?.call('en');
+                                  },
+                                );
+                              },
+                              icon: const Icon(Icons.language, size: 16, color: Color(0xFFA78BFA)),
+                              label: const Text('Change', style: TextStyle(color: Color(0xFFA78BFA), fontSize: 12, fontWeight: FontWeight.bold)),
+                              style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
 
                       // Engine Section (Mobile: full engine selector; Web: browser audio banner)
                       if (!kIsWeb) ...[
@@ -175,12 +252,20 @@ class TtsSheet {
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
-                            children: TtsModelRegistry.models.map((m) {
+                            children: (isEnglish
+                                ? TtsModelRegistry.models
+                                : TtsModelRegistry.models.where((m) =>
+                                    m.id == TtsModelRegistry.edgeNeuralId ||
+                                    m.id == TtsModelRegistry.systemId)
+                            ).map((m) {
                               final isSelected = activeEngine.id == m.id;
+                              final modelLabel = m.id == TtsModelRegistry.edgeNeuralId
+                                  ? (isEnglish ? 'Microsoft HD' : '${langInfo.englishName} Studio HD')
+                                  : (m.id == TtsModelRegistry.systemId ? 'Device TTS' : m.name.split(' ').first);
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8),
                                 child: ChoiceChip(
-                                  label: Text(m.name.split(' ').first),
+                                  label: Text(modelLabel),
                                   selected: isSelected,
                                   selectedColor: const Color(0xFF8B5CF6),
                                   backgroundColor: const Color(0xFF1E1E28),
@@ -192,8 +277,11 @@ class TtsSheet {
                                   onSelected: (sel) {
                                     if (sel) {
                                       ttsManager.switchEngine(m.id);
-                                      ttsManager.setVoice(m.defaultVoice);
-                                      settingsProvider.updateTtsVoice(m.id, m.defaultVoice);
+                                      final targetVoice = m.id == TtsModelRegistry.systemId
+                                          ? 'system_$currentLang'
+                                          : (langInfo.defaultFemaleVoice.isNotEmpty ? langInfo.defaultFemaleVoice : m.defaultVoice);
+                                      ttsManager.setVoice(targetVoice);
+                                      settingsProvider.updateTtsVoice(m.id, targetVoice);
                                       setState(() {});
                                     }
                                   },
@@ -222,7 +310,7 @@ class TtsSheet {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      modelInfo.category,
+                                      isEnglish ? modelInfo.category : '${langInfo.englishName} Native Studio Model',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
@@ -231,7 +319,9 @@ class TtsSheet {
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      modelInfo.description,
+                                      isEnglish
+                                          ? modelInfo.description
+                                          : 'High-definition neural AI speakers calibrated specifically for ${langInfo.englishName} (${langInfo.nativeName}) literature.',
                                       style: const TextStyle(fontSize: 11, color: Colors.white70, height: 1.3),
                                     ),
                                   ],
@@ -474,6 +564,7 @@ class TtsSheet {
                             ),
                             onTap: () {
                               ttsManager.setVoice(profile.id);
+                              ttsManager.currentLanguage = currentLang;
                               settingsProvider.updateTtsVoice(activeEngine.id, profile.id);
                               setState(() {});
                             },

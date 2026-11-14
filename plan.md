@@ -18,7 +18,7 @@ Previously, reading and downloading in novel apps was rigidly one-dimensional:
 ### The Solution: A Complete, User-Friendly Audio & Reading Ecosystem
 This plan introduces a cohesive, intuitive feature set designed specifically for everyday, non-technical readers:
 - **1-Tap Dual-Track Downloader**: When downloading chapters (e.g. *Shadow Slave* Ch 1–10), the user can effortlessly choose their preferred text language (e.g. Hindi), check `[🎧 Download Audio too]`, choose the voice, and download both text and studio-grade audio in one go.
-- **In-Reader Translation Symbol (`Icons.translate`)**: A translation button right in the top app bar transforms the novel text into Hindi (or any of 70+ languages) with one tap, with synchronized Hindi speech highlighting.
+- **In-Reader Translation Symbol (`Icons.translate`)**: Tapping the translation button in the top app bar immediately pops up a clean, completely unbiased **Language Selection Modal** with search and native scripts. The user can freely choose any target language from 70+ global languages, and the chapter text immediately translates with synchronized native voice speech highlighting.
 - **"Listen-to-Save" Audio Assembly**: Listening to TTS while reading automatically retains and stitches the audio into permanent chapter `.mp3` audiobooks.
 - **Downloads Tab Badging**: In the Downloads tab, chapters clearly display colorful badges: **`[offline]`** for text and **`[audio_hi]`** for Hindi audio (or `audio_en`, `audio_es`, etc.).
 - **1-Click Portable `.zip` Backup & Migration**: An Export/Import window packages all novels, chapters, audiobooks, and progress into a single `.zip` file on phone storage. Reinstalling the app and picking the `.zip` file instantly restores everything.
@@ -118,7 +118,7 @@ When the user taps the `[Download]` button on any novel, a clean bottom sheet op
 
 ---
 
-### Pillar 2: In-Reader Live Translation & Bilingual Helper (`ReaderScreen`)
+### Pillar 2: In-Reader Translation Action & Unbiased Language Selection (`ReaderScreen`)
 
 #### Top App Bar Integration:
 In [`ReaderScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/reader_screen.dart), an international translation symbol (`Icons.translate`) sits beside the TTS button:
@@ -127,23 +127,30 @@ In [`ReaderScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/u
 [ ← Back ]  Chapter 1: The First Nightmare      [ 文A ]  [ 🎧 TTS ]  [ Aa ]
 ```
 
-#### Interactive Behavior:
-1. **1-Tap Toggle**:
-   - Tapping `[文A]` opens a smooth modal:
-     - Switch: **"Translate Chapter"** (ON / OFF).
-     - Target Language: Quick chips for recent languages (`Hindi`, `Spanish`, `Japanese`, etc.).
+#### Interactive Behavior & Language Selection Modal:
+1. **Immediate Language Selection Popup on Tap**:
+   - Tapping `[文A]` **immediately pops up the Language Selection Modal** (never hardcoded or biased towards any specific language).
+   - The modal features:
+     - **Quick Status Header**: Shows current reading mode (`Original` vs `Translated`) with a 1-tap toggle switch to enable/disable translation.
+     - **Search Bar**: Quick search filter across 70+ supported global languages by English name or native name (e.g., typing *"Esp"*, *"Hin"*, *"Jap"*, *"Fra"*, *"Deu"*).
+     - **Unbiased Global Language List**: Displays all supported languages with their flag, localized English name, and native script name (e.g. `🇪🇸 Spanish (Español)`, `🇯🇵 Japanese (日本語)`, `🇮🇳 Hindi (हिन्दी)`, `🇫🇷 French (Français)`, `🇩🇪 German (Deutsch)`, `🇸🇦 Arabic (العربية)`, `🇨🇳 Chinese (中文)`, `🇵🇹 Portuguese (Português)`, `🇷🇺 Russian (Русский)`, `🇰🇷 Korean (한국어)`, `🇮🇹 Italian (Italiano)`, etc.).
+     - **Recent / Pinned Languages**: If the user has used languages before, their recent picks appear at the top for convenience, without imposing any defaults.
+   - When the user selects a language, the modal closes and the chapter text is dynamically translated into that chosen language.
+
 2. **Active State Banner**:
-   - When active, an elegant dismissible banner appears below the AppBar:
-     `"Translated to Hindi • Tap [文A] to switch back to English"`.
-   - The chapter text dynamically re-renders in Hindi (Devanagari script).
+   - When translation is active, an elegant dismissible banner appears below the AppBar:
+     `"Translated to {Language Name} • Tap [文A] to change language or turn off"`.
+   - The chapter text dynamically re-renders in the selected language.
+
 3. **Bilingual Long-Press Helper**:
    - If a translated fantasy term, character name, or ability looks unfamiliar:
-   - Long-pressing any translated paragraph surfaces a lightweight floating tooltip showing the **original English text**!
-4. **Synchronized Multilingual TTS Playback**:
-   - When the user taps the **TTS Audio Button** while Hindi is active:
-     - The reader automatically speaks the chapter in Hindi using `hi-IN-SwaraNeural`.
-     - Spoken Hindi sentences highlight in real time as the audio flows.
-     - In [`TtsSheet`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/tts_sheet.dart), the reader can freely switch voices or pitch.
+   - Long-pressing any translated paragraph surfaces a lightweight floating tooltip showing the **original source text**!
+
+4. **Synchronized Multilingual TTS Playback in Selected Language**:
+   - When the user taps the **TTS Audio Button** while translation is active:
+     - The reader automatically speaks the chapter in the **user's selected language** using that language's highest-fidelity studio neural voice (e.g. `es-ES-ElviraNeural` for Spanish, `ja-JP-NanamiNeural` for Japanese, `hi-IN-SwaraNeural` for Hindi, `fr-FR-DeniseNeural` for French, etc.).
+     - Spoken translated sentences highlight in real time as the audio flows.
+     - In [`TtsSheet`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/tts_sheet.dart), the reader can freely switch voices, rate, or pitch within that language.
 
 ---
 

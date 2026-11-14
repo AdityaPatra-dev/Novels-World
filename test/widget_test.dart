@@ -13,6 +13,7 @@ import 'package:novels_world/data/download_service.dart';
 import 'package:novels_world/providers/library_provider.dart';
 import 'package:novels_world/providers/reader_provider.dart';
 import 'package:novels_world/providers/settings_provider.dart';
+import 'package:novels_world/providers/audiobook_player_provider.dart';
 import 'package:novels_world/main.dart';
 
 class _TestHttpOverrides extends HttpOverrides {}
@@ -98,6 +99,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => LibraryProvider(storageService)),
           ChangeNotifierProvider(create: (_) => ReaderProvider(storageService)),
           ChangeNotifierProvider(create: (_) => DownloadService(storageService)),
+          ChangeNotifierProvider(create: (_) => AudiobookPlayerProvider(storageService: storageService)),
         ],
         child: const NovelsWorldApp(),
       ),

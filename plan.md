@@ -126,28 +126,55 @@ class AudiobookDownloadTask {
 
 ---
 
-### Pillar 4: Multilingual & Translation Audiobook Pipeline
+### Pillar 4: Multilingual Translation & Dual-Track (Visual + Audio) Reading Experience
 
-#### The Problem:
-- Readers often read foreign raw light novels (e.g. Kakuyomu in Japanese, WuxiaBox raws in Chinese, Riwyat in Arabic) or want English novels narrated in Spanish, French, German, or Hindi.
+#### The User Scenario:
+> *"Suppose there is a novel in English and a person who knows only Hindi wants to read it. We add a translation symbol in the reader so if checked, the user can select Hindi (or any language) and it displays the translated text. When the user taps for audio, they can select the language and the audio comes out in that language too."*
 
-#### Architecture:
+#### 1. In-Reader Translation Action Symbol (`Icons.translate`):
+- **Location**: Top AppBar of [`ReaderScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/reader_screen.dart), directly adjacent to the TTS button.
+- **Visual State**:
+  - `Inactive`: Outline icon (`Icons.translate_outlined` or `g_translate`).
+  - `Active`: Highlighted purple accent badge (`[文A]` with selected language pill, e.g. `HI` / `ES`).
+- **Interaction**:
+  - Tapping the icon opens the **Language & Translation Modal**:
+    - **Toggle Translation**: Switch ON / OFF.
+    - **Target Language Selector**: Quick chips for popular languages (Hindi `हिन्दी`, Spanish `Español`, Japanese `日本語`, French `Français`, German `Deutsch`, Arabic `العربية`, Chinese `中文`, etc.) plus a full searchable language list.
+    - **Display Mode**:
+      - *Replaced Text*: Shows the novel text purely translated in the chosen language.
+      - *Bilingual Interlinear (Optional)*: Shows original sentence followed by translated sentence below it (ideal for language learners).
+
+#### 2. Live Translation Pipeline (`TranslationService`):
 ```dart
 abstract class TranslationService {
   Future<String> translateText(String text, {required String sourceLang, required String targetLang});
+  Future<List<String>> translateParagraphs(List<String> paragraphs, {required String sourceLang, required String targetLang});
   Future<List<String>> translateSentences(List<String> sentences, {required String sourceLang, required String targetLang});
 }
 ```
+- **Caching**: Translated chapters are cached locally under `translations/<novelId>/<chapterId>_<lang>.json` in [`StorageService`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/data/storage_service.dart). Once a chapter is translated to Hindi, scrolling back and forth or reopening the chapter renders instantly with 0 network delay.
+- **Provider**: High-speed free web translation (Google Translate GTX endpoint) with zero configuration, plus optional Gemini/OpenAI key support for literary fantasy terms.
 
-#### Translation Providers:
-1. **Free High-Speed Web Translation** (Default, zero API key needed):
-   - Endpoint: `https://translate.googleapis.com/translate_a/single?client=gtx&sl={src}&tl={target}&dt=t&q={encoded}`
-   - Fast, reliable, and handles 50–100 sentences per chapter in small batches without user setup.
-2. **AI LLM Translation (Optional / User Configurable)**:
-   - For users with a Gemini API Key or OpenAI Key in app settings:
-   - Preserves literary tone, fantasy honorifics (e.g. *senpai*, *cultivation ranks*, *daoist terms*), and narrative voice.
+#### 3. Harmonized Multilingual TTS Audio Playback:
+- When translation is active (e.g. Hindi `hi`), tapping the **Listen via TTS** button automatically:
+  1. Supplies the translated Hindi sentences to [`RingBufferManager`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/tts/ring_buffer_manager.dart).
+  2. Automatically defaults the speech synthesizer to the best matching native neural voice:
+     - Hindi `hi` $\rightarrow$ `hi-IN-SwaraNeural` (Natural Female) / `hi-IN-MadhurNeural` (Authoritative Male).
+     - Spanish `es` $\rightarrow$ `es-ES-ElviraNeural` / `es-ES-AlvaroNeural`.
+     - Japanese `ja` $\rightarrow$ `ja-JP-NanamiNeural` / `ja-JP-KeitaNeural`.
+  3. Highlights the translated words/sentences in sync with speech on the screen!
+- **Voice / Language Switcher in Audio Sheet**:
+  - Inside [`TtsSheet`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/reader/tts_sheet.dart), a "Language & Voice" dropdown allows the reader to freely toggle between listening in the Original Source Language or Translated Language.
 
-#### Neural Voice Mapping Matrix:
+#### 4. "Listen-to-Save" Translated Audiobook Assembly:
+- When the reader enables **"Save TTS as Offline Audiobook"** while listening to the Hindi translation:
+  - The synthesized Hindi MP3 chunks are automatically concatenated into:
+    `audiobooks/<novelId>/<chapterId>_hi.mp3`.
+  - The user now possesses a complete, permanent **Hindi Audiobook** of that English novel stored on their device!
+
+---
+
+### Pillar 5: Neural Voice Mapping Matrix
 When translating or synthesizing in different languages, the system dynamically maps the target language to the best studio-grade Microsoft Neural voice:
 
 | Language Code | Language Name | Recommended Female Voice | Recommended Male Voice |

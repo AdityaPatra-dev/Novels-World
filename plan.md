@@ -284,15 +284,31 @@ Designed for relaxed, hands-free listening:
 ### Pillar 7: Portable Backup & Migration (.ZIP Export & Import)
 
 #### The User Scenario:
-> *"Suppose the user wants to delete or reinstall the application, or move to a new phone, but wants to keep all downloaded novels and audiobooks. We add an export window that bundles all downloaded novels, text chapters, and audiobooks into a structured `.zip` archive saved to their phone. When re-installing the app, they select Import, choose the `.zip`, and all novels, chapters, `offline` and `audio_hi` tags, and audiobooks are instantly restored."*
+> *"Suppose the user wants to delete or reinstall the application, or move to a new phone, but wants to keep all downloaded novels and audiobooks. We provide an export window that bundles all downloaded novels, text chapters, and audiobooks into a structured `.zip` archive saved to their phone. Users can choose either a **single monolithic `.zip`** or **1.5 GB batched split archives** (for FAT32 / cloud upload compatibility). After export, the app clearly displays the exact destination path with 1-tap folder opening. The export is strictly read-only with zero modifications to existing app data. When re-installing the app, they select Import, choose the `.zip` file(s), and all novels, chapters, `offline` and `audio_hi` tags, and audiobooks are seamlessly restored without loss or corruption."*
 
-#### 1. Backup Directory & Internal Zip Specification:
-Using pure-Dart `package:archive/archive.dart` (`ZipEncoder` / `ZipDecoder`):
+---
+
+#### 1. Dual Export Modes: Single Monolithic vs. 1.5 GB Batched Splits
+
+Users have diverse device constraints, cloud storage limits, and file system requirements. The Export dialog provides two distinct packaging modes:
+
+| Feature / Mode | Mode A: Single Monolithic `.zip` | Mode B: 1.5 GB Batched Splits (`_part01_of_03.zip`) |
+| :--- | :--- | :--- |
+| **Best For** | Fast backups, desktop/PC storage, modern file systems | Android FAT32 SD cards (4 GB cap), Telegram / WhatsApp (1.5 GB/2 GB cap), unstable cloud uploads |
+| **File Structure** | `novels_world_backup_YYYYMMDD_HHMM.zip` | `novels_world_backup_YYYYMMDD_part01_of_03.zip`<br/>`novels_world_backup_YYYYMMDD_part02_of_03.zip`<br/>`novels_world_backup_YYYYMMDD_part03_of_03.zip` |
+| **Boundary Logic** | Everything in one continuous archive | **Atomic Chapter Integrity**: Files are never severed mid-stream. If adding the next 15 MB chapter MP3 would exceed 1.5 GB (~1,610,612,736 bytes), the current volume closes cleanly and the next begins. |
+| **Independent Usability** | Full backup in one file | **Self-Contained Restoration**: Each part is a valid, independently openable standard ZIP. Part 1 always contains core manifest, settings, and novels metadata so text reading is restorable even before all parts download. |
+
+---
+
+#### 2. Backup Directory & Internal Zip Specification:
+
+Using pure-Dart `package:archive/archive.dart` (`ZipFileEncoder` / `ZipDecoder`):
 
 ```
-novels_world_backup_YYYYMMDD_HHMM.zip
-├── manifest.json                                  <-- App version, backup date, novel registry index
-├── settings.json                                  <-- Reader preferences, active voices, translation prefs
+novels_world_backup_YYYYMMDD_part01_of_02.zip
+├── manifest.json                                  <-- Master manifest (version, backup date, novel index, CRC32 hashes)
+├── settings.json                                  <-- Reader preferences, font size, active voices, translation prefs
 └── novels/
     └── shadow_slave/
         ├── metadata.json                          <-- Novel model (title, author, genres, cover URL, source)
@@ -307,36 +323,128 @@ novels_world_backup_YYYYMMDD_HHMM.zip
             └── ...
 ```
 
-#### 2. Export Window Workflow (`BackupService.exportToZip`):
-1. In [`DownloadsScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/downloads/downloads_screen.dart), tap the **[Backup & Migration]** icon in the AppBar (`Icons.archive_outlined`).
-2. Opens the **Backup & Migration Dialog**:
-   - Summary Card: Shows total items to be backed up:
-     `"3 Novels • 45 Text Chapters • 20 Audiobooks • Total Size: ~24.5 MB"`.
-   - Options checkboxes:
-     - `[x] Include Offline Text & Library History`
-     - `[x] Include Offline Audiobooks (.mp3)`
-3. User taps **[📦 Export Backup (.zip)]**:
-   - Generates `manifest.json`.
-   - Packages novels, chapters, translated files, audiobooks, and covers.
-   - Shows live progress bar (`0% -> 100%`).
-   - Uses `FilePicker.platform.saveFile(...)` to let the user save `novels_world_backup_<date>.zip` into their Phone Downloads, SD Card, or Google Drive.
-   - Shows success toast: *"✅ Backup successfully saved to your device!"*.
+##### Master Manifest Schema (`manifest.json`):
+```json
+{
+  "app_version": "1.2.0",
+  "schema_version": 1,
+  "created_at": "2026-11-14T20:30:00Z",
+  "is_batched": true,
+  "volume_index": 1,
+  "total_volumes": 2,
+  "batch_max_bytes": 1610612736,
+  "total_novels": 3,
+  "total_chapters": 45,
+  "total_audiobooks": 20,
+  "novels": [
+    {
+      "id": "shadow_slave",
+      "title": "Shadow Slave",
+      "author": "Guiltythree",
+      "source_key": "novelfire",
+      "offline_text_count": 10,
+      "audiobook_count": 10,
+      "audio_languages": ["hi"]
+    }
+  ],
+  "entries": [
+    {
+      "path": "novels/shadow_slave/chapters/chapter_1.json",
+      "byte_size": 12480,
+      "crc32": "a4f89d12",
+      "type": "text"
+    },
+    {
+      "path": "novels/shadow_slave/audio/chapter_1_hi.mp3",
+      "byte_size": 13421772,
+      "crc32": "7b2e401c",
+      "type": "audiobook"
+    }
+  ]
+}
+```
 
-#### 3. Import Window Workflow (`BackupService.importFromZip`):
-1. On a fresh app installation or new phone, user goes to Downloads tab $\rightarrow$ taps **[Backup & Migration]** $\rightarrow$ taps **[📥 Import Backup (.zip)]**.
-2. Opens file picker via `FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['zip'])`.
-3. User selects their saved backup `.zip` file.
-4. **Pre-Import Verification Summary**:
-   - App inspects `manifest.json` and presents a confirmation dialog:
-     `"Found Backup from Nov 14, 2026: 3 Novels (Shadow Slave, Lord of the Mysteries...), 45 Chapters, 20 Audiobooks. Restore now?"`
-5. Tapping **[Confirm Restore]**:
-   - Safely extracts text chapters into `${storage.appDocumentsDirectoryPath}/chapters/`.
-   - Extracts translated chapters into `${storage.appDocumentsDirectoryPath}/translations/`.
-   - Extracts `.mp3` audio files into `${storage.appDocumentsDirectoryPath}/audiobooks/{novelId}/`.
-   - Restores novel metadata and reading progress in [`StorageService`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/data/storage_service.dart).
-6. **Immediate UI Refresh**:
-   - Both **Library** and **Downloads** tabs refresh instantly.
-   - *Shadow Slave* appears with its 10 chapters, the **`[offline]`** and **`[audio_hi]`** badges are active, and tapping **`[🎧 Play]`** plays the Hindi audio immediately without needing an internet connection!
+---
+
+#### 3. Strict Zero App Data Mutation & Memory Safety (Read-Only Guarantee)
+
+1. **Read-Only Operation on Existing App Data**:
+   - The export service treats the local application directory (`appDocumentsDirectoryPath`) as **strictly read-only**.
+   - No files are moved, renamed, locked, or deleted during export.
+   - User reading history, bookmarks, in-progress downloads, and active reader sessions remain untouched and running smoothly in parallel without interruption.
+2. **Streaming Compression & Memory Protection**:
+   - Instead of buffering multi-gigabyte audio files in device RAM (which causes `OutOfMemoryError` on mobile devices), `ZipFileEncoder` streams data using a 64 KB memory chunk buffer directly into the target `.zip` file on disk.
+   - Peak RAM usage during export remains strictly below **45 MB**, even when backing up 10 GB of audiobooks.
+
+---
+
+#### 4. Export Workflow & Clear Destination Path Presentation
+
+1. In [`DownloadsScreen`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/ui/downloads/downloads_screen.dart), tap the **[Backup & Migration]** icon in the AppBar (`Icons.archive_outlined`).
+2. **Export Configuration Dialog**:
+   - **Summary Card**: Shows total backup payload:
+     `"3 Novels • 45 Text Chapters • 20 Audiobooks • Total Size: ~2.4 GB"`.
+   - **Backup Format Selector**:
+     - `◉ 1.5 GB Batched Splits (Recommended for Cloud & Phone Transfers)`
+     - `○ Single Monolithic .zip File`
+   - **Include Content Checkboxes**:
+     - `[x] Include Text Chapters & Reading History (~2.1 MB)`
+     - `[x] Include Offline Audiobooks (.mp3) (~2.4 GB)`
+   - **Destination Folder**: Shows default backup directory (e.g. `/storage/emulated/0/Download/NovelsWorld_Backups/`) with a `[Change Folder]` option.
+3. User taps **[📦 Start Export]**:
+   - Real-time animated progress bar with volume indicator: `"Packaging Part 1 of 2 (68%) • Shadow Slave Ch. 8..."`.
+   - Generates files directly in the target directory without touching internal databases.
+4. **Post-Export Completion & Path Verification Dialog**:
+   Upon completion, a comprehensive confirmation window appears:
+   ```
+   ┌─────────────────────────────────────────────────────────────┐
+   │ ✅ Backup Successfully Exported!                             │
+   ├─────────────────────────────────────────────────────────────┤
+   │ 📂 Destination Location:                                    │
+   │ /storage/emulated/0/Download/NovelsWorld_Backups/           │
+   │                                           [ 📋 Copy Path ]  │
+   │                                                             │
+   │ 📦 Exported Files (2 Volumes • 2.4 GB total):                │
+   │ • novels_world_backup_20261114_part01_of_02.zip   (1.48 GB) │
+   │ • novels_world_backup_20261114_part02_of_02.zip   (940 MB)  │
+   │                                                             │
+   │ ℹ️ All local novel data and reading history remain intact.  │
+   ├─────────────────────────────────────────────────────────────┤
+   │ [ 📤 Share Backup ]          [ 📂 Open in Files / Explorer ] │
+   └─────────────────────────────────────────────────────────────┘
+   ```
+   - **`[📋 Copy Path]`**: Copies absolute path to system clipboard with an instant confirmation toast.
+   - **`[📂 Open in Files / Explorer]`**: Immediately opens the native file explorer (Files on Android, Finder on macOS, Explorer on Windows) positioned directly at the backup folder.
+   - **`[📤 Share Backup]`**: Triggers native share sheet to quickly dispatch backup files to Google Drive, Telegram, AirDrop, or local PC.
+
+---
+
+#### 5. Import Workflow: Multi-Volume Assembly & Safe Deduplication
+
+1. **User Action**: On a new phone or clean installation, user taps **[Backup & Migration]** $\rightarrow$ **[📥 Import Backup (.zip)]**.
+2. **File Selection**:
+   - User picks either the single `.zip` OR selects all/any of the batched `.zip` files (e.g. selecting `part01` and `part02` together).
+3. **Pre-Import Validation & Integrity Inspection**:
+   - Reads `manifest.json` from each selected archive.
+   - Verifies CRC32 checksums to ensure zero file corruption during device transfer.
+   - Evaluates missing parts: If only `part01_of_02.zip` is selected, the UI gracefully notes:
+     `"⚠️ Part 2 not found: 10 audiobooks from Shadow Slave will be skipped, but all text chapters and Part 1 audiobooks will be fully restored."`
+   - **Inspection Summary Dialog**:
+     `"Found Backup from Nov 14, 2026: 3 Novels (Shadow Slave, Lord of the Mysteries...), 45 Text Chapters, 20 Audiobooks. Restore now?"`
+   - **Deduplication / Conflict Resolution Mode**:
+     - `◉ Safe Merge (Recommended)`: Skips already existing identical chapters; only imports new chapters and missing audiobooks without overwriting recent reading positions.
+     - `○ Replace All`: Overwrites local chapters with backup versions.
+4. **Atomic Restoration Execution**:
+   - Files are unpacked into a temporary staging folder (`${storage.appDocumentsDirectoryPath}/.import_staging/`).
+   - Text chapters move to `${storage.appDocumentsDirectoryPath}/chapters/`.
+   - Translated chapters move to `${storage.appDocumentsDirectoryPath}/translations/`.
+   - Audiobooks move to `${storage.appDocumentsDirectoryPath}/audiobooks/{novelId}/`.
+   - Novel metadata, reading history, and tags are atomically committed to [`StorageService`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/data/storage_service.dart).
+   - Staging directory is cleanly deleted.
+5. **Instant Reactive Refresh**:
+   - Library and Downloads views automatically reload.
+   - *Shadow Slave* and other restored novels immediately display with correct chapter counts, **`[offline]`** and **`[audio_hi]`** badge pills.
+   - Tapping **`[🎧 Play]`** on any chapter plays the restored audio immediately with **0 seconds latency and zero internet requirement**!
 
 ---
 
@@ -396,10 +504,18 @@ In [`NovelStorageModal`](file:///home/adityapatra/Documents/GitHub/Novels-World/
 - [ ] Update `NovelStorageModal` to display and purge audiobook storage.
 
 ### Phase 5: Portable Backup & Migration (.ZIP Export & Import)
-- [ ] Implement `BackupService` ([`lib/core/services/backup_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/core/services/backup_service.dart)) using `package:archive` (`ZipEncoder` & `ZipDecoder`).
-- [ ] Add Backup & Migration Modal in `DownloadsScreen` (`[Import / Export Backup]`).
-- [ ] Verify export creates valid `.zip` with manifest, novels, text chapters, and audio files.
-- [ ] Verify import seamlessly extracts, restores preferences, novel cards, badges, and offline playback.
+- [ ] Implement `BackupService` ([`lib/core/services/backup_service.dart`](file:///home/adityapatra/Documents/GitHub/Novels-World/lib/core/services/backup_service.dart)) supporting:
+  - **Mode A**: Single monolithic `.zip` archive.
+  - **Mode B**: 1.5 GB batched split archives (`_part01_of_N.zip`) with atomic chapter boundary calculation and individual part validity.
+  - **Read-Only Safety**: Strict zero mutation of existing app databases, reading history, or audio files.
+  - **Destination Path Surface**: Reports full destination directory, file sizes, and triggers folder view / share sheet.
+  - **Safe Merge Import**: CRC32 integrity verification, temporary staging unpack, deduplication with existing local chapters, and atomic commit to `StorageService`.
+- [ ] Implement Backup & Migration Modal in `DownloadsScreen` (`[Import / Export Backup]`) with mode selector, progress streaming, and post-export destination card with `[📋 Copy Path]`, `[📂 Open in Files]`, and `[📤 Share]`.
+- [ ] Write comprehensive unit tests in `test/backup_service_test.dart` verifying:
+  - Monolithic export & extraction.
+  - 1.5 GB split volume generation and multi-part manifest reconstruction.
+  - Preservation of app data integrity (verifying original files are unmodified before and after export).
+  - Safe merge behavior when importing over pre-existing novels.
 
 ### Phase 6: Audiobook Player UI & Verification
 - [ ] Build floating Audiobook Mini Player and Full-Screen Audiobook Player modal with sleep timer, speed dial, and seek bar.

@@ -72,25 +72,39 @@ class AllFreeNovelExtractor implements NovelSource {
     return _parseBookGrid(url);
   }
 
-  Future<List<Novel>> _parseBookGrid(String url) async {
-    String html = '';
+  Future<String> _fetchHtml(String url) async {
+    String htmlBody = '';
     try {
       final response = await _client.get(Uri.parse(url), headers: _headers);
-      if (response.statusCode == 200) {
-        html = response.body;
+      if (response.statusCode == 200 &&
+          !response.body.contains('Just a moment...') &&
+          !response.body.contains('challenge-running') &&
+          !response.body.contains('cf-chl-')) {
+        htmlBody = response.body;
       }
     } catch (_) {}
 
-    if (html.isEmpty || html.contains('Just a moment...')) {
+    if (htmlBody.isEmpty) {
       final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
       if (wvHtml != null && wvHtml.isNotEmpty) {
-        html = wvHtml;
+        htmlBody = wvHtml;
       }
     }
 
-    if (html.isEmpty) {
-      return [];
+    if (htmlBody.isEmpty ||
+        htmlBody.contains('Just a moment...') ||
+        htmlBody.contains('challenge-running') ||
+        htmlBody.contains('cf-chl-')) {
+      throw const HttpException(
+        'Cloudflare challenge encountered on AllFreeNovel. Open in WebView to solve.',
+      );
     }
+
+    return htmlBody;
+  }
+
+  Future<List<Novel>> _parseBookGrid(String url) async {
+    final html = await _fetchHtml(url);
 
     final doc = html_parser.parse(html);
     final novelList = <Novel>[];
@@ -167,25 +181,7 @@ class AllFreeNovelExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
-    String html = '';
-    try {
-      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-      if (response.statusCode == 200) {
-        html = response.body;
-      }
-    } catch (_) {}
-
-    if (html.isEmpty || html.contains('Just a moment...')) {
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
-      if (wvHtml != null && wvHtml.isNotEmpty) {
-        html = wvHtml;
-      }
-    }
-
-    if (html.isEmpty) {
-      throw HttpException('Failed to load novel details from AllFreeNovel ($novelUrl)');
-    }
-
+    final html = await _fetchHtml(novelUrl);
     final doc = html_parser.parse(html);
 
     final rawTitle = doc.querySelector('h1')?.text.trim() ?? 'Untitled';
@@ -247,25 +243,7 @@ class AllFreeNovelExtractor implements NovelSource {
     String novelUrl, {
     void Function(List<Chapter> batch)? onBatchLoaded,
   }) async {
-    String html = '';
-    try {
-      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-      if (response.statusCode == 200) {
-        html = response.body;
-      }
-    } catch (_) {}
-
-    if (html.isEmpty || html.contains('Just a moment...')) {
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
-      if (wvHtml != null && wvHtml.isNotEmpty) {
-        html = wvHtml;
-      }
-    }
-
-    if (html.isEmpty) {
-      return [];
-    }
-
+    final html = await _fetchHtml(novelUrl);
     final doc = html_parser.parse(html);
     final pageListContainer = doc.querySelector('#PageList');
     if (pageListContainer == null) {
@@ -304,25 +282,7 @@ class AllFreeNovelExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    String html = '';
-    try {
-      final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
-      if (response.statusCode == 200) {
-        html = response.body;
-      }
-    } catch (_) {}
-
-    if (html.isEmpty || html.contains('Just a moment...')) {
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(chapterUrl);
-      if (wvHtml != null && wvHtml.isNotEmpty) {
-        html = wvHtml;
-      }
-    }
-
-    if (html.isEmpty) {
-      throw HttpException('Failed to load chapter content from $chapterUrl');
-    }
-
+    final html = await _fetchHtml(chapterUrl);
     final doc = html_parser.parse(html);
 
     final rawParas = <String>[];

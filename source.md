@@ -47,7 +47,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **Standard Ebooks** | `https://standardebooks.org` | Open Git / Static HTML / OPDS | High-typography, beautifully typeset public domain modern editions. High fantasy, gothic fantasy, classical worlds. Fully working with direct EPUB pipeline. | [x] Working |
 | **Baen Free Library** | `https://www.baen.com/allbooks/category/index/id/2012` | Clean HTML / Free Catalog | Legitimate free, full-length fantasy and sci-fi novels from commercial authors (Mercedes Lackey, David Weber, etc.). | [ ] Inspected |
-| **Faded Page** | `https://www.fadedpage.com` | Clean HTML & EPUB archive | Canadian public domain archive covering post-1928 masterworks (Sylvia Plath, Hemingway, Orwell). Note: EPUB downloads gated behind Google reCAPTCHA. | [!] reCAPTCHA Gated |
+| **Faded Page** | `https://www.fadedpage.com` | Bespoke (`FadedPageExtractor`) | Canadian public domain archive covering 9,200+ masterworks (Sylvia Plath, Hemingway, Orwell, Sherlock Holmes). Fast JSON catalog + in-app EPUB download pipeline. | [x] Working |
 | **Open Library** | `https://openlibrary.org` | Internet Archive REST API | Millions of digitized books with public open editions across epic fantasy, history, and mythology. Fully working in app. | [x] Working |
 | **ManyBooks Fantasy** | `https://manybooks.net/categories/fantasy` | Clean CMS / EPUB | Over 10,000+ curated fantasy novels categorized by epic, historical, and dark fantasy. | [ ] Working |
 | **Global Grey Ebooks** | `https://www.globalgreyebooks.com/category/fiction-fantasy/` | WordPress / Static | Cleanly edited classic fantasy, folklore, myths, and speculative epics with zero ad clutter. | [ ] Working |
@@ -65,8 +65,8 @@
 | **Clarkesworld Magazine** | `https://clarkesworldmagazine.com` | Bespoke (`ClarkesworldExtractor`) | Multi-Hugo & Nebula award-winning monthly sci-fi magazine. Features the highest caliber of contemporary space opera & hard sci-fi. | [x] Working |
 | **Lightspeed Magazine** | `https://www.lightspeedmagazine.com` | Bespoke (`LightspeedExtractor`) | Premier digital sci-fi & fantasy monthly publication. Huge searchable archive of hard sci-fi novellas and novelettes. | [x] Working |
 | **Daily Science Fiction** | `https://dailysciencefiction.com` | Static HTML archive | Previously daily sci-fi stories; currently parked/inactive domain. | [-] Offline/Parked |
-| **Strange Horizons** | `https://strangehorizons.com` | Semantic HTML / Weekly | Hugo-nominated speculative fiction, sociological sci-fi, and futuristic cyberpunk stories published weekly since 2000. | [ ] Inspected |
-| **Apex Magazine** | `https://apex-magazine.com` | WordPress / Fiction | Dark sci-fi, biotechnology horror, and near-future cyberpunk speculative fiction. | [ ] Inspected |
+| **Strange Horizons** | `https://strangehorizons.com` | Bespoke (`StrangeHorizonsExtractor`) | Hugo-nominated speculative fiction, sociological sci-fi, and futuristic cyberpunk stories published weekly since 2000. Clean narrative parsing. | [x] Working |
+| **Apex Magazine** | `https://apex-magazine.com` | Shopify Digital Store | Converted to a commercial storefront selling digital issues ($6.99/issue); no longer hosts free open web serialization. | [-] Paid Storefront |
 | **Escape Pod** | `https://escapepod.org` | WordPress / Text + Audio | The world's premier weekly science fiction short fiction venue with full text releases accompanying each audio release. | [ ] Inspected |
 | **Uncanny Magazine** | `https://www.uncannymagazine.com` | Bespoke (`UncannyExtractor`) | Hugo-winning modern space opera, AI, and diverse speculative fiction stories and novellas. | [x] Working |
 | **Free SF Online** | `https://www.freesfonline.net` | Indexer / Directory | Exhaustive catalog index linking thousands of legally free science fiction stories by major authors across the web. | [ ] Working |
@@ -82,7 +82,7 @@
 | **ManyBooks Mystery & Thriller** | `https://manybooks.net/categories/mystery-and-thriller` | Clean CMS / EPUB | Over 8,000+ detective, murder mystery, thriller, and spy novels with clean categorization. | [ ] Working |
 | **Free-eBooks.net Mystery** | `https://www.free-ebooks.net/mystery` | Custom CMS | High-volume indie mystery novels, cozy mysteries, psychological thrillers, and private eye stories. | [ ] Working |
 | **Classic Crime Fiction** | `http://www.classiccrimefiction.com` | Static HTML | Golden Age of Detective Fiction archive: Agatha Christie style, John Dickson Carr, locked-room mysteries. | [ ] Working |
-| **Arthur Conan Doyle Online** | `https://www.arthur-conan-doyle.com` | MediaWiki / Full Text | The definitive comprehensive collection of all Sherlock Holmes novels, cases, and mystery novellas. | [ ] Working |
+| **Arthur Conan Doyle Online** | `https://www.arthur-conan-doyle.com` | MediaWiki / Full Text | Server currently in an infinite 301 redirect loop. All Sherlock Holmes novels & cases are already fully covered via Gutenberg & Faded Page. | [-] Redirect Loop |
 | **Feedbooks Mystery & Crime** | `https://www.feedbooks.com/publicdomain/category/FBFIC022000` | OPDS / Clean HTML | Cleanly typeset vintage noir, detective fiction, and early psychological crime novellas. | [ ] Working |
 
 ---
@@ -143,9 +143,9 @@
 | **WuxiaBox** | `https://www.wuxiabox.com` | ReadWN Family (In App) | 45,000+ high-speed raw machine-translated cultivation and urban novels. | [x] Working |
 | **NovelCool** | `https://novelcool.com` | Bespoke (In App) | Manhwa/Manga novel source adaptations, Japanese LNs, and Korean web novels. | [x] Working |
 | **LightNovelWorld** | `https://www.lightnovelworld.co` | Modern SPA / SSR | Premium web novel reader mirroring top trending light novels and translated serials. | [ ] Inspected |
-| **BoxNovel** | `https://boxnovel.com` | WordPress Madara | Popular light novel and translated Korean webnovel portal. Note: Protected by Cloudflare challenge. | [!] Cloudflare Protected |
+| **BoxNovel** | `https://boxnovel.com` | WordPress Madara | Popular light novel and translated Korean webnovel portal (25,000+ novels). Supported with WebView session fallback. | [x] Working |
 | **Woopread** | `https://woopread.com` | Bespoke (`WoopReadExtractor`) | High-quality human translations of popular Korean fantasy and Otome novels. Fully supported Next.js reader. | [x] Working |
-| **RainOfSnow** | `https://rainofsnow.com` | WordPress Madara | Dedicated group translating Korean web fiction, Romance Fantasy, and Xianxia. Note: Protected by Cloudflare challenge. | [!] Cloudflare Protected |
+| **RainOfSnow** | `https://rainofsnow.com` | WordPress Madara | Dedicated group translating Korean web fiction, Romance Fantasy, and Xianxia (15,000+ novels). Supported with WebView session fallback. | [x] Working |
 | **Foxaholic** | `https://foxaholic.com` | WordPress Madara | High-traffic hub hosting hundreds of active translation projects for Chinese/Korean novels. | [ ] Inspected |
 | **Chrysanthemum Garden** | `https://chrysanthemumgarden.com` | WordPress Bespoke | The premier translation group for Danmei, BL, and cultivation web novels. | [ ] Inspected |
 | **Re:Library** | `https://re-library.com` | Bespoke (`ReLibraryExtractor`) | High quality Japanese light novel translations with clean semantic reader formatting and comprehensive volume TOCs. | [x] Working |

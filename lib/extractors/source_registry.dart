@@ -25,6 +25,8 @@ import 'bespoke/clarkesworld_extractor.dart';
 import 'bespoke/lightspeed_extractor.dart';
 import 'bespoke/eastoftheweb_extractor.dart';
 import 'bespoke/uncanny_extractor.dart';
+import 'bespoke/fadedpage_extractor.dart';
+import 'bespoke/strangehorizons_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -58,6 +60,8 @@ class SourceRegistry {
     'lightspeed': LightspeedExtractor(),
     'eastoftheweb': EastOfTheWebExtractor(),
     'uncannymagazine': UncannyExtractor(),
+    'strangehorizons': StrangeHorizonsExtractor(),
+    'fadedpage': FadedPageExtractor(),
     'local_epub': LocalEpubExtractor(),
 
     // ==========================================
@@ -182,12 +186,27 @@ class SourceRegistry {
     // ==========================================
     // 5. WordPress Madara Engine (English)
     // ==========================================
+    'boxnovel': MadaraExtractor(
+      id: 'boxnovel',
+      name: 'BoxNovel',
+      baseUrl: 'https://boxnovel.com',
+      lang: 'en',
+      estimatedNovelCount: 25000,
+    ),
     'sonicmtl': MadaraExtractor(
       id: 'sonicmtl',
       name: 'SonicMTL',
       baseUrl: 'https://www.sonicmtl.com',
       lang: 'en',
       estimatedNovelCount: 18000,
+    ),
+    'rainofsnow': MadaraExtractor(
+      id: 'rainofsnow',
+      name: 'RainOfSnow',
+      baseUrl: 'https://rainofsnow.com',
+      lang: 'en',
+      customPopularPath: '/novels/',
+      estimatedNovelCount: 15000,
     ),
     'wuxiaworldsite': MadaraExtractor(
       id: 'wuxiaworldsite',

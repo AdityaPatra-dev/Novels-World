@@ -5,6 +5,8 @@ import 'package:novels_world/extractors/bespoke/clarkesworld_extractor.dart';
 import 'package:novels_world/extractors/bespoke/lightspeed_extractor.dart';
 import 'package:novels_world/extractors/bespoke/eastoftheweb_extractor.dart';
 import 'package:novels_world/extractors/bespoke/uncanny_extractor.dart';
+import 'package:novels_world/extractors/bespoke/strangehorizons_extractor.dart';
+import 'package:novels_world/extractors/bespoke/fadedpage_extractor.dart';
 import 'package:novels_world/extractors/source_registry.dart';
 
 void main() {
@@ -499,6 +501,110 @@ void main() {
       expect(content.paragraphs.length, equals(2));
       expect(content.paragraphs[0], equals('The desert was vast and silent beneath the copper stars.'));
       expect(content.paragraphs[1], equals('A solitary traveler walked across the ancient sands.'));
+    });
+  });
+
+  group('StrangeHorizonsExtractor Unit Tests', () {
+    late StrangeHorizonsExtractor extractor;
+
+    setUp(() {
+      extractor = StrangeHorizonsExtractor();
+    });
+
+    test('Source registration is active', () {
+      final source = SourceRegistry.getSource('strangehorizons');
+      expect(source, isNotNull);
+      expect(source!.id, equals('strangehorizons'));
+      expect(source.name, equals('Strange Horizons'));
+    });
+
+    test('parseNovelList extracts fiction links', () {
+      const html = '''
+      <div>
+        <a href="https://strangehorizons.com/wordpress/fiction/welcome-home/">Welcome Home</a>
+        <a href="https://strangehorizons.com/wordpress/fiction/the-ghost-station/">The Ghost Station</a>
+      </div>
+      ''';
+
+      final list = extractor.parseNovelList(html);
+      expect(list.length, equals(2));
+      expect(list[0].title, equals('Welcome Home'));
+      expect(list[0].sourceUrl, equals('https://strangehorizons.com/wordpress/fiction/welcome-home/'));
+      expect(list[1].title, equals('The Ghost Station'));
+    });
+
+    test('parseNovelDetails extracts title and author', () {
+      const html = '''
+      <html>
+        <head>
+          <title>Strange Horizons - Welcome Home By Andrew Kozma</title>
+        </head>
+        <body>
+          <h1 class="entry-title">Welcome Home</h1>
+          <div class="author">By Andrew Kozma</div>
+          <div class="sizeable-content">
+            <p>I was having a bad day and so I entered Harriet’s Café.</p>
+          </div>
+        </body>
+      </html>
+      ''';
+
+      final novel = extractor.parseNovelDetails('https://strangehorizons.com/wordpress/fiction/welcome-home/', html);
+      expect(novel.title, equals('Welcome Home'));
+      expect(novel.author, equals('Andrew Kozma'));
+      expect(novel.description, contains('I was having a bad day'));
+    });
+
+    test('parseChapterContent cleans narrative in sizeable-content', () {
+      const html = '''
+      <div class="sizeable-content">
+        <p>Content warning: Show warnings</p>
+        <p>I was having a bad day—okay, a bad life—and so I entered Harriet’s Café.</p>
+        <p>There was a solitary barista behind the counter.</p>
+      </div>
+      ''';
+
+      final content = extractor.parseChapterContent('https://strangehorizons.com/sample', html);
+      expect(content.paragraphs.length, equals(2));
+      expect(content.paragraphs[0], contains("Harriet's Café"));
+      expect(content.paragraphs[1], contains('solitary barista'));
+    });
+  });
+
+  group('FadedPageExtractor Unit Tests', () {
+    late FadedPageExtractor extractor;
+
+    setUp(() {
+      extractor = FadedPageExtractor();
+    });
+
+    test('Source registration is active', () {
+      final source = SourceRegistry.getSource('fadedpage');
+      expect(source, isNotNull);
+      expect(source!.id, equals('fadedpage'));
+      expect(source.name, equals('Faded Page'));
+      expect(source.lang, equals('en'));
+    });
+
+    test('Full book properties are configured', () async {
+      final chapters = await extractor.getChapterList('https://www.fadedpage.com/showbook.php?pid=20190433');
+      expect(chapters.isNotEmpty, isTrue);
+      expect(chapters.first.title, contains('Full Book'));
+      expect(chapters.first.url, contains('link.php?file=20190433.epub'));
+    });
+  });
+
+  group('Madara New Sources Registration Tests', () {
+    test('BoxNovel and RainOfSnow registered in registry', () {
+      final boxnovel = SourceRegistry.getSource('boxnovel');
+      expect(boxnovel, isNotNull);
+      expect(boxnovel!.id, equals('boxnovel'));
+      expect(boxnovel.baseUrl, equals('https://boxnovel.com'));
+
+      final rainofsnow = SourceRegistry.getSource('rainofsnow');
+      expect(rainofsnow, isNotNull);
+      expect(rainofsnow!.id, equals('rainofsnow'));
+      expect(rainofsnow.baseUrl, equals('https://rainofsnow.com'));
     });
   });
 }

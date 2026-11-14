@@ -4,8 +4,11 @@ import 'package:provider/provider.dart';
 import '../../core/models/novel.dart';
 import '../../core/models/chapter.dart';
 import '../../core/utils/chapter_range_parser.dart';
+import '../../data/audiobook_download_service.dart';
 import '../../data/download_service.dart';
 import '../../data/storage_service.dart';
+import '../../tts/language_voice_registry.dart';
+import 'narrator_selection_sheet.dart';
 import 'novel_storage_modal.dart';
 
 class DownloadRangeDialog extends StatefulWidget {
@@ -51,9 +54,14 @@ class _DownloadRangeDialogState extends State<DownloadRangeDialog> {
   int _alreadyDownloadedCount = 0;
   int _toDownloadCount = 0;
 
+  AudiobookDownloadMode _downloadMode = AudiobookDownloadMode.both;
+  LanguageVoiceInfo _selectedLanguage = LanguageVoiceRegistry.defaultLanguage;
+  late String _selectedVoice;
+
   @override
   void initState() {
     super.initState();
+    _selectedVoice = _selectedLanguage.defaultFemaleVoice;
     _textController.addListener(_onTextChanged);
 
     // Initial default: Next 10 unread or 1-10
@@ -163,18 +171,34 @@ class _DownloadRangeDialogState extends State<DownloadRangeDialog> {
   void _startDownload() {
     if (_toDownloadCount == 0 || _selectedChapters.isEmpty) return;
 
-    final downloadService = context.read<DownloadService>();
-    final chaptersToEnqueue = _selectedChapters
-        .where((ch) => !downloadService.isChapterDownloaded(ch.id))
-        .toList();
+    final chaptersToEnqueue = _selectedChapters.toList();
 
-    downloadService.enqueueChapters(widget.novel, chaptersToEnqueue);
+    if (_downloadMode == AudiobookDownloadMode.textOnly) {
+      final downloadService = context.read<DownloadService>();
+      final filtered = chaptersToEnqueue
+          .where((ch) => !downloadService.isChapterDownloaded(ch.id))
+          .toList();
+      downloadService.enqueueChapters(widget.novel, filtered);
+    } else {
+      AudiobookDownloadService().enqueueChapters(
+        novel: widget.novel,
+        chapters: chaptersToEnqueue,
+        mode: _downloadMode,
+        targetLang: _selectedLanguage.code,
+        voice: _selectedVoice,
+      );
+    }
 
     Navigator.pop(context);
+    final modeLabel = _downloadMode == AudiobookDownloadMode.textOnly
+        ? 'text'
+        : (_downloadMode == AudiobookDownloadMode.audiobookOnly
+            ? 'audiobooks (${_selectedLanguage.englishName})'
+            : 'text & audiobooks (${_selectedLanguage.englishName})');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Queued ${chaptersToEnqueue.length} chapters for download.',
+          'Queued ${chaptersToEnqueue.length} chapters for $modeLabel download.',
         ),
         backgroundColor: const Color(0xFF8B5CF6),
         behavior: SnackBarBehavior.floating,
@@ -261,6 +285,113 @@ class _DownloadRangeDialogState extends State<DownloadRangeDialog> {
                 ),
               ],
             ),
+
+            const SizedBox(height: 16),
+
+            // Download Mode Selection Cards
+            const Text(
+              'Select Download Mode:',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _buildModeCard(AudiobookDownloadMode.textOnly, '📖 Text Only', 'Fast (~10 KB)'),
+                const SizedBox(width: 8),
+                _buildModeCard(AudiobookDownloadMode.audiobookOnly, '🎧 Audio Only', '~1.2 MB / ch'),
+                const SizedBox(width: 8),
+                _buildModeCard(AudiobookDownloadMode.both, '🌟 Both (T+A)', 'Read + Listen'),
+              ],
+            ),
+
+            if (_downloadMode != AudiobookDownloadMode.textOnly) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E2C),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Audio Language & Narrator',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        Text(
+                          '${_selectedLanguage.flag} ${_selectedLanguage.englishName}',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFFA78BFA), fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedLanguage.code,
+                      key: ValueKey(_selectedLanguage.code),
+                      dropdownColor: const Color(0xFF1A1A26),
+                      style: const TextStyle(fontSize: 13, color: Colors.white),
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        filled: true,
+                        fillColor: const Color(0xFF14141E),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      ),
+                      items: LanguageVoiceRegistry.supportedLanguages.map((l) {
+                        return DropdownMenuItem(
+                          value: l.code,
+                          child: Text('${l.flag} ${l.nativeName} (${l.englishName})'),
+                        );
+                      }).toList(),
+                      onChanged: (code) {
+                        if (code != null) {
+                          setState(() {
+                            _selectedLanguage = LanguageVoiceRegistry.getByCode(code);
+                            _selectedVoice = _selectedLanguage.defaultFemaleVoice;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Narrator: $_selectedVoice',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11.5, color: Colors.white70),
+                          ),
+                        ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF8B5CF6),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onPressed: () {
+                            NarratorSelectionSheet.show(
+                              context: context,
+                              language: _selectedLanguage,
+                              currentVoice: _selectedVoice,
+                              onVoiceSelected: (voice) {
+                                setState(() {
+                                  _selectedVoice = voice;
+                                });
+                              },
+                            );
+                          },
+                          child: const Text('Change', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             const SizedBox(height: 16),
 
@@ -571,6 +702,54 @@ class _DownloadRangeDialogState extends State<DownloadRangeDialog> {
       side: const BorderSide(color: Colors.white12),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
       visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Widget _buildModeCard(AudiobookDownloadMode mode, String title, String subtitle) {
+    final isSelected = _downloadMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _downloadMode = mode;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF8B5CF6).withValues(alpha: 0.2)
+                : const Color(0xFF1E1E2C),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF8B5CF6) : Colors.white10,
+              width: isSelected ? 1.8 : 1.0,
+            ),
+          ),
+          child: Column(
+            children: [
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : Colors.white70,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isSelected ? const Color(0xFFA78BFA) : Colors.white38,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -15,6 +15,7 @@ import 'core/services/firebase_web_plugins.dart';
 import 'providers/library_provider.dart';
 import 'providers/reader_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/audiobook_player_provider.dart';
 import 'ui/home_screen.dart';
 
 class AppHttpOverrides extends HttpOverrides {
@@ -70,6 +71,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => LibraryProvider(storageService)),
         ChangeNotifierProvider(create: (_) => ReaderProvider(storageService)),
         ChangeNotifierProvider(create: (_) => DownloadService(storageService)),
+        ChangeNotifierProvider(create: (_) => AudiobookPlayerProvider(storageService: storageService)),
       ],
       child: const NovelsWorldApp(),
     ),

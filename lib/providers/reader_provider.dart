@@ -4,13 +4,16 @@ import '../core/models/chapter.dart';
 import '../core/models/chapter_content.dart';
 import '../core/models/reading_progress.dart';
 import '../core/services/epub_service.dart';
+import '../core/services/translation_service.dart';
 import '../data/storage_service.dart';
 import '../extractors/source_registry.dart';
+import '../tts/language_voice_registry.dart';
 import '../tts/ring_buffer_manager.dart';
 import '../tts/tts_model_registry.dart';
 
 class ReaderProvider extends ChangeNotifier {
   final StorageService _storage;
+  final TranslationService _translationService = TranslationService();
   final RingBufferManager ttsManager = RingBufferManager();
 
   Novel? _novel;
@@ -22,6 +25,10 @@ class ReaderProvider extends ChangeNotifier {
   int _activeSentenceIndex = 0;
   bool _isLoading = false;
   String? _errorMessage;
+
+  String? _targetLanguageCode;
+  List<String>? _translatedSentences;
+  bool _isTranslating = false;
 
   ChapterContent? _preloadedNextContent;
   List<String> _preloadedNextSentences = [];
@@ -96,10 +103,71 @@ class ReaderProvider extends ChangeNotifier {
           : null;
   ChapterContent? get content => _content;
   List<String> get sentences => _sentences;
+  List<String> get displaySentences => _translatedSentences ?? _sentences;
   int get activeSentenceIndex => _activeSentenceIndex;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isTtsPlaying => ttsManager.isPlaying;
+
+  bool get isTranslationActive => _targetLanguageCode != null;
+  String? get targetLanguageCode => _targetLanguageCode;
+  bool get isTranslating => _isTranslating;
+
+  Future<void> translateCurrentChapter(LanguageVoiceInfo lang) async {
+    if (_sentences.isEmpty || _novel == null || currentChapter == null) return;
+    _targetLanguageCode = lang.code;
+    _isTranslating = true;
+    notifyListeners();
+
+    try {
+      final translated = await _translationService.translateSentences(
+        _sentences,
+        targetLang: lang.code,
+        novelId: _novel!.id,
+        chapterId: currentChapter!.id,
+      );
+      _translatedSentences = translated;
+      _isTranslating = false;
+
+      // Update TTS with new translated sentences and appropriate localized voice
+      ttsManager.loadSentences(
+        _translatedSentences!,
+        startIndex: _activeSentenceIndex,
+        novelId: _novel!.id,
+        chapterId: currentChapter!.id,
+        lang: lang.code,
+        novel: _novel,
+        chapterTitle: currentChapter!.title,
+        trackNumber: _currentChapterIndex + 1,
+      );
+      ttsManager.setVoice(lang.defaultFemaleVoice);
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[ReaderProvider] Translation failed: $e');
+      _isTranslating = false;
+      notifyListeners();
+    }
+  }
+
+  void disableTranslation() {
+    _targetLanguageCode = null;
+    _translatedSentences = null;
+    _isTranslating = false;
+    if (_novel != null && currentChapter != null) {
+      ttsManager.loadSentences(
+        _sentences,
+        startIndex: _activeSentenceIndex,
+        novelId: _novel!.id,
+        chapterId: currentChapter!.id,
+        lang: 'en',
+        novel: _novel,
+        chapterTitle: currentChapter!.title,
+        trackNumber: _currentChapterIndex + 1,
+      );
+    }
+    notifyListeners();
+  }
 
   bool get hasPreviousChapter => _currentChapterIndex > 0;
   bool get hasNextChapter => _currentChapterIndex < _chapters.length - 1;
@@ -182,7 +250,21 @@ class ReaderProvider extends ChangeNotifier {
       }
 
       // Load sentences into the real-time TTS streaming ring-buffer
-      ttsManager.loadSentences(_sentences, startIndex: _activeSentenceIndex);
+      if (_targetLanguageCode != null) {
+        final langInfo = LanguageVoiceRegistry.getByCode(_targetLanguageCode!);
+        await translateCurrentChapter(langInfo);
+      } else {
+        ttsManager.loadSentences(
+          _sentences,
+          startIndex: _activeSentenceIndex,
+          novelId: _novel!.id,
+          chapterId: chapter.id,
+          lang: 'en',
+          novel: _novel,
+          chapterTitle: chapter.title,
+          trackNumber: _currentChapterIndex + 1,
+        );
+      }
 
       _isLoading = false;
       notifyListeners();

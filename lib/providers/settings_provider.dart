@@ -49,5 +49,11 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
     await _storage.saveSettings(_settings);
   }
+
+  Future<void> updateSaveTtsAsAudiobook(bool enabled) async {
+    _settings = _settings.copyWith(saveTtsAsAudiobook: enabled);
+    notifyListeners();
+    await _storage.saveSettings(_settings);
+  }
 }
 

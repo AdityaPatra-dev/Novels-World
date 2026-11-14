@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import '../core/models/novel.dart';
+import '../core/services/audiobook_assembler_service.dart';
+import '../data/storage_service.dart';
 import 'tts_engine_interface.dart';
 import 'tts_model_registry.dart';
 import 'engines/edge_neural_engine.dart';
@@ -19,6 +22,21 @@ class RingBufferManager extends ChangeNotifier {
   late TtsEngineInterface _activeEngine;
   final SleepTimerService sleepTimer;
   final AudioPlayer _player;
+  final StorageService _storage;
+  final AudiobookAssemblerService _assembler;
+
+  StorageService get storage => _storage;
+  AudiobookAssemblerService get assembler => _assembler;
+
+  String? currentNovelId;
+  String? currentChapterId;
+  String currentLanguage = 'en';
+  Novel? currentNovel;
+  String? currentChapterTitle;
+  int? currentTrackNumber;
+  Uint8List? currentCoverBytes;
+  bool saveTtsAsAudiobook = false;
+  final Map<int, String> _chapterAudioChunks = {};
 
   StreamSubscription<PlayerState>? _stateSub;
   int _sessionEpoch = 0;
@@ -46,8 +64,12 @@ class RingBufferManager extends ChangeNotifier {
     AudioPlayer? player,
     SleepTimerService? sleepTimer,
     Map<String, TtsEngineInterface>? customEngines,
+    StorageService? storage,
+    AudiobookAssemblerService? assembler,
   })  : _player = player ?? AudioPlayer(),
         sleepTimer = sleepTimer ?? SleepTimerService(),
+        _storage = storage ?? StorageService(),
+        _assembler = assembler ?? AudiobookAssemblerService(storage: storage),
         _engines = {
           TtsModelRegistry.edgeNeuralId: EdgeNeuralEngine(),
           TtsModelRegistry.kokoroId: KokoroEngine(),
@@ -138,6 +160,10 @@ class RingBufferManager extends ChangeNotifier {
     if (!tag.startsWith('next_')) return;
     final nextIdx = int.tryParse(tag.replaceFirst('next_', '')) ?? 0;
 
+    if (saveTtsAsAudiobook) {
+      _assembleCurrentChapterAudiobook();
+    }
+
     // Respect sleep timer if set to end of chapter
     if (sleepTimer.mode == SleepTimerMode.endOfChapter) {
       pause();
@@ -164,12 +190,43 @@ class RingBufferManager extends ChangeNotifier {
     }
   }
 
-  void loadSentences(List<String> sentences, {int startIndex = 0}) {
+  void loadSentences(
+    List<String> sentences, {
+    int startIndex = 0,
+    String? novelId,
+    String? chapterId,
+    String lang = 'en',
+    Novel? novel,
+    String? chapterTitle,
+    int? trackNumber,
+    Uint8List? coverBytes,
+    bool? saveTtsAsAudiobook,
+  }) {
+    if (this.saveTtsAsAudiobook &&
+        _chapterAudioChunks.isNotEmpty &&
+        currentNovelId != null &&
+        currentChapterId != null &&
+        (currentNovelId != novelId || currentChapterId != chapterId)) {
+      _assembleCurrentChapterAudiobook();
+    }
     stop();
     _sentences = sentences;
     _nextChapterSentences.clear();
     _hasTriggeredApproachingEnd = false;
     _currentIndex = startIndex.clamp(0, sentences.isEmpty ? 0 : sentences.length - 1);
+
+    if (novelId != null) currentNovelId = novelId;
+    if (chapterId != null) currentChapterId = chapterId;
+    currentLanguage = lang;
+    if (novel != null) currentNovel = novel;
+    if (chapterTitle != null) currentChapterTitle = chapterTitle;
+    if (trackNumber != null) currentTrackNumber = trackNumber;
+    if (coverBytes != null) currentCoverBytes = coverBytes;
+    if (saveTtsAsAudiobook != null) {
+      this.saveTtsAsAudiobook = saveTtsAsAudiobook;
+    }
+    _chapterAudioChunks.clear();
+
     notifyListeners();
     _prefetchUpcoming();
   }
@@ -291,6 +348,10 @@ class RingBufferManager extends ChangeNotifier {
 
     if (epoch != _sessionEpoch || !_isPlaying) return;
 
+    if (audioPath != null && saveTtsAsAudiobook) {
+      _chapterAudioChunks[_currentIndex] = audioPath;
+    }
+
     if (!kIsWeb && audioPath != null && await File(audioPath).exists()) {
       try {
         await _player.setFilePath(audioPath);
@@ -336,6 +397,10 @@ class RingBufferManager extends ChangeNotifier {
       await playFuture;
     } else {
       // Reached the end of current chapter's sentences
+      if (saveTtsAsAudiobook) {
+        _assembleCurrentChapterAudiobook();
+      }
+
       if (sleepTimer.mode == SleepTimerMode.endOfChapter) {
         _isPlaying = false;
         notifyListeners();
@@ -364,6 +429,49 @@ class RingBufferManager extends ChangeNotifier {
       }
     }
     _isTransitioning = false;
+  }
+
+  void _assembleCurrentChapterAudiobook() {
+    if (!saveTtsAsAudiobook ||
+        currentNovelId == null ||
+        currentChapterId == null ||
+        _chapterAudioChunks.isEmpty) {
+      return;
+    }
+
+    final novelId = currentNovelId!;
+    final chapterId = currentChapterId!;
+    final lang = currentLanguage;
+    final novel = currentNovel;
+    final chapterTitle = currentChapterTitle;
+    final trackNumber = currentTrackNumber;
+    final coverBytes = currentCoverBytes;
+
+    final paths = <String>[];
+    for (int i = 0; i < _sentences.length; i++) {
+      if (_chapterAudioChunks.containsKey(i)) {
+        paths.add(_chapterAudioChunks[i]!);
+      }
+    }
+
+    if (paths.isEmpty) return;
+
+    _assembler.assembleChapterAudiobook(
+      novelId: novelId,
+      chapterId: chapterId,
+      lang: lang,
+      chunkFilePaths: paths,
+      novel: novel,
+      chapterTitle: chapterTitle,
+      trackNumber: trackNumber,
+      coverBytes: coverBytes,
+    ).then((file) {
+      if (file != null) {
+        debugPrint('[RingBufferManager] Saved offline chapter audiobook: ${file.path}');
+      }
+    }).catchError((e) {
+      debugPrint('[RingBufferManager] Error assembling offline audiobook: $e');
+    });
   }
 
   Future<void> resume() async {

@@ -16,6 +16,7 @@ class ReaderSettings {
   final double ttsSpeed;
   final String ttsEngine; // 'kokoro', 'piper', 'sherpa'
   final String ttsVoice;
+  final bool saveTtsAsAudiobook;
 
   const ReaderSettings({
     this.theme = ReaderTheme.dark,
@@ -26,6 +27,7 @@ class ReaderSettings {
     this.ttsSpeed = 1.0,
     this.ttsEngine = 'edge_neural',
     this.ttsVoice = 'en-US-ChristopherNeural',
+    this.saveTtsAsAudiobook = false,
   });
 
   Color get backgroundColor {
@@ -76,6 +78,7 @@ class ReaderSettings {
     double? ttsSpeed,
     String? ttsEngine,
     String? ttsVoice,
+    bool? saveTtsAsAudiobook,
   }) {
     return ReaderSettings(
       theme: theme ?? this.theme,
@@ -86,6 +89,7 @@ class ReaderSettings {
       ttsSpeed: ttsSpeed ?? this.ttsSpeed,
       ttsEngine: ttsEngine ?? this.ttsEngine,
       ttsVoice: ttsVoice ?? this.ttsVoice,
+      saveTtsAsAudiobook: saveTtsAsAudiobook ?? this.saveTtsAsAudiobook,
     );
   }
 
@@ -99,6 +103,7 @@ class ReaderSettings {
       'ttsSpeed': ttsSpeed,
       'ttsEngine': ttsEngine,
       'ttsVoice': ttsVoice,
+      'saveTtsAsAudiobook': saveTtsAsAudiobook,
     };
   }
 
@@ -115,6 +120,7 @@ class ReaderSettings {
       ttsSpeed: (json['ttsSpeed'] as num?)?.toDouble() ?? 1.0,
       ttsEngine: json['ttsEngine'] as String? ?? 'edge_neural',
       ttsVoice: json['ttsVoice'] as String? ?? 'en-US-ChristopherNeural',
+      saveTtsAsAudiobook: json['saveTtsAsAudiobook'] as bool? ?? false,
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,7 @@ import '../novel/novel_detail_screen.dart';
 import '../reader/reader_screen.dart';
 import '../widgets/download_range_dialog.dart';
 import '../widgets/novel_storage_modal.dart';
+import 'backup_migration_modal.dart';
 
 class DownloadsScreen extends StatefulWidget {
   final VoidCallback? onBrowseTap;
@@ -161,6 +163,18 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.archive_outlined, color: Color(0xFFA78BFA)),
+            tooltip: 'Backup & Migration (.zip)',
+            onPressed: () {
+              BackupMigrationModal.show(
+                context,
+                onDataRestored: () {
+                  _loadDownloadedNovels();
+                },
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.folder_open_rounded, color: Color(0xFFA78BFA)),
             tooltip: 'Where files are saved',
@@ -640,6 +654,7 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
     final sizeFormatted = _storageInfo?.formattedSize ?? '...';
     final storageDir = _storageInfo?.directoryPath ?? _storageService.chaptersDirectoryPath;
     final isBook = widget.novel.isFullBook || widget.novel.sourceId == 'local_epub';
+    final audioChapters = !kIsWeb ? _storageService.getDownloadedAudiobookChapterIds(widget.novel.id) : <String>[];
 
     return Card(
       color: const Color(0xFF1A1A24),
@@ -794,6 +809,30 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
                                 ),
                               ),
                             ),
+                            if (audioChapters.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFFA78BFA).withValues(alpha: 0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.headphones_rounded, size: 12, color: Color(0xFFA78BFA)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${audioChapters.length} Audiobooks',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFA78BFA),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ],

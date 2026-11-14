@@ -544,6 +544,47 @@ class TtsSheet {
                       ),
 
                       const SizedBox(height: 16),
+
+                      // Listen-to-Save Audiobook Toggle
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E28),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: ttsManager.saveTtsAsAudiobook
+                                ? const Color(0xFF8B5CF6)
+                                : Colors.white10,
+                            width: ttsManager.saveTtsAsAudiobook ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: Icon(
+                            Icons.bookmark_added,
+                            color: ttsManager.saveTtsAsAudiobook
+                                ? const Color(0xFF8B5CF6)
+                                : Colors.white54,
+                          ),
+                          title: const Text(
+                            'Save Listening as Offline Audiobook',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                          subtitle: Text(
+                            'Automatically stitches streamed audio into a permanent chapter .mp3 file for offline listening.',
+                            style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.6)),
+                          ),
+                          activeThumbColor: const Color(0xFF8B5CF6),
+                          value: ttsManager.saveTtsAsAudiobook,
+                          onChanged: (val) {
+                            ttsManager.saveTtsAsAudiobook = val;
+                            settingsProvider.updateSaveTtsAsAudiobook(val);
+                            setState(() {});
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF8B5CF6),

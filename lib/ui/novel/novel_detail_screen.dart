@@ -20,6 +20,7 @@ import '../../core/utils/text_cleaner.dart';
 import '../../core/utils/chapter_range_parser.dart';
 import '../../core/utils/http_client_factory.dart';
 import '../../core/services/epub_service.dart';
+import '../audiobook/audiobook_player_screen.dart';
 
 class NovelDetailScreen extends StatefulWidget {
   final Novel novel;
@@ -1373,6 +1374,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                   final isRead = _isChapterRead(chapter);
                   final isDownloaded = downloadService.isChapterDownloaded(chapter.id);
                   final isDownloading = downloadService.currentTask?.chapter.id == chapter.id;
+                  final storage = context.read<StorageService>();
+                  final hasAudio = !kIsWeb && storage.hasOfflineAudiobook(_novel.id, chapter.id);
+                  final audioLangs = (!kIsWeb && hasAudio)
+                      ? storage.getDownloadedAudiobookLanguages(_novel.id)[chapter.id]
+                      : null;
 
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -1422,6 +1428,63 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       ),
                       subtitle: Row(
                         children: [
+                          if (isDownloaded) ...[
+                            Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.offline_pin, size: 10, color: Color(0xFF34D399)),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'offline',
+                                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF34D399)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (hasAudio) ...[
+                            InkWell(
+                              onTap: () {
+                                final lang = (audioLangs != null && audioLangs.isNotEmpty) ? audioLangs.first : 'en';
+                                AudiobookPlayerScreen.open(
+                                  context,
+                                  novel: _novel,
+                                  chapter: chapter,
+                                  language: lang,
+                                  allChapters: _chapters,
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(4),
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.5)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.headphones_rounded, size: 10, color: Color(0xFFA78BFA)),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      audioLangs != null && audioLangs.isNotEmpty ? 'audio_${audioLangs.first}' : 'audio',
+                                      style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFA78BFA)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                           if (isLastRead) ...[
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),

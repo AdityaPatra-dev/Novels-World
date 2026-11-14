@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../providers/reader_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../tts/language_voice_registry.dart';
+import 'language_selection_modal.dart';
 import 'reader_settings_modal.dart';
 import 'tts_sheet.dart';
 
@@ -113,6 +115,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
         actions: [
           IconButton(
             icon: Icon(
+              Icons.translate,
+              color: reader.isTranslationActive ? const Color(0xFF8B5CF6) : settings.textColor,
+            ),
+            tooltip: 'Translate Chapter',
+            onPressed: () {
+              LanguageSelectionModal.show(
+                context: context,
+                currentLanguageCode: reader.targetLanguageCode,
+                isTranslationActive: reader.isTranslationActive,
+                onLanguageSelected: (lang) {
+                  reader.translateCurrentChapter(lang);
+                },
+                onDisableTranslation: () {
+                  reader.disableTranslation();
+                },
+              );
+            },
+          ),
+          IconButton(
+            icon: Icon(
               reader.isTtsPlaying ? Icons.record_voice_over : Icons.record_voice_over_outlined,
               color: reader.isTtsPlaying ? const Color(0xFF8B5CF6) : settings.textColor,
             ),
@@ -169,6 +191,58 @@ class _ReaderScreenState extends State<ReaderScreen> {
               controller: _scrollController,
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 150),
               children: [
+                if (reader.isTranslating)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF8B5CF6)),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Translating chapter sentences...',
+                          style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (reader.isTranslationActive && reader.targetLanguageCode != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.translate, size: 16, color: Color(0xFF8B5CF6)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Translated to ${LanguageVoiceRegistry.getByCode(reader.targetLanguageCode!).displayName} • Long press for original',
+                            style: const TextStyle(fontSize: 12, color: Color(0xFFA78BFA)),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => reader.disableTranslation(),
+                          child: const Icon(Icons.close, size: 18, color: Colors.white54),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Chapter Header
                 Padding(
                   padding: const EdgeInsets.only(bottom: 24, top: 8),
@@ -403,7 +477,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     dynamic settings,
     TextStyle baseTextStyle,
   ) {
-    final units = reader.sentences;
+    final units = reader.displaySentences;
     final List<Widget> widgets = [];
 
     if (units.isEmpty) {
@@ -490,6 +564,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
               });
               reader.playFromSentence(i);
             },
+            onLongPress: () {
+              if (reader.isTranslationActive && i < reader.sentences.length) {
+                _showOriginalTextTooltip(context, reader.sentences[i]);
+              }
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -510,5 +589,42 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
 
     return widgets;
+  }
+
+  void _showOriginalTextTooltip(BuildContext context, String originalText) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E28),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.translate, color: Color(0xFF8B5CF6), size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'Original Source Text',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                originalText,
+                style: const TextStyle(fontSize: 14, color: Colors.white70, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

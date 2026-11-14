@@ -26,6 +26,8 @@ class StorageService {
   Directory get _safeAppDir => _appDir!;
 
   String get chaptersDirectoryPath => kIsWeb ? 'Browser Storage' : '${_safeAppDir.path}/chapters';
+  String get audiobooksDirectoryPath => kIsWeb ? 'Browser Storage' : '${_safeAppDir.path}/audiobooks';
+  String get translationsDirectoryPath => kIsWeb ? 'Browser Storage' : '${_safeAppDir.path}/translations';
   String get appDocumentsDirectoryPath => kIsWeb ? 'Browser Storage' : _safeAppDir.path;
 
   Future<void> init({Directory? appDir}) async {
@@ -36,6 +38,14 @@ class StorageService {
       final chaptersDir = Directory('${_safeAppDir.path}/chapters');
       if (!await chaptersDir.exists()) {
         await chaptersDir.create(recursive: true);
+      }
+      final audiobooksDir = Directory('${_safeAppDir.path}/audiobooks');
+      if (!await audiobooksDir.exists()) {
+        await audiobooksDir.create(recursive: true);
+      }
+      final translationsDir = Directory('${_safeAppDir.path}/translations');
+      if (!await translationsDir.exists()) {
+        await translationsDir.create(recursive: true);
       }
     }
   }
@@ -596,6 +606,245 @@ class StorageService {
     final rawList = list.map((n) => jsonEncode(n.toJson())).toList();
     await _safePrefs.setStringList(_downloadedNovelsKey, rawList);
     await _safePrefs.remove('downloaded_chapters_$novelId');
+  }
+
+  // --- Audiobook Storage & Indexing ---
+
+  String _safeId(String id) => id.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+
+  Directory getNovelAudiobookDirectory(String novelId) {
+    if (kIsWeb) return Directory('');
+    final safeNovel = _safeId(novelId);
+    return Directory('${_safeAppDir.path}/audiobooks/$safeNovel');
+  }
+
+  File getAudiobookFile(String novelId, String chapterId, String lang) {
+    if (kIsWeb) return File('');
+    final safeNovel = _safeId(novelId);
+    final safeChapter = _safeId(chapterId);
+    final safeLang = _safeId(lang.toLowerCase());
+    return File('${_safeAppDir.path}/audiobooks/$safeNovel/${safeChapter}_$safeLang.mp3');
+  }
+
+  bool hasOfflineAudiobook(String novelId, String chapterId, [String? lang]) {
+    if (kIsWeb) return false;
+    final novelDir = getNovelAudiobookDirectory(novelId);
+    if (!novelDir.existsSync()) return false;
+
+    final safeChapter = _safeId(chapterId);
+    if (lang != null && lang.isNotEmpty) {
+      final file = getAudiobookFile(novelId, chapterId, lang);
+      return file.existsSync() && file.lengthSync() > 0;
+    }
+
+    try {
+      final entries = novelDir.listSync();
+      final prefix = '${safeChapter}_';
+      for (final entry in entries) {
+        if (entry is File && entry.path.endsWith('.mp3')) {
+          final fileName = entry.uri.pathSegments.last;
+          if (fileName.startsWith(prefix) && entry.lengthSync() > 0) {
+            return true;
+          }
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  List<String> getDownloadedAudiobookChapterIds(String novelId, [String? lang]) {
+    if (kIsWeb) return [];
+    final novelDir = getNovelAudiobookDirectory(novelId);
+    if (!novelDir.existsSync()) return [];
+
+    final result = <String>{};
+    try {
+      final entries = novelDir.listSync();
+      for (final entry in entries) {
+        if (entry is File && entry.path.endsWith('.mp3') && entry.lengthSync() > 0) {
+          final fileName = entry.uri.pathSegments.last;
+          // Format: {safeChapterId}_{lang}.mp3
+          final base = fileName.substring(0, fileName.length - 4); // strip .mp3
+          final lastUnderscore = base.lastIndexOf('_');
+          if (lastUnderscore > 0) {
+            final chapterId = base.substring(0, lastUnderscore);
+            final fileLang = base.substring(lastUnderscore + 1);
+            if (lang == null || lang.isEmpty || fileLang == _safeId(lang.toLowerCase())) {
+              result.add(chapterId);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return result.toList();
+  }
+
+  Map<String, List<String>> getDownloadedAudiobookLanguages(String novelId) {
+    if (kIsWeb) return {};
+    final novelDir = getNovelAudiobookDirectory(novelId);
+    if (!novelDir.existsSync()) return {};
+
+    final map = <String, List<String>>{};
+    try {
+      final entries = novelDir.listSync();
+      for (final entry in entries) {
+        if (entry is File && entry.path.endsWith('.mp3') && entry.lengthSync() > 0) {
+          final fileName = entry.uri.pathSegments.last;
+          final base = fileName.substring(0, fileName.length - 4);
+          final lastUnderscore = base.lastIndexOf('_');
+          if (lastUnderscore > 0) {
+            final chapterId = base.substring(0, lastUnderscore);
+            final fileLang = base.substring(lastUnderscore + 1);
+            map.putIfAbsent(chapterId, () => []).add(fileLang);
+          }
+        }
+      }
+    } catch (_) {}
+    return map;
+  }
+
+  int getAudiobookStorageBytes(String novelId) {
+    if (kIsWeb) return 0;
+    final novelDir = getNovelAudiobookDirectory(novelId);
+    if (!novelDir.existsSync()) return 0;
+
+    int total = 0;
+    try {
+      final entries = novelDir.listSync(recursive: true);
+      for (final entry in entries) {
+        if (entry is File && entry.path.endsWith('.mp3')) {
+          total += entry.lengthSync();
+        }
+      }
+    } catch (_) {}
+    return total;
+  }
+
+  int getTotalAudiobookStorageBytes() {
+    if (kIsWeb) return 0;
+    final audiobooksDir = Directory(audiobooksDirectoryPath);
+    if (!audiobooksDir.existsSync()) return 0;
+
+    int total = 0;
+    try {
+      final entries = audiobooksDir.listSync(recursive: true);
+      for (final entry in entries) {
+        if (entry is File && entry.path.endsWith('.mp3')) {
+          total += entry.lengthSync();
+        }
+      }
+    } catch (_) {}
+    return total;
+  }
+
+  String get appDirectoryPath => _safeAppDir.path;
+
+  Future<void> restoreDownloadedNovelData({
+    required Novel novel,
+    List<Chapter>? chapters,
+    required Set<String> downloadedChapterIds,
+    ReadingProgress? progress,
+    Set<String>? readChapterIds,
+  }) async {
+    await init();
+    // 1. Record novel in downloaded list
+    final list = _getDownloadedNovelsList();
+    final idx = list.indexWhere((n) => n.id == novel.id);
+    if (idx >= 0) {
+      list[idx] = novel;
+    } else {
+      list.add(novel);
+    }
+    await _safePrefs.setStringList(_downloadedNovelsKey, list.map((n) => jsonEncode(n.toJson())).toList());
+
+    // 2. Record chapters list in cache if provided
+    if (chapters != null && chapters.isNotEmpty) {
+      await cacheChapterList(novel.id, chapters);
+    }
+
+    // 3. Record downloaded chapter IDs (merge with existing)
+    final existingChapters = getDownloadedChapterIds(novel.id);
+    existingChapters.addAll(downloadedChapterIds);
+    await _safePrefs.setStringList('downloaded_chapters_${novel.id}', existingChapters.toList());
+
+    // 4. Record progress if provided and newer
+    if (progress != null) {
+      final existingProgress = getProgress(novel.id);
+      if (existingProgress == null || progress.lastReadAt.isAfter(existingProgress.lastReadAt)) {
+        await saveProgress(progress);
+      }
+    }
+
+    // 5. Record read chapter IDs
+    if (readChapterIds != null && readChapterIds.isNotEmpty) {
+      final existingRead = getReadChapterIds(novel.id);
+      existingRead.addAll(readChapterIds);
+      await _safePrefs.setStringList('read_chapters_${novel.id}', existingRead.toList());
+    }
+  }
+
+  Future<void> clearAllDownloadedContent() async {
+    await init();
+    if (kIsWeb) return;
+
+    final chaptersDir = Directory(chaptersDirectoryPath);
+    if (await chaptersDir.exists()) {
+      await for (final entity in chaptersDir.list()) {
+        try {
+          await entity.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+
+    final audiobooksDir = Directory(audiobooksDirectoryPath);
+    if (await audiobooksDir.exists()) {
+      await for (final entity in audiobooksDir.list()) {
+        try {
+          await entity.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+
+    final translationsDir = Directory(translationsDirectoryPath);
+    if (await translationsDir.exists()) {
+      await for (final entity in translationsDir.list()) {
+        try {
+          await entity.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+
+    final importedDir = Directory('${_safeAppDir.path}/imported_novels');
+    if (await importedDir.exists()) {
+      await for (final entity in importedDir.list()) {
+        try {
+          await entity.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+
+    // Clear downloaded novel records in SharedPreferences
+    final downloadedNovels = _getDownloadedNovelsList();
+    for (final n in downloadedNovels) {
+      await _safePrefs.remove('downloaded_chapters_${n.id}');
+    }
+    await _safePrefs.remove(_downloadedNovelsKey);
+  }
+
+  Future<void> deleteAudiobookChapter(String novelId, String chapterId, String lang) async {
+    if (kIsWeb) return;
+    final file = getAudiobookFile(novelId, chapterId, lang);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
+  Future<void> deleteAllNovelAudiobooks(String novelId) async {
+    if (kIsWeb) return;
+    final novelDir = getNovelAudiobookDirectory(novelId);
+    if (await novelDir.exists()) {
+      await novelDir.delete(recursive: true);
+    }
   }
 }
 

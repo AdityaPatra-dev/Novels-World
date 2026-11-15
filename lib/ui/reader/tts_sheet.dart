@@ -127,6 +127,9 @@ class TtsSheet {
               if (activeEngine.id == TtsModelRegistry.systemId) {
                 return p.id.startsWith('system') || p.id == 'default';
               }
+              if (isEnglish) {
+                return modelInfo.voices.any((v) => v.startsWith(p.id));
+              }
               return !p.id.startsWith('system');
             }).toList();
 
@@ -279,7 +282,9 @@ class TtsSheet {
                                       ttsManager.switchEngine(m.id);
                                       final targetVoice = m.id == TtsModelRegistry.systemId
                                           ? 'system_$currentLang'
-                                          : (langInfo.defaultFemaleVoice.isNotEmpty ? langInfo.defaultFemaleVoice : m.defaultVoice);
+                                          : (isEnglish
+                                              ? m.defaultVoice
+                                              : (langInfo.defaultFemaleVoice.isNotEmpty ? langInfo.defaultFemaleVoice : m.defaultVoice));
                                       ttsManager.setVoice(targetVoice);
                                       settingsProvider.updateTtsVoice(m.id, targetVoice);
                                       setState(() {});
@@ -484,9 +489,14 @@ class TtsSheet {
                         })
                       else
                         ...relevantProfiles.map((profile) {
+                        final hasDirectMatch = relevantProfiles.any((p) =>
+                            activeVoice.contains(p.id) ||
+                            p.displayName.contains(activeVoice) ||
+                            activeVoice == p.id);
                         final isSelected = activeVoice.contains(profile.id) ||
                             profile.displayName.contains(activeVoice) ||
-                            activeVoice == profile.id;
+                            activeVoice == profile.id ||
+                            (!hasDirectMatch && (profile.id == modelInfo.defaultVoice || profile == relevantProfiles.first));
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),

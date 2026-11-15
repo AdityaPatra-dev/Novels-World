@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -30,20 +31,77 @@ class _BrowseScreenState extends State<BrowseScreen> {
   String? _errorMessage;
   bool _isSearching = false;
 
+  // Stale-While-Revalidate memory cache for instant source switching (0ms delay)
+  static final Map<String, List<Novel>> _sourceNovelsCache = {};
+  static final Map<String, DateTime> _sourceCacheTime = {};
+  static const Duration _cacheTtl = Duration(minutes: 30);
+  static bool _prewarmingStarted = false;
+  Timer? _prewarmTimer;
+
   @override
   void initState() {
     super.initState();
     _currentSource = SourceRegistry.getDefaultSource();
     _loadPopular();
+    final isTest = Platform.environment.containsKey('FLUTTER_TEST');
+    if (!_prewarmingStarted && !isTest) {
+      _prewarmingStarted = true;
+      _prewarmPopularSources();
+    }
+  }
+
+  void _prewarmPopularSources() {
+    _prewarmTimer?.cancel();
+    _prewarmTimer = Timer(const Duration(milliseconds: 1500), () async {
+      if (!mounted) return;
+      final topSourceIds = ['readnovelfull', 'novelfull', 'lightnovelpub', 'royalroad', 'freewebnovel'];
+      for (final sId in topSourceIds) {
+        if (!mounted) break;
+        if (_sourceNovelsCache.containsKey(sId)) continue;
+        final src = SourceRegistry.getSource(sId);
+        if (src != null && src.id != _currentSource.id) {
+          try {
+            final list = await src.getPopular(page: 1);
+            if (list.isNotEmpty) {
+              _sourceNovelsCache[src.id] = list;
+              _sourceCacheTime[src.id] = DateTime.now();
+            }
+          } catch (_) {}
+          if (!mounted) break;
+          await Future.delayed(const Duration(milliseconds: 350));
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _prewarmTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPopular() async {
+  Future<void> _loadPopular({bool forceRefresh = false}) async {
+    final cached = _sourceNovelsCache[_currentSource.id];
+    final cacheTime = _sourceCacheTime[_currentSource.id];
+    final isCacheValid = cached != null && cacheTime != null && DateTime.now().difference(cacheTime) < _cacheTtl;
+
+    // Instant Cache Hit: Display cached novels immediately with 0 delay
+    if (!forceRefresh && cached != null && cached.isNotEmpty) {
+      setState(() {
+        _novels = cached;
+        _isLoading = false;
+        _errorMessage = null;
+        _isSearching = false;
+      });
+
+      // Background revalidation if cache is expired
+      if (!isCacheValid) {
+        _revalidateInBackground(_currentSource);
+      }
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -52,6 +110,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
     try {
       final list = await _currentSource.getPopular(page: 1);
+      if (list.isNotEmpty) {
+        _sourceNovelsCache[_currentSource.id] = list;
+        _sourceCacheTime[_currentSource.id] = DateTime.now();
+      }
       if (mounted) {
         setState(() {
           _novels = list;
@@ -66,6 +128,21 @@ class _BrowseScreenState extends State<BrowseScreen> {
         });
       }
     }
+  }
+
+  Future<void> _revalidateInBackground(NovelSource source) async {
+    try {
+      final list = await source.getPopular(page: 1);
+      if (list.isNotEmpty) {
+        _sourceNovelsCache[source.id] = list;
+        _sourceCacheTime[source.id] = DateTime.now();
+        if (mounted && _currentSource.id == source.id && !_isSearching) {
+          setState(() {
+            _novels = list;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _performSearch(String query) async {
@@ -377,7 +454,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
           if (_isSearching) {
             await _performSearch(_searchController.text);
           } else {
-            await _loadPopular();
+            await _loadPopular(forceRefresh: true);
           }
         },
         child: _buildBody(),
@@ -387,7 +464,74 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          int crossAxisCount = 2;
+          if (constraints.maxWidth > 900) {
+            crossAxisCount = 5;
+          } else if (constraints.maxWidth > 600) {
+            crossAxisCount = 3;
+          }
+          return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: 0.58,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 18,
+            ),
+            itemCount: crossAxisCount * 3,
+            itemBuilder: (context, index) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E28),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF262636),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 12,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2E2E42),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            height: 10,
+                            width: 80,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF242436),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      );
     }
 
     if (_errorMessage != null) {

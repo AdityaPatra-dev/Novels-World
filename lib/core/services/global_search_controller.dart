@@ -98,8 +98,12 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
   int _currentGenerationId = 0;
   static const Duration sourceTimeout = Duration(seconds: 8);
 
-  /// Executes global search across all cataloged sources in parallel.
-  /// Results stream incrementally into [value] in real time.
+  // In-memory query cache for instant (0ms) global search repeat lookups
+  static final Map<String, GlobalSearchState> _queryCache = {};
+  static const int _maxCacheEntries = 40;
+
+  /// Executes global search across all cataloged sources with controlled concurrency (5 workers max).
+  /// Results stream incrementally into [value] in real time without thread or socket exhaustion.
   Future<void> search(String query, {List<NovelSource>? targetSources}) async {
     final cleanQuery = query.trim();
     if (cleanQuery.isEmpty) {
@@ -107,14 +111,33 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
       return;
     }
 
+    final cacheKey = cleanQuery.toLowerCase();
+    final cached = _queryCache[cacheKey];
+    if (cached != null) {
+      _currentGenerationId++;
+      value = cached;
+      return;
+    }
+
     final generationId = ++_currentGenerationId;
-    final sources = targetSources ?? SourceRegistry.getAllSources();
+    final allSources = List<NovelSource>.from(targetSources ?? SourceRegistry.getAllSources());
+
+    // Prioritize fastest and highest-reliability aggregator sources first
+    const priorityIds = ['readnovelfull', 'novelfull', 'royalroad', 'lightnovelpub', 'freewebnovel', 'wuxiaworld', 'scribblehub'];
+    allSources.sort((a, b) {
+      final aPri = priorityIds.indexOf(a.id);
+      final bPri = priorityIds.indexOf(b.id);
+      if (aPri != -1 && bPri != -1) return aPri.compareTo(bPri);
+      if (aPri != -1) return -1;
+      if (bPri != -1) return 1;
+      return 0;
+    });
 
     // Initial state: searching started
     value = GlobalSearchState(
       query: cleanQuery,
       isSearching: true,
-      totalSources: sources.length,
+      totalSources: allSources.length,
       completedSources: 0,
       sourceResults: [],
       groupedMatches: [],
@@ -125,110 +148,137 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     final List<Novel> novelsAccumulator = [];
     final Map<String, GroupedNovelMatch> groupedMap = {};
 
-    // Concurrently trigger each source search worker
-    final List<Future<void>> workerFutures = sources.map((source) async {
-      final stopwatch = Stopwatch()..start();
-      List<Novel> sourceNovels = [];
-      bool isSuccess = false;
-      String? errorMessage;
+    DateTime lastEmission = DateTime.now();
 
-      try {
-        sourceNovels = await source.search(cleanQuery).timeout(sourceTimeout);
-        isSuccess = true;
-      } on TimeoutException {
-        errorMessage = 'Source search timed out after ${sourceTimeout.inSeconds}s';
-      } catch (e) {
-        errorMessage = e.toString().replaceAll('Exception:', '').trim();
-      } finally {
-        stopwatch.stop();
-      }
-
-      // Check if user entered a newer query while this source was fetching
+    void maybeEmitUpdate(bool force) {
       if (_currentGenerationId != generationId) return;
+      final now = DateTime.now();
+      if (force || now.difference(lastEmission).inMilliseconds > 200 || resultsAccumulator.length == 1) {
+        lastEmission = now;
+        final isAllDone = resultsAccumulator.length >= allSources.length;
+        final sortedMatches = groupedMap.values.toList()
+          ..sort((a, b) => computeRelevanceScore(b, cleanQuery).compareTo(computeRelevanceScore(a, cleanQuery)));
 
-      final result = SourceSearchResult(
-        source: source,
-        novels: sourceNovels,
-        isSuccess: isSuccess,
-        errorMessage: errorMessage,
-        elapsed: stopwatch.elapsed,
-      );
-
-      // Mutate local accumulators safely
-      resultsAccumulator.add(result);
-
-      // Sort novels within this source by relevance to query
-      sourceNovels.sort((a, b) => computeNovelRelevance(b.title, b.author, cleanQuery).compareTo(computeNovelRelevance(a.title, a.author, cleanQuery)));
-
-      for (final novel in sourceNovels) {
-        novelsAccumulator.add(novel);
-
-        // Normalize title for clustering
-        final normalizedKey = normalizeTitle(novel.title);
-        if (groupedMap.containsKey(normalizedKey)) {
-          final existing = groupedMap[normalizedKey]!;
-          existing.sourceVariants[source] = novel;
-
-          // Prefer exact title over long subtitle/fanfiction variants
-          if (novel.title.toLowerCase().trim() == cleanQuery.toLowerCase().trim() ||
-              (novel.title.length < existing.canonicalTitle.length &&
-                  novel.title.toLowerCase().contains(cleanQuery.toLowerCase()))) {
-            existing.canonicalTitle = novel.title;
-          }
-
-          // Prefer real author over 'Unknown Author'
-          if ((existing.author == 'Unknown Author' || existing.author.isEmpty) &&
-              novel.author.isNotEmpty &&
-              novel.author != 'Unknown Author') {
-            existing.author = novel.author;
-          }
-
-          // Prefer real cover over placeholder
-          if (novel.coverUrl.isNotEmpty &&
-              (existing.coverUrl.isEmpty ||
-                  existing.coverUrl.contains('400') ||
-                  existing.coverUrl.contains('placeholder') ||
-                  existing.coverUrl.contains('blank'))) {
-            existing.coverUrl = novel.coverUrl;
-          }
-        } else {
-          groupedMap[normalizedKey] = GroupedNovelMatch(
-            canonicalTitle: novel.title,
-            author: novel.author.isNotEmpty ? novel.author : 'Unknown Author',
-            coverUrl: novel.coverUrl,
-            sourceVariants: {source: novel},
-          );
-        }
+        value = value.copyWith(
+          completedSources: resultsAccumulator.length,
+          isSearching: !isAllDone,
+          sourceResults: List.unmodifiable(resultsAccumulator),
+          allNovelsRaw: List.unmodifiable(novelsAccumulator),
+          groupedMatches: List.unmodifiable(sortedMatches),
+        );
       }
+    }
 
-      final isAllDone = resultsAccumulator.length >= sources.length;
+    int nextSourceIndex = 0;
+    const int maxConcurrent = 5;
 
-      // Sort grouped matches by relevance score (exact match and multi-source novels at the top)
-      final sortedMatches = groupedMap.values.toList()
-        ..sort((a, b) => computeRelevanceScore(b, cleanQuery).compareTo(computeRelevanceScore(a, cleanQuery)));
+    Future<void> runWorker() async {
+      while (true) {
+        if (_currentGenerationId != generationId) return;
+        NovelSource source;
+        if (nextSourceIndex < allSources.length) {
+          source = allSources[nextSourceIndex++];
+        } else {
+          return;
+        }
 
-      // Incrementally emit state to UI listeners
-      value = value.copyWith(
-        completedSources: resultsAccumulator.length,
-        isSearching: !isAllDone,
-        sourceResults: List.unmodifiable(resultsAccumulator),
-        allNovelsRaw: List.unmodifiable(novelsAccumulator),
-        groupedMatches: List.unmodifiable(sortedMatches),
-      );
-    }).toList();
+        final stopwatch = Stopwatch()..start();
+        List<Novel> sourceNovels = [];
+        bool isSuccess = false;
+        String? errorMessage;
 
-    // Wait for all workers to settle
+        try {
+          sourceNovels = await source.search(cleanQuery).timeout(sourceTimeout);
+          isSuccess = true;
+        } on TimeoutException {
+          errorMessage = 'Source search timed out after ${sourceTimeout.inSeconds}s';
+        } catch (e) {
+          errorMessage = e.toString().replaceAll('Exception:', '').trim();
+        } finally {
+          stopwatch.stop();
+        }
+
+        if (_currentGenerationId != generationId) return;
+
+        final result = SourceSearchResult(
+          source: source,
+          novels: sourceNovels,
+          isSuccess: isSuccess,
+          errorMessage: errorMessage,
+          elapsed: stopwatch.elapsed,
+        );
+
+        resultsAccumulator.add(result);
+
+        // Sort novels within this source by relevance to query
+        sourceNovels.sort((a, b) => computeNovelRelevance(b.title, b.author, cleanQuery).compareTo(computeNovelRelevance(a.title, a.author, cleanQuery)));
+
+        for (final novel in sourceNovels) {
+          novelsAccumulator.add(novel);
+
+          final normalizedKey = normalizeTitle(novel.title);
+          if (groupedMap.containsKey(normalizedKey)) {
+            final existing = groupedMap[normalizedKey]!;
+            existing.sourceVariants[source] = novel;
+
+            if (novel.title.toLowerCase().trim() == cleanQuery.toLowerCase().trim() ||
+                (novel.title.length < existing.canonicalTitle.length &&
+                    novel.title.toLowerCase().contains(cleanQuery.toLowerCase()))) {
+              existing.canonicalTitle = novel.title;
+            }
+
+            if ((existing.author == 'Unknown Author' || existing.author.isEmpty) &&
+                novel.author.isNotEmpty &&
+                novel.author != 'Unknown Author') {
+              existing.author = novel.author;
+            }
+
+            if (novel.coverUrl.isNotEmpty &&
+                (existing.coverUrl.isEmpty ||
+                    existing.coverUrl.contains('400') ||
+                    existing.coverUrl.contains('placeholder') ||
+                    existing.coverUrl.contains('blank'))) {
+              existing.coverUrl = novel.coverUrl;
+            }
+          } else {
+            groupedMap[normalizedKey] = GroupedNovelMatch(
+              canonicalTitle: novel.title,
+              author: novel.author.isNotEmpty ? novel.author : 'Unknown Author',
+              coverUrl: novel.coverUrl,
+              sourceVariants: {source: novel},
+            );
+          }
+        }
+
+        maybeEmitUpdate(false);
+      }
+    }
+
+    final workerFutures = <Future<void>>[];
+    final activeWorkers = allSources.length < maxConcurrent ? allSources.length : maxConcurrent;
+    for (int i = 0; i < activeWorkers; i++) {
+      workerFutures.add(runWorker());
+    }
+
     await Future.wait(workerFutures);
 
     if (_currentGenerationId == generationId) {
       final sortedMatches = groupedMap.values.toList()
         ..sort((a, b) => computeRelevanceScore(b, cleanQuery).compareTo(computeRelevanceScore(a, cleanQuery)));
 
-      value = value.copyWith(
+      final finalState = value.copyWith(
         isSearching: false,
-        completedSources: sources.length,
+        completedSources: allSources.length,
+        sourceResults: List.unmodifiable(resultsAccumulator),
+        allNovelsRaw: List.unmodifiable(novelsAccumulator),
         groupedMatches: List.unmodifiable(sortedMatches),
       );
+      value = finalState;
+
+      if (_queryCache.length >= _maxCacheEntries) {
+        _queryCache.remove(_queryCache.keys.first);
+      }
+      _queryCache[cacheKey] = finalState;
     }
   }
 

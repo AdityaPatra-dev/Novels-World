@@ -62,12 +62,21 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   ];
 
   List<String> _recentSearches = [];
+  bool _hasSubmitted = false;
 
   @override
   void initState() {
     super.initState();
     _searchController = GlobalSearchController();
     _loadRecentSearches();
+
+    _focusNode.addListener(() {
+      if (_focusNode.hasFocus && _hasSubmitted) {
+        setState(() {
+          _hasSubmitted = false;
+        });
+      }
+    });
 
     if (widget.initialQuery != null && widget.initialQuery!.trim().isNotEmpty) {
       _textController.text = widget.initialQuery!.trim();
@@ -97,7 +106,20 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       final list = List<String>.from(_recentSearches);
       list.removeWhere((s) => s.toLowerCase() == clean.toLowerCase());
       list.insert(0, clean);
-      if (list.length > 10) list.removeLast();
+      if (list.length > 15) list.removeLast();
+      await prefs.setStringList('global_search_recent', list);
+      if (mounted) {
+        setState(() => _recentSearches = list);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _removeRecentSearch(String item) async {
+    final clean = item.trim();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = List<String>.from(_recentSearches);
+      list.removeWhere((s) => s.toLowerCase() == clean.toLowerCase());
       await prefs.setStringList('global_search_recent', list);
       if (mounted) {
         setState(() => _recentSearches = list);
@@ -125,19 +147,25 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   }
 
   void _onQueryChanged(String query) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 450), () {
-      if (mounted) {
-        _searchController.search(query);
-      }
-    });
+    if (_hasSubmitted) {
+      setState(() {
+        _hasSubmitted = false;
+      });
+    } else {
+      setState(() {});
+    }
   }
 
   void _executeSearch(String query) {
+    final clean = query.trim();
+    if (clean.isEmpty) return;
     _debounceTimer?.cancel();
     _focusNode.unfocus();
-    _saveRecentSearch(query);
-    _searchController.search(query);
+    setState(() {
+      _hasSubmitted = true;
+    });
+    _saveRecentSearch(clean);
+    _searchController.search(clean);
   }
 
   void _openNovel(Novel novel) {
@@ -228,15 +256,28 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                 suffixIcon: ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _textController,
                   builder: (context, val, _) {
-                    return val.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18, color: Colors.white54),
-                            onPressed: () {
-                              _textController.clear();
-                              _searchController.clear();
-                            },
-                          )
-                        : const SizedBox.shrink();
+                    if (val.text.isEmpty) return const SizedBox.shrink();
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18, color: Colors.white54),
+                          onPressed: () {
+                            _textController.clear();
+                            _searchController.clear();
+                            setState(() {
+                              _hasSubmitted = false;
+                            });
+                            _focusNode.requestFocus();
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.arrow_forward_rounded, size: 18, color: Color(0xFF8B5CF6)),
+                          tooltip: 'Search',
+                          onPressed: () => _executeSearch(_textController.text),
+                        ),
+                      ],
+                    );
                   },
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
@@ -246,28 +287,177 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           ),
         ),
       ),
-      body: ValueListenableBuilder<GlobalSearchState>(
-        valueListenable: _searchController,
-        builder: (context, state, _) {
-          return Column(
-            children: [
-              // Search Progress & Status Header
-              if (state.totalSources > 0) _buildProgressHeader(state),
+      body: !_hasSubmitted
+          ? _buildYouTubeSuggestionsOverlay()
+          : ValueListenableBuilder<GlobalSearchState>(
+              valueListenable: _searchController,
+              builder: (context, state, _) {
+                return Column(
+                  children: [
+                    // Search Progress & Status Header
+                    if (state.totalSources > 0) _buildProgressHeader(state),
 
-              // Live Matching Suggestions Bar
-              _buildLiveSuggestionsBar(),
+                    // Live Matching Suggestions Bar
+                    _buildLiveSuggestionsBar(),
 
-              // View Mode Selector Tabs
-              if (state.totalNovelsFound > 0) _buildViewTabs(state),
+                    // View Mode Selector Tabs
+                    if (state.totalNovelsFound > 0) _buildViewTabs(state),
 
-              // Main Results Body
-              Expanded(
-                child: _buildBody(state),
-              ),
-            ],
-          );
-        },
+                    // Main Results Body
+                    Expanded(
+                      child: _buildBody(state),
+                    ),
+                  ],
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildHighlightedText(String fullText, String query) {
+    final lowerText = fullText.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final matchIndex = lowerText.indexOf(lowerQuery);
+
+    if (matchIndex == -1 || query.isEmpty) {
+      return Text(
+        fullText,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+      );
+    }
+
+    final before = fullText.substring(0, matchIndex);
+    final match = fullText.substring(matchIndex, matchIndex + query.length);
+    final after = fullText.substring(matchIndex + query.length);
+
+    return RichText(
+      text: TextSpan(
+        style: const TextStyle(color: Colors.white70, fontSize: 14),
+        children: [
+          if (before.isNotEmpty) TextSpan(text: before),
+          TextSpan(
+            text: match,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (after.isNotEmpty) TextSpan(text: after),
+        ],
       ),
+    );
+  }
+
+  Widget _buildYouTubeSuggestionsOverlay() {
+    final query = _textController.text.trim();
+    if (query.isEmpty) {
+      return _buildSuggestionsView();
+    }
+
+    final lowerQuery = query.toLowerCase();
+
+    // 1. History matches
+    final matchingHistory = _recentSearches
+        .where((s) => s.toLowerCase().contains(lowerQuery))
+        .toList();
+
+    // 2. Library & Catalog matches
+    final libraryTitles = context.watch<LibraryProvider>().novels.map((n) => n.title).toList();
+    final allCandidates = <String>{..._popularSuggestions, ...libraryTitles};
+    final matchingCatalog = allCandidates
+        .where((s) =>
+            s.toLowerCase().contains(lowerQuery) &&
+            !matchingHistory.any((h) => h.toLowerCase() == s.toLowerCase()) &&
+            s.toLowerCase() != lowerQuery)
+        .take(15)
+        .toList();
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [
+        // "Search for ..." top action
+        ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
+          leading: const Icon(Icons.search_rounded, color: Color(0xFF8B5CF6), size: 20),
+          title: RichText(
+            text: TextSpan(
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              children: [
+                const TextSpan(text: 'Search for "'),
+                TextSpan(
+                  text: query,
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFA78BFA)),
+                ),
+                const TextSpan(text: '" across all sources'),
+              ],
+            ),
+          ),
+          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.white38),
+          onTap: () => _executeSearch(query),
+        ),
+        const Divider(color: Color(0xFF222230), height: 1),
+
+        // Recent history matching items
+        ...matchingHistory.map((item) {
+          return ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+            leading: const Icon(Icons.history_rounded, color: Color(0xFFA78BFA), size: 20),
+            title: _buildHighlightedText(item, query),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 16, color: Colors.white30),
+                  tooltip: 'Remove from history',
+                  onPressed: () => _removeRecentSearch(item),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.north_west_rounded, size: 18, color: Colors.white38),
+                  tooltip: 'Insert into search bar',
+                  onPressed: () {
+                    _textController.text = item;
+                    _textController.selection = TextSelection.fromPosition(
+                      TextPosition(offset: item.length),
+                    );
+                    setState(() {});
+                  },
+                ),
+              ],
+            ),
+            onTap: () {
+              _textController.text = item;
+              _executeSearch(item);
+            },
+          );
+        }),
+
+        // Predictive catalog & library matching items
+        ...matchingCatalog.map((item) {
+          return ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+            leading: const Icon(Icons.search_rounded, color: Colors.white38, size: 20),
+            title: _buildHighlightedText(item, query),
+            trailing: IconButton(
+              icon: const Icon(Icons.north_west_rounded, size: 18, color: Colors.white38),
+              tooltip: 'Insert into search bar',
+              onPressed: () {
+                _textController.text = item;
+                _textController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: item.length),
+                );
+                setState(() {});
+              },
+            ),
+            onTap: () {
+              _textController.text = item;
+              _executeSearch(item);
+            },
+          );
+        }),
+      ],
     );
   }
 

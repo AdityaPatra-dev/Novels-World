@@ -62,6 +62,8 @@ class _SourceSelectionModalState extends State<SourceSelectionModal> {
     'fadedpage',
     'local_epub',
     'novelpdf',
+    'epustakalay',
+    'odiabibhaba',
   };
 
   @override

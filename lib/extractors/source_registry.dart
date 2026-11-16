@@ -27,6 +27,12 @@ import 'bespoke/eastoftheweb_extractor.dart';
 import 'bespoke/uncanny_extractor.dart';
 import 'bespoke/fadedpage_extractor.dart';
 import 'bespoke/strangehorizons_extractor.dart';
+import 'bespoke/gadyakosh_extractor.dart';
+import 'bespoke/or_wikisource_extractor.dart';
+import 'bespoke/hindisamay_extractor.dart';
+import 'bespoke/epustakalay_extractor.dart';
+import 'bespoke/odiabibhaba_extractor.dart';
+import 'bespoke/kavitakosh_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -363,6 +369,20 @@ class SourceRegistry {
     // 11. International Sources: Japanese (ja)
     // ==========================================
     'kakuyomu': KakuyomuExtractor(),
+
+    // ==========================================
+    // 12. Indic Sources: Hindi (hi)
+    // ==========================================
+    'epustakalay': EPustakalayExtractor(),
+    'kavitakosh': KavitaKoshExtractor(),
+    'gadyakosh': GadyaKoshExtractor(),
+    'hindisamay': HindiSamayExtractor(),
+
+    // ==========================================
+    // 13. Indic Sources: Odia (or)
+    // ==========================================
+    'odiabibhaba': OdiaBibhabaExtractor(),
+    'or_wikisource': OdiaWikisourceExtractor(),
   };
 
   static String _defaultSourceId = 'readnovelfull';

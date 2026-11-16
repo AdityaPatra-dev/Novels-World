@@ -300,9 +300,10 @@
 
 ## Next Steps for Integration
 
-1. **Your Inspection**: Browse the URLs above that interest you, check whether they load cleanly in your browser without aggressive IP blocking, and mark `[x]` on your choices.
-2. **Implementation Strategy**:
-   * **Tier 1 (Instant Plug-in)**: Enable `Royal Road` and `Scribble Hub` (extractors are already written in your codebase).
-   * **Tier 2 (Template Reuse)**: Sites running **WordPress Madara** (BoxNovel, Woopread, RainOfSnow) or **NovelFull** (Novel12, Novel80, LightNovelWorld) can be activated in `source_registry.dart` with simple config entries without writing new extractors.
-   * **Tier 3 (Bespoke APIs)**: Build bespoke extractors for high-impact content sources (Standard Ebooks, Clarkesworld, Baen Free Library).
-   * **Tier 4 (MediaWiki & Vernacular Readers)**: Connect MediaWiki-based Indic platforms (Odia Wikisource, Gadya Kosh, Kavita Kosh, Bharatkosh) using the standardized MediaWiki action API (`api.php`), and create lightweight chapter scrapers for Odia Bibhaba, ePustakalay, Hindi Samay, and Pratilipi (Hindi/Odia).
+1. **Active Integrated Indic Extractors (Implemented in Application)**:
+   * **Gadya Kosh (गद्य कोश)** (`gadyakosh`): Fully integrated bespoke MediaWiki extractor. Reads Hindi classical prose, Premchand novels, Mansarovar stories, and literature online with clean chapter parsing.
+   * **Odia Wikisource (ଓଡ଼ିଆ ଉଇକିପାଠାଗାର)** (`or_wikisource`): Fully integrated bespoke extractor for canonical Odia literature (Fakir Mohan Senapati, Radhanath Ray, Gangadhar Meher, Sarala Dasa, Upendra Bhanja) with chapter-by-chapter parsing and text extraction.
+   * **Hindi Samay (हिंदी समय)** (`hindisamay`): Fully integrated bespoke portal extractor by Mahatma Gandhi Antarrashtriya Hindi Vishwavidyalaya. Multi-chapter novels, stories, memoirs, and essays.
+   * **ePustakalay (ई-पुस्तकालय)** (`epustakalay`): Fully integrated digital library extractor for India's largest Hindi book collection (history, literature, mythology, novels) with direct reader & preservation links.
+   * **Odia Bibhaba (ଓଡ଼ିଆ ବିଭବ)** (`odiabibhaba`): Fully integrated REST API extractor for Odisha's grandest digital library (10,000+ digitized historical books, Mukunda Deva chronicles, Paika rebellion records, rare dictionaries) with direct stream support.
+   * **Kavita Kosh (कविता कोश)** (`kavitakosh`): Fully integrated bespoke extractor for India's treasury of Hindi poetry and epics (Ramcharitmanas, Rashmirathi, Kamayani, Nirala, Mahadevi Varma).

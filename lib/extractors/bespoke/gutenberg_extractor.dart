@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
@@ -47,74 +48,345 @@ class GutenbergExtractor implements NovelSource {
     'Referer': '$baseUrl/',
   };
 
+  static const String _gutenbergBase = 'https://www.gutenberg.org';
+
+  static final List<Novel> _topGutenbergClassics = [
+    Novel(
+      id: 'gutenberg_1342',
+      sourceId: 'gutenberg',
+      title: 'Pride and Prejudice',
+      author: 'Jane Austen',
+      description: 'A romantic classic following the turbulent relationship between Elizabeth Bennet and Fitzwilliam Darcy.',
+      coverUrl: '$_gutenbergBase/cache/epub/1342/pg1342.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/1342',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/1342.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Romance', 'Historical Fiction'],
+    ),
+    Novel(
+      id: 'gutenberg_84',
+      sourceId: 'gutenberg',
+      title: 'Frankenstein; or, The Modern Prometheus',
+      author: 'Mary Wollstonecraft Shelley',
+      description: 'Gothic masterpiece about scientist Victor Frankenstein and the sentient creature he creates.',
+      coverUrl: '$_gutenbergBase/cache/epub/84/pg84.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/84',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/84.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Gothic', 'Science Fiction'],
+    ),
+    Novel(
+      id: 'gutenberg_11',
+      sourceId: 'gutenberg',
+      title: "Alice's Adventures in Wonderland",
+      author: 'Lewis Carroll',
+      description: 'The whimsical tale of Alice tumbling down a rabbit hole into a fantastical world.',
+      coverUrl: '$_gutenbergBase/cache/epub/11/pg11.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/11',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/11.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Fantasy', 'Children'],
+    ),
+    Novel(
+      id: 'gutenberg_345',
+      sourceId: 'gutenberg',
+      title: 'Dracula',
+      author: 'Bram Stoker',
+      description: 'The definitive vampire horror novel following Count Dracula\'s journey to England.',
+      coverUrl: '$_gutenbergBase/cache/epub/345/pg345.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/345',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/345.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Horror', 'Gothic'],
+    ),
+    Novel(
+      id: 'gutenberg_1661',
+      sourceId: 'gutenberg',
+      title: 'The Adventures of Sherlock Holmes',
+      author: 'Arthur Conan Doyle',
+      description: 'Twelve detective stories featuring the legendary Baker Street sleuth Sherlock Holmes and Dr. Watson.',
+      coverUrl: '$_gutenbergBase/cache/epub/1661/pg1661.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/1661',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/1661.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Mystery', 'Detective'],
+    ),
+    Novel(
+      id: 'gutenberg_98',
+      sourceId: 'gutenberg',
+      title: 'A Tale of Two Cities',
+      author: 'Charles Dickens',
+      description: 'Historical novel set in London and Paris before and during the French Revolution.',
+      coverUrl: '$_gutenbergBase/cache/epub/98/pg98.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/98',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/98.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Historical Fiction', 'Literature'],
+    ),
+    Novel(
+      id: 'gutenberg_174',
+      sourceId: 'gutenberg',
+      title: 'The Picture of Dorian Gray',
+      author: 'Oscar Wilde',
+      description: 'Philosophical gothic tale of aestheticism, moral decay, and an aging portrait.',
+      coverUrl: '$_gutenbergBase/cache/epub/174/pg174.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/174',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/174.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Gothic', 'Philosophy'],
+    ),
+    Novel(
+      id: 'gutenberg_2701',
+      sourceId: 'gutenberg',
+      title: 'Moby Dick; Or, The Whale',
+      author: 'Herman Melville',
+      description: 'Epic saga of Captain Ahab and his obsessive quest for the elusive white whale.',
+      coverUrl: '$_gutenbergBase/cache/epub/2701/pg2701.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/2701',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/2701.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Adventure', 'Literature'],
+    ),
+    Novel(
+      id: 'gutenberg_1260',
+      sourceId: 'gutenberg',
+      title: 'Jane Eyre: An Autobiography',
+      author: 'Charlotte Brontë',
+      description: 'Passionate bildungsroman following an orphaned governess and her bond with Mr. Rochester.',
+      coverUrl: '$_gutenbergBase/cache/epub/1260/pg1260.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/1260',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/1260.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Romance', 'Gothic'],
+    ),
+    Novel(
+      id: 'gutenberg_1400',
+      sourceId: 'gutenberg',
+      title: 'Great Expectations',
+      author: 'Charles Dickens',
+      description: 'The personal growth and fortunes of the orphan Pip amidst Victorian society.',
+      coverUrl: '$_gutenbergBase/cache/epub/1400/pg1400.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/1400',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/1400.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Literature', 'Victorian'],
+    ),
+    Novel(
+      id: 'gutenberg_43',
+      sourceId: 'gutenberg',
+      title: 'The Strange Case of Dr. Jekyll and Mr. Hyde',
+      author: 'Robert Louis Stevenson',
+      description: 'Chilling psychological exploration of the dual nature of man.',
+      coverUrl: '$_gutenbergBase/cache/epub/43/pg43.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/43',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/43.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Mystery', 'Horror'],
+    ),
+    Novel(
+      id: 'gutenberg_1184',
+      sourceId: 'gutenberg',
+      title: 'The Count of Monte Cristo',
+      author: 'Alexandre Dumas',
+      description: 'Historical adventure novel of betrayal, immense wealth, and elaborate retribution.',
+      coverUrl: '$_gutenbergBase/cache/epub/1184/pg1184.cover.medium.jpg',
+      sourceUrl: '$_gutenbergBase/ebooks/1184',
+      status: 'COMPLETED',
+      isFullBook: true,
+      bookDownloadUrl: '$_gutenbergBase/ebooks/1184.epub3.images',
+      bookFormat: 'epub',
+      genres: const ['Classics', 'Adventure', 'Historical Fiction'],
+    ),
+  ];
+
   @override
   Future<List<Novel>> getPopular({int page = 1}) async {
     final startIndex = (page - 1) * 25 + 1;
     final url = '$baseUrl/ebooks/search/?sort_order=downloads&start_index=$startIndex';
-    return _parseSearchGrid(url);
+    final live = await _parseSearchGrid(url);
+    if (live.isNotEmpty) return live;
+    return _topGutenbergClassics;
   }
 
   @override
   Future<List<Novel>> getLatest({int page = 1}) async {
     final startIndex = (page - 1) * 25 + 1;
     final url = '$baseUrl/ebooks/search/?sort_order=release_date&start_index=$startIndex';
-    return _parseSearchGrid(url);
+    final live = await _parseSearchGrid(url);
+    if (live.isNotEmpty) return live;
+    return _topGutenbergClassics.reversed.toList();
   }
 
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
+    final cleanQuery = query.trim().toLowerCase();
+    if (cleanQuery.isEmpty) return [];
+
     final startIndex = (page - 1) * 25 + 1;
     final encoded = Uri.encodeComponent(query.trim());
     final url = '$baseUrl/ebooks/search/?query=$encoded&start_index=$startIndex';
-    return _parseSearchGrid(url);
+    final live = await _parseSearchGrid(url);
+    if (live.isNotEmpty) return live;
+
+    return _topGutenbergClassics.where((n) {
+      return n.title.toLowerCase().contains(cleanQuery) ||
+          n.author.toLowerCase().contains(cleanQuery) ||
+          n.description.toLowerCase().contains(cleanQuery);
+    }).toList();
   }
 
   Future<List<Novel>> _parseSearchGrid(String url) async {
-    final response = await _client.get(Uri.parse(url), headers: _headers);
-    if (response.statusCode != 200) {
-      return [];
-    }
-
-    final doc = html_parser.parse(response.body);
-    final novelList = <Novel>[];
-    final items = doc.querySelectorAll('li.booklink');
-
-    for (final item in items) {
-      final anchor = item.querySelector('a.link');
-      if (anchor == null) continue;
-
-      final href = anchor.attributes['href'];
-      if (href == null || href.isEmpty) continue;
-
-      final fullUrl = _resolveUrl(href);
-      final rawTitle = item.querySelector('.title')?.text.trim() ?? '';
-      if (rawTitle.isEmpty) continue;
-
-      final author = item.querySelector('.subtitle')?.text.trim() ?? 'Unknown Author';
-
-      // Extract book id (e.g. 1342)
-      final bookNum = Uri.parse(fullUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
-      String coverUrl = '';
-      if (bookNum.isNotEmpty) {
-        coverUrl = '$baseUrl/cache/epub/$bookNum/pg$bookNum.cover.medium.jpg';
+    try {
+      final response = await _client
+          .get(Uri.parse(url), headers: _headers)
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode != 200) {
+        return _fetchFromGutendex(url);
       }
 
-      final downloadUrl = bookNum.isNotEmpty ? '$baseUrl/ebooks/$bookNum.epub.images' : '';
-      novelList.add(Novel(
-        id: '${id}_$bookNum',
-        sourceId: id,
-        title: rawTitle,
-        author: author,
-        coverUrl: coverUrl,
-        sourceUrl: fullUrl,
-        status: 'COMPLETED',
-        isFullBook: true,
-        bookDownloadUrl: downloadUrl.isNotEmpty ? downloadUrl : null,
-        bookFormat: 'epub',
-      ));
-    }
+      final doc = html_parser.parse(response.body);
+      final novelList = <Novel>[];
+      final items = doc.querySelectorAll('li.booklink');
 
-    return novelList;
+      for (final item in items) {
+        final anchor = item.querySelector('a.link');
+        if (anchor == null) continue;
+
+        final href = anchor.attributes['href'];
+        if (href == null || href.isEmpty) continue;
+
+        final fullUrl = _resolveUrl(href);
+        final rawTitle = item.querySelector('.title')?.text.trim() ?? '';
+        if (rawTitle.isEmpty) continue;
+
+        final author = item.querySelector('.subtitle')?.text.trim() ?? 'Unknown Author';
+
+        // Extract book id (e.g. 1342)
+        final bookNum = Uri.parse(fullUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
+        String coverUrl = '';
+        if (bookNum.isNotEmpty) {
+          coverUrl = '$baseUrl/cache/epub/$bookNum/pg$bookNum.cover.medium.jpg';
+        }
+
+        final downloadUrl = bookNum.isNotEmpty ? '$baseUrl/ebooks/$bookNum.epub.images' : '';
+        novelList.add(Novel(
+          id: '${id}_$bookNum',
+          sourceId: id,
+          title: rawTitle,
+          author: author,
+          coverUrl: coverUrl,
+          sourceUrl: fullUrl,
+          status: 'COMPLETED',
+          isFullBook: true,
+          bookDownloadUrl: downloadUrl.isNotEmpty ? downloadUrl : null,
+          bookFormat: 'epub',
+        ));
+      }
+
+      if (novelList.isNotEmpty) {
+        return novelList;
+      }
+      return _fetchFromGutendex(url);
+    } catch (_) {
+      return _fetchFromGutendex(url);
+    }
+  }
+
+  Future<List<Novel>> _fetchFromGutendex(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final query = uri.queryParameters['query'];
+      final sortOrder = uri.queryParameters['sort_order'];
+      final startIndex = int.tryParse(uri.queryParameters['start_index'] ?? '1') ?? 1;
+      final page = (startIndex ~/ 25) + 1;
+
+      String gutendexUrl;
+      if (query != null && query.isNotEmpty) {
+        gutendexUrl = 'https://gutendex.com/books/?search=${Uri.encodeComponent(query)}&page=$page';
+      } else if (sortOrder == 'release_date') {
+        gutendexUrl = 'https://gutendex.com/books/?sort=ascending&page=$page';
+      } else {
+        gutendexUrl = 'https://gutendex.com/books/?sort=popular&page=$page';
+      }
+
+      final resp = await _client.get(Uri.parse(gutendexUrl), headers: {
+        'User-Agent': WebViewSessionManager.defaultUserAgent,
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 3));
+
+      if (resp.statusCode != 200) return [];
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      final books = data['results'] as List?;
+      if (books == null) return [];
+
+      final list = <Novel>[];
+      for (final item in books) {
+        final b = item as Map<String, dynamic>;
+        final bookId = b['id']?.toString() ?? '';
+        if (bookId.isEmpty) continue;
+
+        final rawTitle = b['title']?.toString() ?? 'Untitled';
+        final title = TextCleaner.cleanNovelTitle(rawTitle);
+
+        final authors = (b['authors'] as List?)
+                ?.map((a) => (a as Map)['name']?.toString() ?? '')
+                .where((name) => name.isNotEmpty)
+                .join(', ') ??
+            'Unknown Author';
+
+        final formats = b['formats'] as Map<String, dynamic>? ?? {};
+        final coverUrl = formats['image/jpeg']?.toString() ??
+            '$baseUrl/cache/epub/$bookId/pg$bookId.cover.medium.jpg';
+        final epubUrl = formats['application/epub+zip']?.toString() ??
+            '$baseUrl/ebooks/$bookId.epub.images';
+
+        final summaries = b['summaries'] as List?;
+        final desc = summaries != null && summaries.isNotEmpty
+            ? summaries.first.toString()
+            : ((b['subjects'] as List?)?.take(3).join(' • ') ?? 'Public Domain Classic');
+
+        list.add(Novel(
+          id: '${id}_$bookId',
+          sourceId: id,
+          title: title,
+          author: authors,
+          description: desc,
+          coverUrl: coverUrl,
+          sourceUrl: '$baseUrl/ebooks/$bookId',
+          status: 'COMPLETED',
+          isFullBook: true,
+          bookDownloadUrl: epubUrl,
+          bookFormat: 'epub',
+          genres: const ['Classics', 'Public Domain'],
+        ));
+      }
+
+      return list;
+    } catch (_) {
+      return [];
+    }
   }
 
   @override
@@ -128,20 +400,24 @@ class GutenbergExtractor implements NovelSource {
       final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
       if (response.statusCode != 200) {
         if (bookNum.isNotEmpty) {
-          return Novel(
-            id: '${id}_$bookNum',
-            sourceId: id,
-            title: 'Project Gutenberg Book #$bookNum',
-            author: 'Unknown Author',
-            description: 'Public domain book from Project Gutenberg.',
-            coverUrl: '$baseUrl/cache/epub/$bookNum/pg$bookNum.cover.medium.jpg',
-            genres: const ['Classics', 'Public Domain'],
-            status: 'COMPLETED',
-            sourceUrl: novelUrl,
-            isFullBook: true,
-            bookDownloadUrl: '$baseUrl/ebooks/$bookNum.epub.images',
-            bookFormat: 'epub',
+          final curated = _topGutenbergClassics.firstWhere(
+            (n) => n.id == '${id}_$bookNum' || n.sourceUrl.endsWith('/$bookNum'),
+            orElse: () => Novel(
+              id: '${id}_$bookNum',
+              sourceId: id,
+              title: 'Project Gutenberg Book #$bookNum',
+              author: 'Unknown Author',
+              description: 'Public domain book from Project Gutenberg.',
+              coverUrl: '$baseUrl/cache/epub/$bookNum/pg$bookNum.cover.medium.jpg',
+              genres: const ['Classics', 'Public Domain'],
+              status: 'COMPLETED',
+              sourceUrl: novelUrl,
+              isFullBook: true,
+              bookDownloadUrl: '$baseUrl/ebooks/$bookNum.epub.images',
+              bookFormat: 'epub',
+            ),
           );
+          return curated;
         }
         throw HttpException('Failed to load novel details from Project Gutenberg ($novelUrl)');
       }

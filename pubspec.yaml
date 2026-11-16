@@ -59,6 +59,7 @@ dependencies:
   firebase_auth_web: ^6.3.2
   cloud_firestore_web: ^5.8.0
   google_sign_in: ^6.2.2
+  just_audio_background: ^0.0.1-beta.17
 
 dev_dependencies:
   flutter_test:

@@ -33,8 +33,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (!mounted) return;
     final reader = context.read<ReaderProvider>();
     final offset = reader.savedScrollOffset;
-    if (offset > 0 && _scrollController.hasClients) {
-      _scrollController.jumpTo(offset.clamp(0.0, _scrollController.position.maxScrollExtent));
+    if (_scrollController.hasClients) {
+      if (offset > 0) {
+        _scrollController.jumpTo(offset.clamp(0.0, _scrollController.position.maxScrollExtent));
+      } else if (reader.activeSentenceIndex > 0) {
+        final approxOffset = (reader.activeSentenceIndex * 65.0).clamp(0.0, _scrollController.position.maxScrollExtent);
+        _scrollController.jumpTo(approxOffset);
+      }
     }
   }
 

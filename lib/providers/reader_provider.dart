@@ -184,12 +184,26 @@ class ReaderProvider extends ChangeNotifier {
     required List<Chapter> chapters,
     required Chapter initialChapter,
   }) async {
+    final isSameNovel = _novel?.id == novel.id;
+    final targetIdx = chapters.indexWhere((c) => c.id == initialChapter.id);
+    final isSameChapter = isSameNovel &&
+        _currentChapterIndex == targetIdx &&
+        _content != null &&
+        targetIdx != -1;
+
     _novel = novel;
     _chapters = chapters;
-    _currentChapterIndex = chapters.indexWhere((c) => c.id == initialChapter.id);
-    if (_currentChapterIndex == -1 && chapters.isNotEmpty) {
-      _currentChapterIndex = 0;
+    _currentChapterIndex = targetIdx != -1 ? targetIdx : 0;
+
+    // If re-entering the SAME chapter that is already loaded:
+    // Do NOT stop TTS and do NOT reset sentence index!
+    if (isSameChapter) {
+      ttsManager.currentNovel = novel;
+      ttsManager.currentChapterTitle = initialChapter.title;
+      notifyListeners();
+      return;
     }
+
     await loadCurrentChapter();
   }
 
@@ -449,7 +463,12 @@ class ReaderProvider extends ChangeNotifier {
     if (ttsManager.isPlaying) {
       ttsManager.pause();
     } else {
-      ttsManager.resume();
+      if (ttsManager.sentences.isNotEmpty) {
+        ttsManager.resume();
+      } else if (_sentences.isNotEmpty) {
+        ttsManager.loadSentences(_sentences, startIndex: _activeSentenceIndex);
+        ttsManager.playFrom(_activeSentenceIndex);
+      }
     }
   }
 

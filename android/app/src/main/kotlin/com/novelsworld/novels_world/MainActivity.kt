@@ -2,12 +2,12 @@ package com.novelsworld.novels_world
 
 import android.content.Intent
 import androidx.core.content.FileProvider
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
     private val UPDATER_CHANNEL = "com.novelsworld.novels_world/app_updater"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

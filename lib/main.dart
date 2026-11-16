@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:provider/provider.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/cloud_sync_service.dart';
@@ -32,6 +33,19 @@ void main() async {
 
   if (!kIsWeb) {
     HttpOverrides.global = AppHttpOverrides();
+    if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+      try {
+        await JustAudioBackground.init(
+          androidNotificationChannelId: 'com.novelsworld.novels_world.channel.audio',
+          androidNotificationChannelName: 'Novels World Audio Playback',
+          androidNotificationOngoing: true,
+          androidStopForegroundOnPause: true,
+          androidNotificationIcon: 'mipmap/ic_launcher',
+        );
+      } catch (e) {
+        debugPrint('[JustAudioBackground] init info: $e');
+      }
+    }
   } else {
     initFirebaseWebPlugins();
   }

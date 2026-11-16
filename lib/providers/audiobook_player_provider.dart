@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import '../core/models/novel.dart';
 import '../core/models/chapter.dart';
 import '../data/storage_service.dart';
@@ -102,7 +103,20 @@ class AudiobookPlayerProvider extends ChangeNotifier {
 
     try {
       await _player.stop();
-      await _player.setFilePath(audioFile.path);
+      if (!kIsWeb) {
+        final mediaItem = MediaItem(
+          id: '${novel.id}_${chapter.id}_$language',
+          album: novel.title,
+          title: chapter.title,
+          artist: novel.author.isNotEmpty ? novel.author : 'Novels World',
+          artUri: novel.coverUrl.isNotEmpty ? Uri.tryParse(novel.coverUrl) : null,
+        );
+        await _player.setAudioSource(
+          AudioSource.file(audioFile.path, tag: mediaItem),
+        );
+      } else {
+        await _player.setFilePath(audioFile.path);
+      }
       await _player.setSpeed(_speed);
       await _player.play();
       _isPlaying = true;

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import '../core/models/novel.dart';
 import '../core/services/audiobook_assembler_service.dart';
 import '../data/storage_service.dart';
@@ -90,6 +91,10 @@ class RingBufferManager extends ChangeNotifier {
 
   void _initPlayerListeners() {
     _stateSub = _player.playerStateStream.listen((state) {
+      if (state.playing != _isPlaying && state.processingState != ProcessingState.completed) {
+        _isPlaying = state.playing;
+        notifyListeners();
+      }
       if (state.processingState == ProcessingState.completed) {
         _handleSentenceCompleted();
       }
@@ -235,7 +240,7 @@ class RingBufferManager extends ChangeNotifier {
   /// Aggressively prefetches upcoming sentences in the background
   /// to ensure 0ms network latency and instant line-to-line transitions.
   void _prefetchUpcoming() {
-    if (kIsWeb) return; // Web uses direct streaming speech synthesis, skipping local file prefetching
+    if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST')) return; // Skip in tests or web
     for (int offset = 1; offset <= 5; offset++) {
       final targetIdx = _currentIndex + offset;
       if (targetIdx < _sentences.length) {
@@ -355,7 +360,16 @@ class RingBufferManager extends ChangeNotifier {
 
     if (!kIsWeb && audioPath != null && await File(audioPath).exists()) {
       try {
-        await _player.setFilePath(audioPath);
+        final mediaItem = MediaItem(
+          id: '${currentNovelId ?? 'tts'}_${currentChapterId ?? 'ch'}',
+          album: currentNovel?.title ?? 'Novels World',
+          title: currentChapterTitle ?? 'Reading Aloud',
+          artist: currentNovel?.author.isNotEmpty == true ? currentNovel!.author : 'Novels World',
+          artUri: currentNovel?.coverUrl.isNotEmpty == true ? Uri.tryParse(currentNovel!.coverUrl) : null,
+        );
+        await _player.setAudioSource(
+          AudioSource.file(audioPath, tag: mediaItem),
+        );
         await _player.setSpeed(_speed);
         await _player.setPitch(1.0); // Clean native playback without DSP artifacts
         await _player.play();

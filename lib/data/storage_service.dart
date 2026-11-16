@@ -24,6 +24,7 @@ class StorageService {
 
   SharedPreferences get _safePrefs => _prefs!;
   Directory get _safeAppDir => _appDir!;
+  Directory get appStorageDirectory => _safeAppDir;
 
   String get chaptersDirectoryPath => kIsWeb ? 'Browser Storage' : '${_safeAppDir.path}/chapters';
   String get audiobooksDirectoryPath => kIsWeb ? 'Browser Storage' : '${_safeAppDir.path}/audiobooks';
@@ -405,40 +406,44 @@ class StorageService {
 
   Future<void> deleteNovelStorage(Novel novel) async {
     await init();
-    if (kIsWeb) return;
-    if (novel.sourceId == 'local_epub' || novel.isFullBook) {
-      String path = '';
-      if (novel.sourceUrl.isNotEmpty) {
-        final uri = Uri.tryParse(novel.sourceUrl);
-        if (uri != null && uri.scheme == 'file') {
-          path = uri.toFilePath();
-        } else {
-          path = novel.sourceUrl;
-        }
+    if (kIsWeb) {
+      await removeDownloadedNovel(novel.id);
+      return;
+    }
+    String path = '';
+    if (novel.sourceUrl.isNotEmpty) {
+      final uri = Uri.tryParse(novel.sourceUrl);
+      if (uri != null && uri.scheme == 'file') {
+        path = uri.toFilePath();
+      } else {
+        path = novel.sourceUrl;
       }
-      if (path.isEmpty || !Directory(path).existsSync()) {
-        path = '${_safeAppDir.path}/imported_novels/${novel.id}';
-      }
-      final dir = Directory(path);
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
-    } else {
-      final chaptersDir = Directory('${_safeAppDir.path}/chapters');
-      if (await chaptersDir.exists()) {
-        await for (final entity in chaptersDir.list()) {
-          if (entity is File && entity.path.endsWith('.json')) {
-            try {
-              final raw = await entity.readAsString();
-              if (raw.contains('"novelId":"${novel.id}"')) {
-                await entity.delete();
-              }
-            } catch (_) {}
-          }
+    }
+    if (path.isEmpty || !Directory(path).existsSync()) {
+      path = '${_safeAppDir.path}/imported_novels/${novel.id}';
+    }
+    final dir = Directory(path);
+    if (await dir.exists()) {
+      await dir.delete(recursive: true);
+    }
+
+    final chaptersDir = Directory('${_safeAppDir.path}/chapters');
+    if (await chaptersDir.exists()) {
+      await for (final entity in chaptersDir.list()) {
+        if (entity is File && entity.path.endsWith('.json')) {
+          try {
+            final raw = await entity.readAsString();
+            if (raw.contains('"novelId":"${novel.id}"')) {
+              await entity.delete();
+            }
+          } catch (_) {}
         }
       }
     }
     await removeDownloadedNovel(novel.id);
+    if (novel.sourceId == 'local_epub') {
+      await removeNovelFromLibrary(novel.id);
+    }
   }
 
   // --- Downloaded Novels Index & Management ---
@@ -582,13 +587,28 @@ class StorageService {
     final downloadedList = _getDownloadedNovelsList();
     final novelMap = <String, Novel>{};
     for (final n in downloadedList) {
-      novelMap[n.id] = n;
+      if (kIsWeb) {
+        novelMap[n.id] = n;
+      } else {
+        final chs = getDownloadedChapterIds(n.id);
+        final importDir = Directory('${_safeAppDir.path}/imported_novels/${n.id}');
+        final hasImportDir = importDir.existsSync() && (importDir.listSync().isNotEmpty);
+        if (chs.isNotEmpty || hasImportDir) {
+          novelMap[n.id] = n;
+        }
+      }
     }
 
-    // Also include any library novels that are local_epub or isFullBook or have downloaded chapters
+    // Also include any library novels that have downloaded chapters or imported files
     for (final n in getLibraryNovels()) {
+      if (novelMap.containsKey(n.id)) continue;
       if (n.sourceId == 'local_epub' || n.isFullBook) {
-        novelMap[n.id] = n;
+        if (!kIsWeb) {
+          final dir = Directory('${_safeAppDir.path}/imported_novels/${n.id}');
+          if (dir.existsSync() && (dir.listSync().isNotEmpty)) {
+            novelMap[n.id] = n;
+          }
+        }
       } else {
         final chs = getDownloadedChapterIds(n.id);
         if (chs.isNotEmpty) {

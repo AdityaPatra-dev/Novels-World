@@ -117,29 +117,40 @@ class OdiaBibhabaExtractor implements NovelSource {
     final slug = novelUrl.split('/').last.trim();
     final directPdfUrl = '$baseUrl/api/books/$slug/stream';
 
-    // Try finding in API
     try {
-      final searchResp = await _client.get(Uri.parse('$baseUrl/api/books?search=$slug'), headers: _headers);
-      if (searchResp.statusCode == 200) {
-        final data = jsonDecode(searchResp.body) as Map<String, dynamic>;
-        final books = data['books'] as List<dynamic>? ?? [];
-        if (books.isNotEmpty) {
-          final b = books.first as Map<String, dynamic>;
-          final title = b['title_or']?.toString() ?? b['title_en']?.toString() ?? slug;
-          final author = b['author_or']?.toString() ?? b['author_en']?.toString() ?? 'Unknown';
+      final resp = await _client.get(Uri.parse('$baseUrl/api/books/$slug'), headers: _headers);
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final b = (data['book'] ?? (data['books'] as List?)?.firstOrNull) as Map<String, dynamic>?;
+        if (b != null) {
+          final titleOr = b['title_or']?.toString() ?? '';
+          final titleEn = b['title_en']?.toString() ?? slug;
+          final title = titleOr.isNotEmpty ? titleOr : titleEn;
+
+          final authorOr = b['author_or']?.toString() ?? '';
+          final authorEn = b['author_en']?.toString() ?? 'ଓଡ଼ିଆ ଲେଖକ';
+          final author = authorOr.isNotEmpty ? authorOr : authorEn;
+
           final cover = b['cover_url']?.toString() ?? '';
+          final pdfPath = b['pdf_url']?.toString() ?? '/api/books/$slug/stream';
+          final pdfUrl = pdfPath.startsWith('http') ? pdfPath : '$baseUrl$pdfPath';
+
+          final category = b['category_or']?.toString() ?? b['category_en']?.toString() ?? 'ଇତିହାସ ଓ ସାହିତ୍ୟ';
+          final year = b['year_or']?.toString() ?? b['year_en']?.toString() ?? '';
+          final desc = year.isNotEmpty ? '$category ($year)' : category;
+
           return Novel(
             id: '${id}_$slug',
             sourceId: id,
             title: title,
             author: author,
-            description: 'ଓଡ଼ିଆ ବିଭବ ଡିଜିଟାଲ ପୁସ୍ତକ ସମ୍ଭାର (Odia Heritage Digital Collection)',
+            description: desc,
             coverUrl: cover,
-            genres: const ['Odia', 'History', 'Literature'],
+            genres: const ['Odia', 'History', 'Heritage', 'Literature'],
             status: 'COMPLETED',
             sourceUrl: novelUrl,
             isFullBook: true,
-            bookDownloadUrl: directPdfUrl,
+            bookDownloadUrl: pdfUrl,
             bookFormat: 'pdf',
           );
         }
@@ -150,7 +161,7 @@ class OdiaBibhabaExtractor implements NovelSource {
       id: '${id}_$slug',
       sourceId: id,
       title: slug.replaceAll('-', ' '),
-      author: 'Unknown Author',
+      author: 'ଓଡ଼ିଆ ଲେଖକ',
       description: 'ଓଡ଼ିଆ ବିଭବ ଡିଜିଟାଲ ପୁସ୍ତକ',
       sourceUrl: novelUrl,
       isFullBook: true,

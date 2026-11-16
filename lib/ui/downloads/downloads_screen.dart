@@ -928,6 +928,7 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
                     icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
                     tooltip: isBook ? 'Delete book from device' : 'Delete downloaded chapters',
                     onPressed: () async {
+                      final downloadService = context.read<DownloadService>();
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
@@ -948,9 +949,14 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
                         ),
                       );
                       if (confirm == true && mounted) {
+                        try {
+                          downloadService.removeBookTask(widget.novel.id);
+                        } catch (_) {}
                         await _storageService.deleteNovelStorage(widget.novel);
-                        _loadInfo();
-                        widget.onNovelUpdated();
+                        if (mounted) {
+                          _loadInfo();
+                          widget.onNovelUpdated();
+                        }
                       }
                     },
                   ),

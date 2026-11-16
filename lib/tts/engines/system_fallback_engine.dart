@@ -18,6 +18,7 @@ class SystemFallbackEngine implements TtsEngineInterface {
   static final Map<String, Map<String, String>> _voiceCache = {};
 
   static String? _appliedVoiceName;
+  static String? _appliedLanguage;
   static double? _appliedSpeed;
   static double? _appliedPitch;
   static Function()? _currentCompletion;
@@ -108,18 +109,25 @@ class SystemFallbackEngine implements TtsEngineInterface {
       }
     }
 
-    // Fallback: pick any English voice matching the locale prefix
-    final targetPrefix = profile.accent == 'UK' ? 'en-gb' : 'en-us';
-    for (final v in _availableSystemVoices) {
-      if (v is Map) {
-        final locale = (v['locale'] ?? '').toString().toLowerCase();
-        if (locale.startsWith(targetPrefix)) {
-          final resolved = {
-            'name': v['name'].toString(),
-            'locale': v['locale'].toString(),
-          };
-          _voiceCache[profile.id] = resolved;
-          return resolved;
+    // ONLY fallback to English if the requested profile was actually an English profile!
+    final isEnglishProfile = (profile.locale != null && profile.locale!.toLowerCase().startsWith('en')) ||
+        profile.accent == 'US' ||
+        profile.accent == 'UK' ||
+        profile.targetVoiceKeywords.any((k) => k.startsWith('en'));
+
+    if (isEnglishProfile) {
+      final targetPrefix = profile.accent == 'UK' ? 'en-gb' : 'en-us';
+      for (final v in _availableSystemVoices) {
+        if (v is Map) {
+          final locale = (v['locale'] ?? '').toString().toLowerCase();
+          if (locale.startsWith(targetPrefix)) {
+            final resolved = {
+              'name': v['name'].toString(),
+              'locale': v['locale'].toString(),
+            };
+            _voiceCache[profile.id] = resolved;
+            return resolved;
+          }
         }
       }
     }
@@ -169,6 +177,16 @@ class SystemFallbackEngine implements TtsEngineInterface {
 
     try {
       final profile = VoiceCalibration.getProfile(voice);
+
+      // Set language on flutterTts if it changed
+      final targetLocale = profile.locale ??
+          (profile.targetVoiceKeywords.isNotEmpty ? profile.targetVoiceKeywords.first : 'en-US');
+      if (_appliedLanguage != targetLocale) {
+        try {
+          await _flutterTts.setLanguage(targetLocale.replaceAll('_', '-'));
+          _appliedLanguage = targetLocale;
+        } catch (_) {}
+      }
 
       // ONLY reload voice if it actually changed — avoiding Android voice pack reset delay!
       final matchedVoice = _resolveBestVoice(profile);

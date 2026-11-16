@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../core/models/novel.dart';
 import '../core/models/chapter.dart';
@@ -105,11 +106,24 @@ class DownloadService extends ChangeNotifier {
   }
 
   bool isBookDownloaded(String novelId) {
-    // Check if book exists in downloaded tasks or library
+    if (kIsWeb) return false;
+    // Check if book exists in completed tasks
     if (_bookTasks.any((t) => t.novel.id == novelId && t.status == DownloadStatus.completed)) {
       return true;
     }
-    return _storage.isNovelInLibrary(novelId);
+    // Check if imported files physically exist on device
+    try {
+      final dir = Directory('${_storage.appStorageDirectory.path}/imported_novels/$novelId');
+      if (dir.existsSync() && (dir.listSync().isNotEmpty)) {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  void removeBookTask(String novelId) {
+    _bookTasks.removeWhere((t) => t.novel.id == novelId);
+    notifyListeners();
   }
 
   bool isDownloadingBook(String novelId) =>

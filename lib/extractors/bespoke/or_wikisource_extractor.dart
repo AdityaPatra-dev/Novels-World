@@ -46,8 +46,8 @@ class OdiaWikisourceExtractor implements NovelSource {
   @override
   Future<List<Novel>> getPopular({int page = 1}) async {
     const popularQueries = [
-      'ଫକୀର ମୋହନ ସେନାପତି',
       'ଛମାଣ ଆଠଗୁଣ୍ଠ',
+      'ଫକୀର ମୋହନ ସେନାପତି',
       'ରାଧାନାଥ ରାୟ',
       'ଗଙ୍ଗାଧର ମେହେର',
       'ସାରଳା ଦାସ',
@@ -103,7 +103,10 @@ class OdiaWikisourceExtractor implements NovelSource {
       if (rawTitle.startsWith('ଶ୍ରେଣୀ:') ||
           rawTitle.startsWith('ବ୍ୟବହାରକାରୀ:') ||
           rawTitle.startsWith('ଉଇକିପାଠାଗାର:') ||
-          rawTitle.startsWith('ମିଡ଼ିଆ:')) {
+          rawTitle.startsWith('ମିଡ଼ିଆ:') ||
+          rawTitle.startsWith('ମିଡ଼ିଆଉଇକି:') ||
+          rawTitle.startsWith('Special:') ||
+          rawTitle.startsWith('Help:')) {
         continue;
       }
 
@@ -121,15 +124,17 @@ class OdiaWikisourceExtractor implements NovelSource {
       final snippetRaw = item['snippet']?.toString() ?? '';
       final snippet = snippetRaw.replaceAll(RegExp(r'<[^>]*>'), '').trim();
 
-      final encodedTitle = Uri.encodeComponent(rawTitle.replaceAll(' ', '_'));
-      final novelUrl = '$baseUrl/wiki/$encodedTitle';
+      final pageId = item['pageid']?.toString() ?? '';
+      final novelUrl = pageId.isNotEmpty
+          ? '$baseUrl/?curid=$pageId'
+          : '$baseUrl/wiki/${Uri.encodeComponent(rawTitle.replaceAll(' ', '_'))}';
 
       novels.add(Novel(
-        id: '${id}_${rawTitle.hashCode.abs()}',
+        id: '${id}_${pageId.isNotEmpty ? pageId : rawTitle.hashCode.abs()}',
         sourceId: id,
         title: title,
         author: author,
-        description: snippet,
+        description: snippet.isNotEmpty ? snippet : 'ଓଡ଼ିଆ ଉଇକିପାଠାଗାର ସାହିତ୍ୟ କୃତି।',
         coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',
         genres: const ['Odia', 'Classics', 'Sahitya'],
         status: 'COMPLETED',
@@ -143,13 +148,19 @@ class OdiaWikisourceExtractor implements NovelSource {
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
     try {
+      final pageId = _extractPageIdFromUrl(novelUrl);
       final pageTitle = _extractPageTitleFromUrl(novelUrl);
-      final apiUrl = '$baseUrl/w/api.php?action=parse&page=${Uri.encodeComponent(pageTitle)}&format=json&prop=text';
+
+      final apiUrl = pageId.isNotEmpty
+          ? '$baseUrl/w/api.php?action=parse&pageid=$pageId&format=json&prop=text|properties'
+          : '$baseUrl/w/api.php?action=parse&page=${Uri.encodeComponent(pageTitle.replaceAll(' ', '_'))}&format=json&prop=text|properties';
+
       final response = await _client.get(Uri.parse(apiUrl), headers: _headers);
 
       String title = pageTitle;
       String author = 'ଓଡ଼ିଆ କ୍ଲାସିକ (Odia Classic)';
       String description = '';
+      String coverUrl = 'https://or.wikisource.org/static/images/project-logos/orwikisource.png';
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -158,30 +169,56 @@ class OdiaWikisourceExtractor implements NovelSource {
           title = parseData['title']?.toString() ?? pageTitle;
           final htmlText = parseData['text']?['*']?.toString() ?? '';
           final doc = html_parser.parse(htmlText);
+
+          final headerTitle = doc.querySelector('#header_title_text')?.text.trim();
+          final headerAuthor = doc.querySelector('#header_author_text')?.text.trim();
+          final authorLink = doc.querySelector('a[href*="/wiki/ଲେଖକ:"]')?.text.trim();
+
+          if (headerTitle != null && headerTitle.isNotEmpty) {
+            title = headerTitle;
+          }
+          if (headerAuthor != null && headerAuthor.isNotEmpty) {
+            author = headerAuthor;
+          } else if (authorLink != null && authorLink.isNotEmpty) {
+            author = authorLink;
+          }
+
+          // Look for cover image
+          final img = doc.querySelector('.infobox img, #mw-content-text img, .thumbimage, img');
+          if (img != null) {
+            final src = img.attributes['src'] ?? '';
+            if (src.isNotEmpty && !src.contains('wikimedia-button') && !src.contains('poweredby')) {
+              coverUrl = src.startsWith('//') ? 'https:$src' : (src.startsWith('http') ? src : '$baseUrl$src');
+            }
+          }
+
           final firstP = doc.querySelector('p')?.text.trim() ?? '';
-          if (firstP.isNotEmpty) {
+          if (firstP.isNotEmpty && firstP.length > 20) {
             description = firstP;
+          } else {
+            description = '$title - $author ଙ୍କ ଦ୍ୱାରା ରଚିତ ଓଡ଼ିଆ କ୍ଲାସିକ ସାହିତ୍ୟ କୃତି।';
           }
         }
       }
 
       return Novel(
-        id: '${id}_${pageTitle.hashCode.abs()}',
+        id: '${id}_${pageId.isNotEmpty ? pageId : pageTitle.hashCode.abs()}',
         sourceId: id,
         title: title,
         author: author,
         description: description,
-        coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',
+        coverUrl: coverUrl,
         genres: const ['Odia', 'Classics', 'Sahitya'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,
       );
     } catch (_) {
+      final fallbackTitle = _extractPageTitleFromUrl(novelUrl);
       return Novel(
         id: '${id}_${novelUrl.hashCode.abs()}',
         sourceId: id,
-        title: 'Odia Literature',
-        author: 'Unknown Author',
+        title: fallbackTitle.isNotEmpty ? fallbackTitle : 'Odia Literature',
+        author: 'ଓଡ଼ିଆ ଲେଖକ',
         coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',
         sourceUrl: novelUrl,
       );
@@ -194,8 +231,13 @@ class OdiaWikisourceExtractor implements NovelSource {
     void Function(List<Chapter> batch)? onBatchLoaded,
   }) async {
     try {
+      final pageId = _extractPageIdFromUrl(novelUrl);
       final pageTitle = _extractPageTitleFromUrl(novelUrl);
-      final apiUrl = '$baseUrl/w/api.php?action=parse&page=${Uri.encodeComponent(pageTitle)}&format=json&prop=text';
+
+      final apiUrl = pageId.isNotEmpty
+          ? '$baseUrl/w/api.php?action=parse&pageid=$pageId&format=json&prop=text'
+          : '$baseUrl/w/api.php?action=parse&page=${Uri.encodeComponent(pageTitle.replaceAll(' ', '_'))}&format=json&prop=text';
+
       final response = await _client.get(Uri.parse(apiUrl), headers: _headers);
 
       if (response.statusCode != 200) return [];
@@ -205,15 +247,18 @@ class OdiaWikisourceExtractor implements NovelSource {
 
       final doc = html_parser.parse(html);
       final List<Chapter> chapters = [];
-      final novelId = '${id}_${pageTitle.hashCode.abs()}';
+      final seenUrls = <String>{};
+      final novelId = '${id}_${pageId.isNotEmpty ? pageId : pageTitle.hashCode.abs()}';
 
       final links = doc.querySelectorAll('a[href*="/wiki/"]');
       final ignoredPrefixes = [
         'ଶ୍ରେଣୀ:',
         'ବ୍ୟବହାରକାରୀ:',
         'ଉଇକିପାଠାଗାର:',
+        'ଲେଖକ:',
         'Help:',
         'Special:',
+        'MediaWiki:',
       ];
 
       for (final a in links) {
@@ -221,31 +266,29 @@ class OdiaWikisourceExtractor implements NovelSource {
         final href = a.attributes['href'] ?? '';
         if (text.isEmpty || href.isEmpty) continue;
 
-        if (ignoredPrefixes.any((p) => href.contains(Uri.encodeComponent(p)))) {
+        if (ignoredPrefixes.any((p) => href.contains(Uri.encodeComponent(p)) || href.contains(p))) {
           continue;
         }
 
-        // Subpage or chapter link
-        if (href.contains(Uri.encodeComponent(pageTitle)) && href != novelUrl) {
-          final chapterUrl = href.startsWith('http') ? href : '$baseUrl$href';
-          final cleanTitle = text.isNotEmpty ? text : _extractPageTitleFromUrl(chapterUrl);
+        final chapterUrl = href.startsWith('http') ? href : '$baseUrl$href';
+        if (chapterUrl == novelUrl || !seenUrls.add(chapterUrl)) continue;
 
-          chapters.add(Chapter(
-            id: '${id}_${chapterUrl.hashCode.abs()}',
-            novelId: novelId,
-            title: cleanTitle,
-            url: chapterUrl,
-            chapterNumber: (chapters.length + 1).toDouble(),
-          ));
-        }
+        chapters.add(Chapter(
+          id: '${id}_${chapterUrl.hashCode.abs()}',
+          novelId: novelId,
+          title: text,
+          url: chapterUrl,
+          chapterNumber: (chapters.length + 1).toDouble(),
+        ));
       }
 
       // If no subchapters were found, the page itself is a full work or poem!
       if (chapters.isEmpty) {
+        final mainTitle = doc.querySelector('#header_title_text')?.text.trim() ?? pageTitle;
         chapters.add(Chapter(
           id: '${id}_${novelUrl.hashCode.abs()}',
           novelId: novelId,
-          title: pageTitle,
+          title: mainTitle.isNotEmpty ? mainTitle : 'ସମ୍ପୂର୍ଣ୍ଣ ରଚନା (Full Work)',
           url: novelUrl,
           chapterNumber: 1.0,
         ));
@@ -260,8 +303,13 @@ class OdiaWikisourceExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
+    final pageId = _extractPageIdFromUrl(chapterUrl);
     final pageTitle = _extractPageTitleFromUrl(chapterUrl);
-    final apiUrl = '$baseUrl/w/api.php?action=parse&page=${Uri.encodeComponent(pageTitle)}&format=json&prop=text';
+
+    final apiUrl = pageId.isNotEmpty
+        ? '$baseUrl/w/api.php?action=parse&pageid=$pageId&format=json&prop=text'
+        : '$baseUrl/w/api.php?action=parse&page=${Uri.encodeComponent(pageTitle.replaceAll(' ', '_'))}&format=json&prop=text';
+
     final response = await _client.get(Uri.parse(apiUrl), headers: _headers);
 
     String html = '';
@@ -271,7 +319,6 @@ class OdiaWikisourceExtractor implements NovelSource {
     }
 
     if (html.isEmpty) {
-      // Fallback to direct HTML scrape
       final directResp = await _client.get(Uri.parse(chapterUrl), headers: _headers);
       if (directResp.statusCode == 200) {
         html = directResp.body;
@@ -301,7 +348,6 @@ class OdiaWikisourceExtractor implements NovelSource {
       }
     }
 
-    // Fallback if no <p> tags
     if (paragraphs.isEmpty) {
       final container = doc.querySelector('#mw-content-text') ?? doc.body;
       if (container != null) {
@@ -314,13 +360,26 @@ class OdiaWikisourceExtractor implements NovelSource {
       }
     }
 
+    final displayTitle = doc.querySelector('#header_title_text')?.text.trim() ?? pageTitle;
+
     return ChapterContent(
       chapterId: '${id}_${chapterUrl.hashCode.abs()}',
-      novelId: '${id}_${pageTitle.hashCode.abs()} ',
-      title: pageTitle,
+      novelId: '${id}_${pageTitle.hashCode.abs()}',
+      title: displayTitle,
       rawText: paragraphs.join('\n\n'),
       paragraphs: paragraphs,
     );
+  }
+
+  String _extractPageIdFromUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      final curid = uri.queryParameters['curid'];
+      if (curid != null && curid.isNotEmpty) {
+        return curid;
+      }
+    } catch (_) {}
+    return '';
   }
 
   String _extractPageTitleFromUrl(String url) {

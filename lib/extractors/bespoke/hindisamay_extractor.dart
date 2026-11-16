@@ -7,7 +7,7 @@ import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/http_client_factory.dart';
 import '../novel_source.dart';
 
-/// Bespoke extractor for Hindi Samay (http://www.hindisamay.com).
+/// Bespoke extractor for Hindi Samay (https://www.hindisamay.com).
 /// Flagship portal by Mahatma Gandhi Antarrashtriya Hindi Vishwavidyalaya
 /// featuring thousands of classic and modern Hindi novels, stories, memoirs, and essays.
 class HindiSamayExtractor implements NovelSource {
@@ -18,13 +18,13 @@ class HindiSamayExtractor implements NovelSource {
   final String name = 'Hindi Samay (हिंदी समय)';
 
   @override
-  final String baseUrl = 'http://www.hindisamay.com';
+  final String baseUrl = 'https://www.hindisamay.com';
 
   @override
   final String lang = 'hi';
 
   @override
-  final String iconUrl = 'http://www.hindisamay.com/favicon.ico';
+  final String iconUrl = 'https://www.hindisamay.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 10000;
@@ -40,6 +40,17 @@ class HindiSamayExtractor implements NovelSource {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'hi,en-US,en;q=0.9',
   };
+
+  String _normalizeContentUrl(String url) {
+    final idMatch = RegExp(r'(?:content/|id=)(\d+)').firstMatch(url);
+    if (idMatch != null) {
+      final workId = idMatch.group(1)!;
+      final pageMatch = RegExp(r'(?:content/\d+/|pageno=)(\d+)').firstMatch(url);
+      final pageno = pageMatch?.group(1) ?? '1';
+      return '$baseUrl/contentDetail.aspx?id=$workId&pageno=$pageno&lang=hi';
+    }
+    return url;
+  }
 
   @override
   Future<List<Novel>> getPopular({int page = 1}) async {
@@ -99,18 +110,27 @@ class HindiSamayExtractor implements NovelSource {
       final List<Novel> novels = [];
       final seenUrls = <String>{};
 
-      final anchors = doc.querySelectorAll('a[href*=".cspx"], a[href*="/content/"]');
+      final anchors = doc.querySelectorAll('a[href*=".cspx"], a[href*="/content/"], a[href*="contentDetail.aspx"]');
       for (final a in anchors) {
         final href = a.attributes['href'] ?? '';
         final text = a.text.trim();
         if (text.isEmpty || href.isEmpty || text.length < 2) continue;
         if (text.contains('क्लिक करें') || text.contains('मुखपृष्ठ') || text.contains('आगे')) continue;
 
-        final fullUrl = href.startsWith('http') ? href : '$baseUrl/${href.replaceFirst(RegExp(r'^/+'), '')}';
-        if (!seenUrls.add(fullUrl)) continue;
+        String rawUrl;
+        if (href.startsWith('//')) {
+          rawUrl = 'https:$href';
+        } else if (href.startsWith('http://') || href.startsWith('https://')) {
+          rawUrl = href;
+        } else {
+          rawUrl = '$baseUrl/${href.replaceFirst(RegExp(r'^/+'), '')}';
+        }
+
+        final normalizedUrl = _normalizeContentUrl(rawUrl);
+        if (!seenUrls.add(normalizedUrl)) continue;
 
         var title = text.replaceAll('(ई-पुस्तक)', '').trim();
-        var author = 'Unknown Author';
+        var author = 'हिंदी साहित्यकार';
 
         if (title.contains('-')) {
           final parts = title.split('-').map((s) => s.trim()).toList();
@@ -124,15 +144,15 @@ class HindiSamayExtractor implements NovelSource {
         }
 
         novels.add(Novel(
-          id: '${id}_${fullUrl.hashCode.abs()}',
+          id: '${id}_${normalizedUrl.hashCode.abs()}',
           sourceId: id,
           title: title,
           author: author,
-          description: 'Hindi literary classic on Hindi Samay.',
+          description: 'हिंदी समय पर उपलब्ध प्रसिद्ध साहित्यिक रचना।',
           coverUrl: 'https://www.hindisamay.com/images/logo.png',
           genres: const ['Hindi', 'Literature', 'Upanyas'],
           status: 'COMPLETED',
-          sourceUrl: fullUrl,
+          sourceUrl: normalizedUrl,
         ));
       }
 
@@ -144,45 +164,76 @@ class HindiSamayExtractor implements NovelSource {
 
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
+    final cleanUrl = _normalizeContentUrl(novelUrl);
     try {
-      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      final response = await _client.get(Uri.parse(cleanUrl), headers: _headers);
       if (response.statusCode != 200) {
-        throw Exception('Failed to load novel details');
+        throw Exception('Failed to load novel details (HTTP ${response.statusCode})');
       }
 
       final doc = html_parser.parse(response.body);
-      final rawTitle = doc.querySelector('title')?.text.trim() ?? 'Hindi Samay';
 
-      var title = rawTitle;
-      var author = 'Unknown Author';
-      if (rawTitle.contains('-')) {
-        final parts = rawTitle.split('-').map((s) => s.trim()).toList();
-        author = parts[0];
-        title = parts.sublist(1).join(' - ');
+      // 1. Check ASP.NET labels
+      final lblTitle = doc.querySelector('#ContentPlaceHolder1_lblTitle')?.text.trim();
+      final lblAuthor = doc.querySelector('#ContentPlaceHolder1_lblAuthor')?.text.trim();
+      final lblType = doc.querySelector('#ContentPlaceHolder1_lblContentType')?.text.trim();
+      final lblContent = doc.querySelector('#ContentPlaceHolder1_lblContentText')?.text.trim() ?? '';
+
+      var title = (lblTitle != null && lblTitle.isNotEmpty) ? lblTitle : '';
+      var author = (lblAuthor != null && lblAuthor.isNotEmpty) ? lblAuthor : '';
+
+      if (title.isEmpty) {
+        final rawDocTitle = doc.querySelector('title')?.text.trim() ?? '';
+        if (rawDocTitle.contains('-')) {
+          final parts = rawDocTitle.split('-').map((s) => s.trim()).toList();
+          author = parts[0];
+          title = parts.sublist(1).join(' - ');
+        } else if (rawDocTitle.isNotEmpty && !rawDocTitle.contains('Hindi Samay')) {
+          title = rawDocTitle;
+        }
       }
 
-      final firstP = doc.querySelector('p')?.text.trim() ?? '';
-      final snippet = firstP.length > 200 ? '${firstP.substring(0, 200)}...' : firstP;
+      if (title.isEmpty) {
+        title = 'हिंदी रचना';
+      }
+      if (author.isEmpty) {
+        author = 'हिंदी साहित्यकार';
+      }
+
+      String snippet = '';
+      if (lblContent.isNotEmpty) {
+        snippet = lblContent.length > 250 ? '${lblContent.substring(0, 250)}...' : lblContent;
+      } else if (lblType != null && lblType.isNotEmpty) {
+        snippet = 'प्रकार: $lblType | हिंदी समय डिजिटल संग्रह';
+      } else {
+        snippet = 'हिंदी समय डिजिटल साहित्य संग्रह।';
+      }
+
+      final genres = <String>['Hindi', 'Literature'];
+      if (lblType != null && lblType.isNotEmpty) {
+        genres.add(lblType);
+      }
 
       return Novel(
-        id: '${id}_${novelUrl.hashCode.abs()}',
+        id: '${id}_${cleanUrl.hashCode.abs()}',
         sourceId: id,
         title: title,
         author: author,
         description: snippet,
         coverUrl: 'https://www.hindisamay.com/images/logo.png',
-        genres: const ['Hindi', 'Literature'],
+        genres: genres,
         status: 'COMPLETED',
-        sourceUrl: novelUrl,
+        sourceUrl: cleanUrl,
       );
     } catch (_) {
       return Novel(
-        id: '${id}_${novelUrl.hashCode.abs()}',
+        id: '${id}_${cleanUrl.hashCode.abs()}',
         sourceId: id,
-        title: 'Hindi Novel',
-        author: 'Unknown Author',
+        title: 'हिंदी रचना',
+        author: 'हिंदी साहित्यकार',
+        description: 'हिंदी समय डिजिटल साहित्य संग्रह।',
         coverUrl: 'https://www.hindisamay.com/images/logo.png',
-        sourceUrl: novelUrl,
+        sourceUrl: cleanUrl,
       );
     }
   }
@@ -192,53 +243,55 @@ class HindiSamayExtractor implements NovelSource {
     String novelUrl, {
     void Function(List<Chapter> batch)? onBatchLoaded,
   }) async {
+    final cleanUrl = _normalizeContentUrl(novelUrl);
     try {
-      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      final response = await _client.get(Uri.parse(cleanUrl), headers: _headers);
       if (response.statusCode != 200) return [];
 
       final doc = html_parser.parse(response.body);
       final List<Chapter> chapters = [];
       final seenUrls = <String>{};
-      final novelId = '${id}_${novelUrl.hashCode.abs()}';
+      final novelId = '${id}_${cleanUrl.hashCode.abs()}';
 
-      final idMatch = RegExp(r'/content/(\d+)/').firstMatch(novelUrl);
-      final contentId = idMatch?.group(1);
+      final idMatch = RegExp(r'(?:content/|id=)(\d+)').firstMatch(cleanUrl);
+      final workId = idMatch?.group(1) ?? '';
 
-      final anchors = doc.querySelectorAll('a[href*="/content/"], a[href*=".cspx"]');
-      for (final a in anchors) {
-        final href = a.attributes['href'] ?? '';
-        final text = a.text.trim();
-        if (text.isEmpty || href.isEmpty) continue;
+      // Parse chapters from #ContentPlaceHolder1_lblToc
+      final tocContainer = doc.querySelector('#ContentPlaceHolder1_lblToc');
+      if (tocContainer != null) {
+        final anchors = tocContainer.querySelectorAll('a');
+        for (final a in anchors) {
+          final href = a.attributes['href'] ?? '';
+          final text = a.text.trim();
+          if (text.isEmpty || href.isEmpty) continue;
 
-        if (contentId != null && !href.contains('/content/$contentId/')) {
-          continue;
+          final pageMatch = RegExp(r'(?:content/\d+/|pageno=)(\d+)').firstMatch(href);
+          final pageNo = pageMatch?.group(1) ?? '${chapters.length + 1}';
+          final chapterUrl = workId.isNotEmpty
+              ? '$baseUrl/contentDetail.aspx?id=$workId&pageno=$pageNo&lang=hi'
+              : (href.startsWith('http') ? href : '$baseUrl/$href');
+
+          if (!seenUrls.add(chapterUrl)) continue;
+
+          final numVal = double.tryParse(pageNo) ?? (chapters.length + 1).toDouble();
+          chapters.add(Chapter(
+            id: '${id}_${chapterUrl.hashCode.abs()}',
+            novelId: novelId,
+            title: text,
+            url: chapterUrl,
+            chapterNumber: numVal,
+          ));
         }
-
-        if (text.contains('आगे') || text.contains('पीछे') || text.contains('क्लिक करें')) {
-          continue;
-        }
-
-        final fullUrl = href.startsWith('http') ? href : '$baseUrl/${href.replaceFirst(RegExp(r'^/+'), '')}';
-        if (!seenUrls.add(fullUrl)) continue;
-
-        final numMatch = RegExp(r'(\d+)').firstMatch(text);
-        final chapNum = numMatch != null ? double.tryParse(numMatch.group(1)!) : (chapters.length + 1).toDouble();
-
-        chapters.add(Chapter(
-          id: '${id}_${fullUrl.hashCode.abs()}',
-          novelId: novelId,
-          title: text,
-          url: fullUrl,
-          chapterNumber: chapNum,
-        ));
       }
 
+      // If no TOC links, check for any contentDetail pagination or single work
       if (chapters.isEmpty) {
+        final title = doc.querySelector('#ContentPlaceHolder1_lblTitle')?.text.trim() ?? 'पूर्ण रचना';
         chapters.add(Chapter(
-          id: '${id}_${novelUrl.hashCode.abs()}',
+          id: '${id}_${cleanUrl.hashCode.abs()}_1',
           novelId: novelId,
-          title: 'पूर्ण रचना (Full Work)',
-          url: novelUrl,
+          title: title.isNotEmpty ? title : 'पूर्ण रचना (Full Work)',
+          url: cleanUrl,
           chapterNumber: 1.0,
         ));
       }
@@ -252,37 +305,52 @@ class HindiSamayExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
+    final cleanUrl = _normalizeContentUrl(chapterUrl);
+    final response = await _client.get(Uri.parse(cleanUrl), headers: _headers);
     if (response.statusCode != 200) {
-      throw Exception('Failed to load chapter content from $chapterUrl');
+      throw Exception('Failed to load chapter content from $cleanUrl (HTTP ${response.statusCode})');
     }
 
     final doc = html_parser.parse(response.body);
-    final title = doc.querySelector('title')?.text.trim() ?? 'Hindi Samay Chapter';
+    final lblTitle = doc.querySelector('#ContentPlaceHolder1_lblTitle')?.text.trim();
+    final title = (lblTitle != null && lblTitle.isNotEmpty)
+        ? lblTitle
+        : (doc.querySelector('title')?.text.trim() ?? 'Hindi Samay Chapter');
 
     final paragraphs = <String>[];
-    final allP = doc.querySelectorAll('p');
+    final contentElem = doc.querySelector('#ContentPlaceHolder1_lblContentText');
 
-    for (final p in allP) {
-      final text = p.text.trim();
-      if (text.length > 50 && !text.startsWith('अनुक्रम')) {
-        final lines = text.split('\n');
-        for (final l in lines) {
-          final t = l.trim();
-          if (t.length > 10) {
-            paragraphs.add(t);
-          }
+    if (contentElem != null) {
+      // Split text by lines and <br>
+      final rawHtml = contentElem.innerHtml;
+      final textWithBreaks = rawHtml.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+      final plainText = html_parser.parse(textWithBreaks).body?.text ?? contentElem.text;
+
+      for (final line in plainText.split('\n')) {
+        final t = line.trim();
+        if (t.length > 1 && !t.startsWith('अनुक्रम') && !t.contains('ContentPlaceHolder1')) {
+          paragraphs.add(t);
         }
       }
     }
 
     if (paragraphs.isEmpty) {
-      paragraphs.add(doc.body?.text.trim() ?? 'No text available');
+      final allP = doc.querySelectorAll('p');
+      for (final p in allP) {
+        final text = p.text.trim();
+        if (text.length > 20 && !text.startsWith('अनुक्रम')) {
+          paragraphs.add(text);
+        }
+      }
+    }
+
+    if (paragraphs.isEmpty) {
+      paragraphs.add('सामग्री लोड करने में असमर्थ।');
     }
 
     return ChapterContent(
-      chapterId: '${id}_${chapterUrl.hashCode.abs()}',
-      novelId: '${id}_${chapterUrl.hashCode.abs()}',
+      chapterId: '${id}_${cleanUrl.hashCode.abs()}',
+      novelId: '${id}_${cleanUrl.hashCode.abs()}',
       title: title,
       rawText: paragraphs.join('\n\n'),
       paragraphs: paragraphs,

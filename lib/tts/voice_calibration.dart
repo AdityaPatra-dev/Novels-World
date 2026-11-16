@@ -9,6 +9,7 @@ class VoiceProfile {
   final double basePitch;
   final double baseSpeed;
   final List<String> targetVoiceKeywords;
+  final String? locale;
 
   const VoiceProfile({
     required this.id,
@@ -19,6 +20,7 @@ class VoiceProfile {
     required this.basePitch,
     required this.baseSpeed,
     required this.targetVoiceKeywords,
+    this.locale,
   });
 }
 
@@ -297,10 +299,53 @@ class VoiceCalibration {
 
   static VoiceProfile getProfile(String voiceId) {
     final cleanId = voiceId.split(' ').first.trim();
-    return profiles.firstWhere(
-      (p) => p.id == cleanId || voiceId.contains(p.id) || p.displayName.contains(voiceId),
-      orElse: () => profiles.first,
-    );
+
+    // 1. Match signature English profiles
+    for (final p in profiles) {
+      if (p.id == cleanId || voiceId.contains(p.id) || p.displayName.contains(voiceId)) {
+        return p;
+      }
+    }
+
+    // 2. Check if voiceId has a language prefix (e.g. 'or-IN-SubhasiniNeural' or 'system_or' or 'hi-IN-...')
+    String? detectedCode;
+    if (cleanId.startsWith('system_')) {
+      detectedCode = cleanId.replaceFirst('system_', '');
+    } else {
+      final prefixMatch = RegExp(r'^([a-zA-Z]{2,3})[-_]').firstMatch(cleanId);
+      if (prefixMatch != null) {
+        detectedCode = prefixMatch.group(1)!.toLowerCase();
+      }
+    }
+
+    if (detectedCode != null) {
+      final langProfiles = getProfilesForLanguage(detectedCode);
+      for (final p in langProfiles) {
+        if (p.id == cleanId || voiceId.contains(p.id) || p.displayName.contains(cleanId)) {
+          return p;
+        }
+      }
+      if (langProfiles.isNotEmpty) {
+        return langProfiles.first;
+      }
+    }
+
+    // 3. Fallback: search across all languages in registry
+    for (final lang in LanguageVoiceRegistry.supportedLanguages) {
+      if (lang.voices.any((v) => v.contains(cleanId)) ||
+          lang.defaultFemaleVoice.contains(cleanId) ||
+          lang.defaultMaleVoice.contains(cleanId)) {
+        final langProfiles = getProfilesForLanguage(lang.code);
+        for (final p in langProfiles) {
+          if (p.id == cleanId || voiceId.contains(p.id)) {
+            return p;
+          }
+        }
+        if (langProfiles.isNotEmpty) return langProfiles.first;
+      }
+    }
+
+    return profiles.first;
   }
 
   /// Returns tailored voice profiles for the specified language [langCode].
@@ -328,6 +373,14 @@ class VoiceCalibration {
       langKeywords.addAll(['ory', 'odia', 'oriya']);
     }
 
+    String resolveLocale(String voiceId) {
+      final match = RegExp(r'^([a-zA-Z]{2,3})[-_]([a-zA-Z]{2})').firstMatch(voiceId);
+      if (match != null) {
+        return '${match.group(1)}_${match.group(2)}';
+      }
+      return '${lang.code}_IN';
+    }
+
     // 1. Female Narrator
     if (lang.defaultFemaleVoice.isNotEmpty) {
       final femaleName = lang.defaultFemaleVoice.split('-').last.replaceAll('Neural', '');
@@ -341,6 +394,7 @@ class VoiceCalibration {
           basePitch: 1.0,
           baseSpeed: 1.0,
           targetVoiceKeywords: [...langKeywords, 'female'],
+          locale: resolveLocale(lang.defaultFemaleVoice),
         ),
       );
     }
@@ -358,6 +412,7 @@ class VoiceCalibration {
           basePitch: 0.95,
           baseSpeed: 1.0,
           targetVoiceKeywords: [...langKeywords, 'male'],
+          locale: resolveLocale(lang.defaultMaleVoice),
         ),
       );
     }
@@ -378,6 +433,7 @@ class VoiceCalibration {
             basePitch: 1.0,
             baseSpeed: 1.0,
             targetVoiceKeywords: [...langKeywords],
+            locale: resolveLocale(voiceId),
           ),
         );
       }
@@ -394,6 +450,7 @@ class VoiceCalibration {
         basePitch: 1.0,
         baseSpeed: 1.0,
         targetVoiceKeywords: [...langKeywords, 'default'],
+        locale: '${lang.code}_IN',
       ),
     );
 

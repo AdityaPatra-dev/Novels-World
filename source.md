@@ -19,6 +19,7 @@
 | **7** | **Young Adult (YA) & Coming-of-Age** | Moderate (LN only) | Western YA portals, indie serialized fiction |
 | **8** | **Eastern Web Fiction & Light Novels** | Saturated (~85% catalog) | Top verified aggregators & translation collectives |
 | **9** | **Hindi Books, Stories & Literature (हिंदी पुस्तकें, बाल/वयस्क कहानियां व सशुल्क विकल्प)** | Expanding (New Dedicated Track) | Children's tales, moderate social stories, mature/pulp fiction, historical treatises, and free alternative sources for paid books |
+| **10** | **Odia Books, Historical Chronicles & Literature (ଓଡ଼ିଆ ପୁସ୍ତକ, ଇତିହାସ ଓ ସାହିତ୍ୟ)** | Expanding (New Dedicated Track) | Classic Odia prose, Paika chronicles, Jagannath culture, modern serials & digital archives |
 
 ---
 
@@ -251,6 +252,52 @@
 
 ---
 
+## 10. Odia Books, Historical Chronicles, Classical Literature & Modern Fiction (ଓଡ଼ିଆ ପୁସ୍ତକ, ଇତିହାସ ଓ ସାହିତ୍ୟ)
+
+*Target audience: Readers seeking authentic Odia classical prose, historical chronicles (ଓଡ଼ିଶା ଇତିହାସ, ପାଇକ ବିଦ୍ରୋହ), Jagannath culture (ଶ୍ରୀଜଗନ୍ନାଥ ସଂସ୍କୃତି), classical poetry, short stories (ଗଳ୍ପ), children's fables (ଶିଶୁ ସାହିତ୍ୟ), and modern serialized web novels.*
+
+### 10.1 Classical Literature, Historical Chronicles & Ebook Archives
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Odia Bibhaba (ଓଡ଼ିଆ ବିଭବ - Books)** | `https://odiabibhaba.in/or/books` | Curated Digital Library / PDF | Odisha's largest and most comprehensive digital archive. Over 10,000+ digitized books covering Indian & Odisha history, Mukunda Deva chronicles, Paika rebellion records, rare dictionaries, classical literature, and science treatises from 1850 onwards. | [x] Working |
+| **Odia Bibhaba Periodicals (ପତ୍ରପତ୍ରିକା ସମ୍ଭାର)** | `https://odiabibhaba.in/or/magazines` | Digital Periodicals Archive | Complete archival runs of historic and foundational Odia literary magazines (*Utkal Dipika, Utkal Sahitya, Mukura, Sahakara, Jhankara, Nabalipi, Dagaro*). | [x] Working |
+| **Odia Virtual Academy (ଓଡ଼ିଆ ଭର୍ଚୁଆଲ ଏକାଡେମୀ)** | `https://ova.gov.in/LibraryIndex` | Govt of Odisha Portal / PDF | Official Government of Odisha digital repository preserving classic and out-of-print Odia literature, state gazetteers, linguistic research, and cultural documentation. | [x] Working |
+| **Odia Wikisource (ଓଡ଼ିଆ ଉଇକିପାଠାଗାର)** | `https://or.wikisource.org/` | MediaWiki Engine | Definitive open-content digital library with complete readable text of canonical Odia masterpieces: Fakir Mohan Senapati (*Chha Mana Atha Guntha, Lachhama, Mamu, Prayaschitta*), Radhanath Ray, Madhusudan Rao, Gangadhar Meher, Sarala Dasa's Mahabharata, and Upendra Bhanja's Kavyas. | [x] Working |
+| **Srujanika Digitization Archive (ସୃଜନିକା)** | `https://archive.org/details/texts?and%5B%5D=srujanika` | Internet Archive Collection | Pioneer grassroots initiative that cataloged and preserved Odisha's public-domain heritage, rare books, ancient lexicons, and educational literature. | [x] Working |
+| **Internet Archive Odia / Oriya Texts** | `https://archive.org/details/texts?and%5B%5D=languageSorter%3A%22Oriya%22` | Internet Archive Search API | Over 15,000+ public-domain Odia books, rare British-era Orissa division reports, mythological Puranas, and regional folklore. | [x] Working |
+| **Internet Archive Odia Books Collection** | `https://archive.org/details/texts?and%5B%5D=languageSorter%3A%22Odia%22` | Internet Archive Search API | Additional curated facet of digitized modern and historical Odia publications and literary works. | [x] Working |
+| **Ama Odisha (ଆମ ଓଡ଼ିଶା)** | `http://www.aamaodisha.org.in/` | Cultural Foundation CMS | Socio-cultural organization promoting Odia language, publishing regional history books, Odia linguistic essays, and heritage books. | [x] Working |
+| **Gita Press Odia Epics & Literature** | `https://gitapress.org/` | E-Commerce / Ebook Reader | Authentic Odia translations of ancient epics, Shrimad Bhagavad Gita, Odia Ramayana (Balarama Dasa's Jagamohana Ramayana), and Bhagavata Purana (Jagannatha Dasa's Odia Bhagavata). | [x] Working |
+
+### 10.2 Modern Serialized Web Fiction, Stories & Literary Magazines
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Pratilipi Odia (ପ୍ରତିଲିପି ଓଡ଼ିଆ)** | `https://odia.pratilipi.com/` | React SPA / REST API | The largest modern vernacular storytelling community in Odisha. Thousands of active serialized Odia web novels, romance, suspense, horror, and family dramas. | [x] Working |
+| **Pratilipi Odia Novels (ଉପନ୍ୟାସ)** | `https://odia.pratilipi.com/genres/novel` | React SPA / REST API | Full-length modern serialized Odia novels across multiple genres by contemporary Odia writers. | [x] Working |
+| **Pratilipi Odia Stories (ଗଳ୍ପ)** | `https://odia.pratilipi.com/genres/story` | React SPA / REST API | Contemporary Odia short stories, slice-of-life fiction, emotional family narratives, and moral tales. | [x] Working |
+| **Pratilipi Odia Historical Serials (ଐତିହାସିକ)** | `https://odia.pratilipi.com/genres/historical` | React SPA / REST API | Serialized historical fiction, Kalinga dynasty chronicles, Konark legends, and folklore retellings. | [x] Working |
+| **Odia Sahitya Stories (ଓଡ଼ିଆ ସାହିତ୍ୟ ଗଳ୍ପ)** | `http://www.odiasahitya.com/galpa/` | Web Publishing CMS | Dedicated web magazine featuring contemporary Odia short stories, author profiles, and literary essays. | [x] Working |
+| **Kadambini Odia Magazine (କାଦମ୍ବିନୀ)** | `https://kadambini.org/` | Web Magazine Portal | Odisha's premiere high-circulation monthly socio-cultural and family literary magazine publishing short fiction, features, and poetry. | [x] Working |
+
+### 10.3 Children's Stories & Moral Fables (ଶିଶୁ ସାହିତ୍ୟ)
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **StoryWeaver Odia (Pratham Books)** | `https://storyweaver.org.in/en/stories?language=Odia` | Open Digital Platform / REST API | India's foremost open children's repository. Hundreds of beautifully illustrated Odia children's storybooks leveled by reading difficulty (Levels 1 to 4). | [x] Working |
+| **Pratilipi Odia Kids / Bal Sahitya (ଶିଶୁ କାହାଣୀ)** | `https://odia.pratilipi.com/genres/kids` | React SPA / REST API | Modern community-written Odia children's stories, bedtime tales, animal fables, and educational short fiction. | [x] Working |
+
+### 10.4 Alternate Sources for Paid / Commercial Odia Books (ସशुल्क ପୁସ୍ତକର ବିକଳ୍ପ ସ୍ରୋତ)
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Anna's Archive (Odia Filter)** | `https://annas-archive.li/search?lang=or` | Shadow Library Metasearch | World's premier shadow library index. Direct search and download for commercially published Odia books, modern bestsellers, and out-of-print literature. | [x] Working |
+| **Open Library Odia Catalog** | `https://openlibrary.org/languages/ori` | Open Library / CDL Reader | Digital library catalog indexing borrowable and readable Odia editions through Internet Archive's BookReader interface. | [x] Working |
+| **Internet Archive Odia Lending Library** | `https://archive.org/details/inlibrary?and%5B%5D=languageSorter%3A%22Oriya%22` | CDL Borrowing System | Controlled Digital Lending (CDL) repository holding in-copyright modern commercial Odia books available for free digital borrowing. | [x] Working |
+
+---
+
 ## Next Steps for Integration
 
 1. **Your Inspection**: Browse the URLs above that interest you, check whether they load cleanly in your browser without aggressive IP blocking, and mark `[x]` on your choices.
@@ -258,4 +305,4 @@
    * **Tier 1 (Instant Plug-in)**: Enable `Royal Road` and `Scribble Hub` (extractors are already written in your codebase).
    * **Tier 2 (Template Reuse)**: Sites running **WordPress Madara** (BoxNovel, Woopread, RainOfSnow) or **NovelFull** (Novel12, Novel80, LightNovelWorld) can be activated in `source_registry.dart` with simple config entries without writing new extractors.
    * **Tier 3 (Bespoke APIs)**: Build bespoke extractors for high-impact content sources (Standard Ebooks, Clarkesworld, Baen Free Library).
-   * **Tier 4 (MediaWiki & Vernacular Readers)**: Connect MediaWiki-based Hindi platforms (Gadya Kosh, Kavita Kosh, Bharatkosh) using the standardized MediaWiki action API (`api.php`), and create lightweight chapter scrapers for ePustakalay, Hindi Samay, and Pratilipi.
+   * **Tier 4 (MediaWiki & Vernacular Readers)**: Connect MediaWiki-based Indic platforms (Odia Wikisource, Gadya Kosh, Kavita Kosh, Bharatkosh) using the standardized MediaWiki action API (`api.php`), and create lightweight chapter scrapers for Odia Bibhaba, ePustakalay, Hindi Samay, and Pratilipi (Hindi/Odia).

@@ -318,8 +318,11 @@ class VoiceCalibration {
 
     final langKeywords = <String>[
       lang.code.toLowerCase(),
+      '${lang.code.toLowerCase()}-',
+      '${lang.code.toLowerCase()}_',
       '${lang.code.toLowerCase()}-in',
       '${lang.code.toLowerCase()}_in',
+      lang.englishName.toLowerCase(),
     ];
     if (lang.code.toLowerCase() == 'or') {
       langKeywords.addAll(['ory', 'odia', 'oriya']);

@@ -18,7 +18,7 @@
 | **6** | **Literary Fiction & Standalone Novellas** | Completely Missing | Award-winning short fiction digests, curated novellas |
 | **7** | **Young Adult (YA) & Coming-of-Age** | Moderate (LN only) | Western YA portals, indie serialized fiction |
 | **8** | **Eastern Web Fiction & Light Novels** | Saturated (~85% catalog) | Top verified aggregators & translation collectives |
-| **9** | **Hindi Books, Historical Chronicles & Literature (हिंदी पुस्तकें, इतिहास व साहित्य)** | Expanding (New Dedicated Track) | Classic Hindi prose, historical chronicles, epic mythology, and modern Hindi serials |
+| **9** | **Hindi Books, Stories & Literature (हिंदी पुस्तकें, बाल/वयस्क कहानियां व सशुल्क विकल्प)** | Expanding (New Dedicated Track) | Children's tales, moderate social stories, mature/pulp fiction, historical treatises, and free alternative sources for paid books |
 
 ---
 
@@ -185,6 +185,69 @@
 | **Pratilipi Hindi (प्रतिलिपि हिंदी)** | `https://hindi.pratilipi.com` | React SPA / REST API | Largest Indian storytelling community with millions of Hindi serialized novels, romance, suspense, horror, and historical fiction from modern authors. | [x] Working |
 | **Matrubharti Hindi** | `https://www.matrubharti.com` | Web App / JSON API | Popular vernacular publishing platform offering thousands of free Hindi ebooks, serialized fiction, romance, and community literature. | [x] Working |
 | **KahaniGanj (कहानीगंज)** | `https://kahaniganj.com/` | WordPress / Modern Web | Online portal dedicated to Hindi stories, modern serialized web novels, motivational articles, and historical story retellings. | [x] Working |
+
+### 9.3 Children's Stories, Bal Sahitya, Moral Fables & Classic Hindi Comics (बाल साहित्य, पंचतंत्र एवं कॉमिक्स)
+
+*Target audience: Children, young readers, and families seeking moral fables (Panchatantra, Hitopadesh), bedtime stories, Akbar-Birbal tales, and nostalgic Hindi comics.*
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **StoryWeaver Hindi (Pratham Books)** | `https://storyweaver.org.in/en/stories?language=Hindi` | Open Digital Platform / REST API | India's foremost open children's repository. Thousands of beautifully illustrated Hindi storybooks leveled by reading difficulty (Levels 1 to 4). | [x] Working |
+| **Panchatantra Hindi (पंचतंत्र कथाएं)** | `https://panchatantra.org/hindi/` | Classical Story CMS | Complete authentic text of Pandit Vishnu Sharma's Panchatantra fables in easy Hindi (Mitra-bheda, Mitra-labha, Sandhi-vigraha, Labdha-pranasa). | [x] Working |
+| **Kids Hindi Stories (Indif)** | `https://www.indif.com/kids/hindi_stories/` | Lightweight HTML Portal | Classic illustrated children's stories including Akbar-Birbal, Tenali Raman, Vikram-Betal, Alif Laila, and moral Panchatantra tales. | [x] Working |
+| **Pratham Books Story Store** | `https://prathambooks.org/books/` | Non-Profit Publisher Portal | Renowned non-profit publisher democratizing children's storybooks in Indian languages with rich illustration and engaging story arcs. | [x] Working |
+| **Chandamama Hindi Complete Archive (चंदामामा)** | `https://archive.org/details/texts?and%5B%5D=chandamama+hindi` | Internet Archive Collection | Complete vintage archive of India's most celebrated monthly children's magazine in Hindi, preserving iconic folklore, mythology, and art. | [x] Working |
+| **Champak Hindi Archive (चंपक)** | `https://archive.org/details/texts?and%5B%5D=champak+hindi` | Internet Archive Collection | Nostalgic digital archive of Delhi Press's legendary *Champak* children's comic and story magazine in Hindi (Cheeku, Meeku, Damru). | [x] Working |
+| **Chacha Chaudhary & Diamond Comics Archive** | `https://archive.org/details/texts?and%5B%5D=chacha+chaudhary` | Internet Archive Collection | Complete digitized runs of Pran's legendary comic creations: Chacha Chaudhary, Sabu, Billoo, Pinki, and Raman in full Hindi color. | [x] Working |
+| **Raj Comics Archive (राज कॉमिक्स)** | `https://archive.org/details/texts?and%5B%5D=raj+comics` | Internet Archive Collection | Extensive digital repository of India's premiere superhero comics (Nagraj, Super Commando Dhruva, Doga, Parmanu, Bhediya). | [x] Working |
+| **KahaniGanj Bal Kahani** | `https://kahaniganj.com/category/bal-kahani/` | WordPress / Modern Web | Short bedtime stories, moral education tales, and animal fables tailored for young Hindi readers. | [x] Working |
+| **Pratilipi Kids / Bal Sahitya** | `https://hindi.pratilipi.com/genres/kids` | React SPA / REST API | Modern community-written Hindi children's stories, fairy tales, and educational short fiction. | [x] Working |
+
+### 9.4 Moderate, General, Family & Social Short Stories (सामाजिक, प्रेरक एवं यथार्थवादी कहानियां)
+
+*Target audience: Readers seeking relatable social stories, human drama, slice-of-life, motivational narratives, and moral family fiction.*
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **ePustakalay Stories (कहानियां संग्रह)** | `https://epustakalay.com/genres/stories/` | Custom Web Portal / PDF & Reader | Over 5,000+ classic & modern short story anthologies in Hindi by India's greatest authors (Premchand, Yashpal, Sudarshan, Mahadevi Varma). | [x] Working |
+| **Gadya Kosh Short Fiction (गद्य कोश कहानी श्रेणी)** | `http://gadyakosh.org/gk/%E0%A4%B6%E0%A5%8D%E0%A4%B0%E0%A5%87%E0%A4%A3%E0%A5%80:%E0%A4%95%E0%A4%B9%E0%A4%BE%E0%A4%A8%E0%A5%80` | MediaWiki Engine | 2,500+ curated classical short stories with rich literary commentary, master author indices, and clean reading text. | [x] Working |
+| **Hindi Samay Stories Portal** | `https://www.hindisamay.com/content.aspx?id=2` | Custom ASP.NET Portal | Curated short story masterpieces from leading 20th and 21st-century Hindi litterateurs. | [x] Working |
+| **Pustak Maza Hindi Stories** | `https://pustakmaza.com/category/hindi-kahani/` | Clean CMS / Direct PDF & Reader | Large catalog of popular Hindi social, motivational, and moral story anthologies available for instant reading. | [x] Working |
+| **AchhiKhabar Hindi Stories (अच्छी ख़बर)** | `https://www.achhikhabar.com/hindi-stories/` | High-traffic Blog / CMS | Hand-picked inspirational, motivational, and philosophical stories with life lessons and moral reflections. | [x] Working |
+| **Hindi Soch (हिंदी सोच)** | `https://www.hindisoch.com/category/hindi-stories/` | WordPress Editorial | Inspirational life narratives, emotional real-life stories, historical anecdotes, and motivational parables. | [x] Working |
+| **NayiChetana (नयी चेतना)** | `https://nayichetana.com/category/hindi-stories/` | Web Publishing CMS | Modern Hindi self-improvement stories, family relationship dynamics, and motivational fiction. | [x] Working |
+| **Pratilipi Social & Romance Fiction** | `https://hindi.pratilipi.com/genres/social` | React SPA / REST API | Thousands of modern serials exploring family drama, societal challenges, youth romance, and contemporary relationships. | [x] Working |
+
+### 9.5 Mature, Pulp Fiction, Crime Thrillers & Erotic Stories (वयस्क साहित्य, पल्प फिक्शन, क्राइम थ्रिलर एवं सस्पेंस)
+
+*Target audience: Mature readers looking for fast-paced Hindi pulp fiction, detective mysteries, crime/investigation thrillers, and adult/erotic romance stories.*
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Surendra Mohan Pathak Pulp Archive** | `https://archive.org/details/texts?and%5B%5D=surendra+mohan+pathak` | Internet Archive Collection | The undisputed King of Hindi crime fiction. Massive digital collection of Sunil, Vimal, and Jeet Singh detective and underworld thriller novels. | [x] Working |
+| **Ved Prakash Sharma Crime Archive** | `https://archive.org/details/texts?and%5B%5D=ved+prakash+sharma` | Internet Archive Collection | Legendary Hindi pulp thrillers, Keshav Pandit courtroom mysteries, and Vikas Gupta secret agent blockbusters. | [x] Working |
+| **Mastram Erotic Novellas Archive (मस्तराम कहानियां)** | `https://archive.org/details/texts?and%5B%5D=mastram` | Internet Archive Collection | Digitized historical archive of India's famous pulp erotic fiction and adult novellas published under the cultural pseudonym Mastram. | [x] Working |
+| **Desi Kahani Net** | `https://www.desikahani.net/` | Web Fiction Portal (Adult) | One of the most visited mature Hindi adult story platforms featuring categorized erotic stories, fantasies, and serialized romance. | [x] Working |
+| **Antarvasna Official** | `https://www.antarvasna.com/` | Web Magazine Portal (Adult) | The internet's longest-standing mature Hindi adult story portal, featuring thousands of categorized adult narratives and community fiction. | [x] Working |
+| **Pratilipi Suspense & Crime Thriller** | `https://hindi.pratilipi.com/genres/suspense-thriller` | React SPA / REST API | High-suspense psychological thrillers, dark crime investigations, murder mysteries, and supernatural horror serials. | [x] Working |
+| **Matrubharti Crime & Thriller** | `https://www.matrubharti.com/books/hindi/thriller` | Web App / JSON API | Vernacular thriller, crime fiction, suspense novels, and gritty investigative web series. | [x] Working |
+
+### 9.6 Alternate Sources for Paid / Commercial Hindi Story Books (सशुल्क पुस्तकों के वैकल्पिक निःशुल्क स्रोत)
+
+*Target audience: Readers searching for free alternatives to commercially published, copyrighted, or paid Hindi ebooks, paperbacks, and bestsellers.*
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Anna's Archive (Hindi Filter)** | `https://annas-archive.li/search?lang=hi` | Shadow Library Metasearch | The premier shadow library index. Direct search and download for commercially published Hindi books, modern bestsellers, and translated literature. | [x] Working |
+| **Library Genesis (.li Mirror)** | `https://libgen.li/index.php?req=hindi&columns%5B%5D=t&columns%5B%5D=a&columns%5B%5D=s&columns%5B%5D=y&columns%5B%5D=p&columns%5B%5D=i&objects%5B%5D=f&objects%5B%5D=e&objects%5B%5D=s&objects%5B%5D=a&objects%5B%5D=p&objects%5B%5D=m&topics%5B%5D=l&topics%5B%5D=c&topics%5B%5D=f&topics%5B%5D=a&topics%5B%5D=m&topics%5B%5D=r&topics%5B%5D=s` | Libgen Cluster | Active, accessible mirror with extensive indexed Hindi fiction, non-fiction, academic, and translated paperbacks. | [x] Working |
+| **Z-Library (Official SingleLogin)** | `https://singlelogin.me/` | Z-Library Authentication Gateway | Official entry gateway to Z-Library's comprehensive database of modern commercial Hindi novels, self-help bestsellers, and contemporary paperbacks. | [x] Working |
+| **Internet Archive Controlled Digital Lending** | `https://archive.org/details/inlibrary?and%5B%5D=languageSorter%3A%22Hindi%22` | CDL Borrowing System | Legal Controlled Digital Lending system holding thousands of in-copyright modern commercial Hindi books borrowable for free reading. | [x] Working |
+| **Internet Archive Hindi Fiction & Bestsellers** | `https://archive.org/details/texts?and%5B%5D=languageSorter%3A%22Hindi%22&and%5B%5D=subject%3A%22fiction%22` | Internet Archive Search API | Tens of thousands of scanned modern Hindi novels, short story collections, and commercial bestsellers uploaded by preservationists. | [x] Working |
+| **Open Library Hindi** | `https://openlibrary.org/languages/hin` | Open Library / CDL Reader | Over 15,000+ cataloged Hindi editions with direct borrow/read access through Internet Archive's BookReader interface. | [x] Working |
+| **PDFDrive** | `https://www.pdfdrive.com/` | Document Search Engine | Massive search engine for PDF ebooks with extensive collections of commercial Hindi storybooks, self-help, and literature. | [x] Working |
+| **PustakMaza Hindi Novels & Bestsellers** | `https://pustakmaza.com/category/hindi-novel/` | Direct Ebook Portal | Free PDF downloads of popular commercial Hindi novels, translated international bestsellers, and historical epics. | [x] Working |
+| **PDF Notes Hindi** | `https://pdfnotes.co/` | E-Learning & Book Portal | Free resource hub distributing PDF editions of popular Hindi literature, competitive story anthologies, and bestsellers. | [x] Working |
+| **HindiBook.com** | `https://www.hindibook.com/` | Custom Catalog Database | Vast index of commercial Hindi books, classical storybooks, and rare out-of-print publications. | [x] Working |
 
 ---
 

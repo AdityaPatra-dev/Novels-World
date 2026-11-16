@@ -92,7 +92,11 @@ class SystemFallbackEngine implements TtsEngineInterface {
         if (v is Map) {
           final name = (v['name'] ?? '').toString().toLowerCase();
           final locale = (v['locale'] ?? '').toString().toLowerCase();
-          if (name.contains(keyword) || locale.contains(keyword)) {
+          final isTwoLetterCode = keyword.length == 2;
+          final matches = isTwoLetterCode
+              ? (locale == keyword || locale.startsWith('${keyword}_') || locale.startsWith('$keyword-'))
+              : (name.contains(keyword) || locale.contains(keyword));
+          if (matches) {
             final resolved = {
               'name': v['name'].toString(),
               'locale': v['locale'].toString(),

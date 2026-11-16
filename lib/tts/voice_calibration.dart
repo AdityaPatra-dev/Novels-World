@@ -316,6 +316,15 @@ class VoiceCalibration {
     final lang = LanguageVoiceRegistry.getByCode(code);
     final results = <VoiceProfile>[];
 
+    final langKeywords = <String>[
+      lang.code.toLowerCase(),
+      '${lang.code.toLowerCase()}-in',
+      '${lang.code.toLowerCase()}_in',
+    ];
+    if (lang.code.toLowerCase() == 'or') {
+      langKeywords.addAll(['ory', 'odia', 'oriya']);
+    }
+
     // 1. Female Narrator
     if (lang.defaultFemaleVoice.isNotEmpty) {
       final femaleName = lang.defaultFemaleVoice.split('-').last.replaceAll('Neural', '');
@@ -328,7 +337,7 @@ class VoiceCalibration {
           accent: lang.flag,
           basePitch: 1.0,
           baseSpeed: 1.0,
-          targetVoiceKeywords: [lang.code, 'female'],
+          targetVoiceKeywords: [...langKeywords, 'female'],
         ),
       );
     }
@@ -345,7 +354,7 @@ class VoiceCalibration {
           accent: lang.flag,
           basePitch: 0.95,
           baseSpeed: 1.0,
-          targetVoiceKeywords: [lang.code, 'male'],
+          targetVoiceKeywords: [...langKeywords, 'male'],
         ),
       );
     }
@@ -365,7 +374,7 @@ class VoiceCalibration {
             accent: lang.flag,
             basePitch: 1.0,
             baseSpeed: 1.0,
-            targetVoiceKeywords: [lang.code],
+            targetVoiceKeywords: [...langKeywords],
           ),
         );
       }
@@ -381,7 +390,7 @@ class VoiceCalibration {
         accent: 'Device',
         basePitch: 1.0,
         baseSpeed: 1.0,
-        targetVoiceKeywords: [lang.code, 'default'],
+        targetVoiceKeywords: [...langKeywords, 'default'],
       ),
     );
 

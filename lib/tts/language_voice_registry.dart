@@ -168,6 +168,19 @@ class LanguageVoiceRegistry {
       ],
     ),
     LanguageVoiceInfo(
+      code: 'or',
+      englishName: 'Odia (Oriya)',
+      nativeName: 'ଓଡ଼ିଆ',
+      flag: '🇮🇳',
+      samplePhrase: 'ଉପନ୍ୟାସ ଜଗତକୁ ଆପଣଙ୍କୁ ସ୍ୱାଗତ, ଗଳ୍ପ ଉପଭୋଗ କରନ୍ତୁ।',
+      defaultFemaleVoice: 'or-IN-SubhasiniNeural',
+      defaultMaleVoice: 'or-IN-SukantNeural',
+      voices: [
+        'or-IN-SubhasiniNeural (Subhasini - Expressive Female)',
+        'or-IN-SukantNeural (Sukant - Deep Storyteller Male)',
+      ],
+    ),
+    LanguageVoiceInfo(
       code: 'ur',
       englishName: 'Urdu',
       nativeName: 'اردو',

@@ -63,13 +63,19 @@ class MadaraExtractor implements NovelSource {
     return headers;
   }
 
-  String _cleanUrl(String url) {
+  String _cleanUrl(String url, [String? contextUrl]) {
     if (url.startsWith('//')) {
       return 'https:$url';
-    } else if (url.startsWith('/')) {
-      return '$baseUrl$url';
+    } else if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    } else {
+      final base = (contextUrl != null && contextUrl.isNotEmpty) ? contextUrl : baseUrl;
+      try {
+        return Uri.parse(base).resolve(url).toString();
+      } catch (_) {
+        return '$baseUrl/${url.replaceFirst(RegExp(r'^/+'), '')}';
+      }
     }
-    return url;
   }
 
   @override
@@ -295,8 +301,21 @@ class MadaraExtractor implements NovelSource {
 
     final document = html_parser.parse(body);
 
-    final rawTitle = document.querySelector('.post-title h1, .post-title h3, .post-title, .nhv-single-novel__title, h1')?.text.trim() ?? 'Untitled';
-    final title = TextCleaner.cleanNovelTitle(rawTitle);
+    var rawTitle = document.querySelector('.post-title h1, .post-title h3, .post-title h2, .post-title, .nhv-single-novel__title, h1, h2')?.text.trim() ?? '';
+    if (rawTitle.isEmpty || rawTitle.toLowerCase() == 'untitled') {
+      final og = document.querySelector('meta[property="og:title"]')?.attributes['content'];
+      if (og != null && og.isNotEmpty) {
+        rawTitle = og;
+      }
+    }
+    if (rawTitle.contains(' - ') || rawTitle.contains(' | ')) {
+      final parts = rawTitle.split(RegExp(r'\s*[-|]\s*'));
+      if (parts.isNotEmpty && parts.first.length > 2) {
+        rawTitle = parts.first.trim();
+      }
+    }
+    rawTitle = rawTitle.replaceFirst(RegExp(r'^رواية\s+'), '').trim();
+    final title = TextCleaner.cleanNovelTitle(rawTitle.isNotEmpty ? rawTitle : 'Novel');
 
     final img = document.querySelector('.summary_image img, .nhv-single-novel__cover img, .post-thumb img, .featured-image img, .item-thumb img, .wp-post-image');
     String cover = '';
@@ -316,8 +335,29 @@ class MadaraExtractor implements NovelSource {
       }
     }
 
-    final author = document.querySelector('.author-content a, .mg_author .summary-content a, a[href*="/cont-author/"], .nhv-novel-author a')?.text.trim() ??
-        'Unknown Author';
+    var author = document.querySelector(
+      '.author-content a, .author-content, .mg_author .summary-content a, .manga-authors a, .manga-authors, a[href*="/cont-author/"], a[href*="/manga-author/"], a[href*="/author/"], a[href*="/yazar/"], a[href*="/autor/"], .nhv-novel-author a, [itemprop="author"] a, [itemprop="author"]',
+    )?.text.trim() ?? '';
+
+    if (author.isEmpty || author.toLowerCase() == 'updating' || author.toLowerCase() == 'güncelleniyor') {
+      final items = document.querySelectorAll('.post-content_item');
+      for (final item in items) {
+        final heading = item.querySelector('.summary-heading')?.text.toLowerCase() ?? '';
+        if (heading.contains('author') ||
+            heading.contains('yazar') ||
+            heading.contains('tác giả') ||
+            heading.contains('autor')) {
+          final authorText = item.querySelector('.summary-content')?.text.trim();
+          if (authorText != null && authorText.isNotEmpty && authorText.toLowerCase() != 'updating') {
+            author = authorText;
+            break;
+          }
+        }
+      }
+    }
+    if (author.isEmpty) {
+      author = '$name Author';
+    }
 
     final genres = document
         .querySelectorAll('.genres-content a, .genres a, a[href*="/cont-genre/"], .nhv-novel-genres a')
@@ -456,20 +496,30 @@ class MadaraExtractor implements NovelSource {
       final a = el.querySelector('a');
       if (a == null) continue;
 
-      final url = _cleanUrl(a.attributes['href'] ?? '');
+      final href = a.attributes['href'] ?? '';
+      final url = _cleanUrl(href);
       final title = a.text.trim();
       if (url.isEmpty ||
           url == '#' ||
           url.startsWith('javascript:') ||
-          !url.startsWith('http') && !url.startsWith('/') ||
+          url.contains('?t=') ||
+          url.contains('page=') ||
+          url.contains('orderby=') ||
+          a.classes.contains('page-link') ||
           title.isEmpty ||
           seenUrls.contains(url)) {
         continue;
       }
+      if (RegExp(r'^\d+$').hasMatch(title) && int.parse(title) < 100 && url.contains('?')) {
+        continue;
+      }
       seenUrls.add(url);
 
+      var cleanChapterUrl = url;
+      cleanChapterUrl = cleanChapterUrl.replaceAll(RegExp(r'chapter-\d+(chapter-\d+)', caseSensitive: false), r'$1');
+
       final date = el.querySelector('.chapter-release-date')?.text.trim();
-      final pathSegs = Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).toList();
+      final pathSegs = Uri.parse(cleanChapterUrl).pathSegments.where((s) => s.isNotEmpty).toList();
       final chapterSlug = pathSegs.isNotEmpty ? pathSegs.last : '${list.length + 1}';
       final chapterId = '${novelId}_$chapterSlug';
 
@@ -483,7 +533,7 @@ class MadaraExtractor implements NovelSource {
           novelId: novelId,
           title: title,
           chapterNumber: chapterNum,
-          url: url,
+          url: cleanChapterUrl,
           releaseDate: date,
         ),
       );
@@ -545,16 +595,30 @@ class MadaraExtractor implements NovelSource {
       if (pTags.isNotEmpty) {
         rawParagraphs = pTags.map((p) => p.text).toList();
       } else {
-        // Fallback for content separated by <br> tags
-        final innerHtml = contentContainer.innerHtml;
-        rawParagraphs = innerHtml.split(RegExp(r'<br\s*/?>', caseSensitive: false));
+        // Fallback for sites that wrap lines in <div> or <span> (like Anslid)
+        final childDivs = contentContainer.querySelectorAll('div, span');
+        final textLines = childDivs
+            .map((d) => d.text.trim())
+            .where((t) => t.isNotEmpty && t.length > 2)
+            .toSet()
+            .toList();
+        if (textLines.length >= 5) {
+          rawParagraphs = textLines;
+        } else {
+          final innerHtml = contentContainer.innerHtml;
+          rawParagraphs = innerHtml.split(RegExp(r'<br\s*/?>', caseSensitive: false));
+          if (rawParagraphs.length <= 1) {
+            rawParagraphs = contentContainer.text.split('\n');
+          }
+        }
       }
     }
 
     final cleanedParagraphs = TextCleaner.cleanParagraphs(rawParagraphs);
     final rawText = TextCleaner.toCleanRawText(cleanedParagraphs);
 
-    final chapterId = Uri.parse(chapterUrl).pathSegments.where((s) => s.isNotEmpty).last;
+    final chapterId = Uri.parse(chapterUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ??
+        chapterUrl.hashCode.abs().toString();
 
     return ChapterContent(
       chapterId: chapterId,

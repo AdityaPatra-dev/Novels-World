@@ -208,11 +208,37 @@ class StandardEbooksExtractor implements NovelSource {
     if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
       return LocalEpubExtractor().getChapterList(novelUrl, onBatchLoaded: onBatchLoaded);
     }
-    return [];
+    final slug = novelUrl.split('/').where((s) => s.isNotEmpty).lastOrNull ?? 'standard_ebook';
+    final single = [
+      Chapter(
+        id: '${id}_$slug',
+        novelId: '${id}_$slug',
+        title: 'Complete Book (Full EPUB)',
+        url: novelUrl,
+        chapterNumber: 1.0,
+      ),
+    ];
+    onBatchLoaded?.call(single);
+    return single;
   }
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    return EpubService().loadChapterContent(chapterUrl);
+    if (chapterUrl.startsWith('file:') || chapterUrl.startsWith('/')) {
+      return EpubService().loadChapterContent(chapterUrl);
+    }
+    final novel = await getNovelDetails(chapterUrl);
+    return ChapterContent(
+      chapterId: '${id}_${novel.id}',
+      novelId: novel.id,
+      title: novel.title,
+      rawText: '${novel.title}\n\nBy ${novel.author}\n\n${novel.description}',
+      paragraphs: [
+        novel.title,
+        if (novel.author.isNotEmpty) 'Author: ${novel.author}',
+        if (novel.description.isNotEmpty) novel.description,
+        'Free, beautifully formatted public-domain ebook edition from Standard Ebooks.',
+      ],
+    );
   }
 }

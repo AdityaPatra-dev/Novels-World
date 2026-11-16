@@ -81,23 +81,75 @@ class HindiSamayExtractor implements NovelSource {
     return _fetchWorksFromUrl('$baseUrl/default.aspx');
   }
 
+  static const Map<String, int> _knownWriters = {
+    'प्रेमचंद': 1152,
+    'गोदान': 1152,
+    'गबन': 1152,
+    'निर्मला': 1152,
+    'कर्मभूमि': 1152,
+    'रंगभूमि': 1152,
+    'कफ़न': 1152,
+    'कफन': 1152,
+    'अज्ञेय': 1275,
+    'मोहन राकेश': 1182,
+    'कबीर': 1355,
+    'हरिऔध': 1162,
+    'भारतेंदु': 1157,
+    'रामचंद्र शुक्ल': 1262,
+    'सहजानंद': 1539,
+    'निराला': 1340,
+    'सूर्यकांत': 1340,
+    'देवकीनंदन खत्री': 1167,
+    'चंद्रकांता': 1167,
+    'शरतचंद्र': 1246,
+    'जयशंकर प्रसाद': 1176,
+    'कामायनी': 1176,
+    'रेणु': 1169,
+    'फणीश्वरनाथ': 1169,
+    'परसाई': 1174,
+    'हरिशंकर': 1174,
+    'भारती': 1249,
+    'धर्मवीर': 1249,
+    'भीष्म साहनी': 1155,
+    'राहुल सांकृत्यायन': 1566,
+    'सुदर्शन': 1345,
+    'श्रीलाल शुक्ल': 1188,
+  };
+
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
     final cleanQuery = query.trim().toLowerCase();
     if (cleanQuery.isEmpty) return [];
 
+    final matchingWriters = _knownWriters.entries
+        .where((e) => cleanQuery.contains(e.key.toLowerCase()) || e.key.toLowerCase().contains(cleanQuery))
+        .map((e) => e.value)
+        .toSet();
+
+    final searchWorks = <Novel>[];
+    for (final wid in matchingWriters) {
+      final works = await _fetchWorksFromUrl('$baseUrl/writer/writer_details_n.aspx?id=$wid');
+      searchWorks.addAll(works);
+    }
+
+    if (searchWorks.isNotEmpty) {
+      return searchWorks;
+    }
+
     final popular = await getPopular(page: 1);
     final latest = await getLatest(page: 1);
 
     final combined = <String, Novel>{};
-    for (final n in [...popular, ...latest]) {
+    for (final n in [...searchWorks, ...popular, ...latest]) {
       combined[n.sourceUrl] = n;
     }
 
     return combined.values.where((n) {
       return n.title.toLowerCase().contains(cleanQuery) ||
           n.author.toLowerCase().contains(cleanQuery) ||
-          n.description.toLowerCase().contains(cleanQuery);
+          n.description.toLowerCase().contains(cleanQuery) ||
+          cleanQuery.contains(n.title.toLowerCase()) ||
+          cleanQuery.contains(n.author.toLowerCase());
     }).toList();
   }
 
@@ -107,6 +159,7 @@ class HindiSamayExtractor implements NovelSource {
       if (response.statusCode != 200) return [];
 
       final doc = html_parser.parse(response.body);
+      final pageWriter = doc.querySelector('h1')?.text.trim() ?? '';
       final List<Novel> novels = [];
       final seenUrls = <String>{};
 
@@ -130,7 +183,18 @@ class HindiSamayExtractor implements NovelSource {
         if (!seenUrls.add(normalizedUrl)) continue;
 
         var title = text.replaceAll('(ई-पुस्तक)', '').trim();
-        var author = 'हिंदी साहित्यकार';
+        var author = pageWriter.isNotEmpty ? pageWriter : 'हिंदी साहित्यकार';
+
+        try {
+          final decoded = Uri.decodeFull(rawUrl);
+          if (decoded.contains('--')) {
+            final fileName = decoded.split('/').last.replaceAll('.cspx', '').trim();
+            final parts = fileName.split('--');
+            if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+              author = parts[0].trim();
+            }
+          }
+        } catch (_) {}
 
         if (title.contains('-')) {
           final parts = title.split('-').map((s) => s.trim()).toList();

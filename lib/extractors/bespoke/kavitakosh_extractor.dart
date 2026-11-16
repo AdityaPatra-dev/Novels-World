@@ -140,10 +140,19 @@ class KavitaKoshExtractor implements NovelSource {
     return novels;
   }
 
+  Uri _parseSafeUri(String url) {
+    try {
+      final decoded = Uri.decodeFull(url);
+      return Uri.parse(Uri.encodeFull(decoded));
+    } catch (_) {
+      return Uri.parse(url);
+    }
+  }
+
   @override
   Future<Novel> getNovelDetails(String novelUrl) async {
     try {
-      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      final response = await _client.get(_parseSafeUri(novelUrl), headers: _headers);
       if (response.statusCode != 200) {
         throw Exception('Failed to load page');
       }
@@ -193,12 +202,18 @@ class KavitaKoshExtractor implements NovelSource {
     void Function(List<Chapter> batch)? onBatchLoaded,
   }) async {
     try {
-      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      final response = await _client.get(_parseSafeUri(novelUrl), headers: _headers);
       if (response.statusCode != 200) return [];
 
       final doc = html_parser.parse(response.body);
       final contentElem = doc.querySelector('#mw-content-text');
       if (contentElem == null) return [];
+
+      for (final bad in contentElem.querySelectorAll(
+        '.infobox, .navbox, #toc, .catlinks, .plainlinks, .printfooter, .mw-jump-link, .metadata, .dablink, header, nav, footer, .sister-projects',
+      )) {
+        bad.remove();
+      }
 
       final List<Chapter> chapters = [];
       final heading = doc.querySelector('#firstHeading')?.text.trim() ?? 'Kavita';
@@ -208,13 +223,41 @@ class KavitaKoshExtractor implements NovelSource {
       final ignoredPrefixes = [
         'रचनाकारों की सूची',
         'अंगिका',
+        'अवधी',
+        'ब्रजभाषा',
+        'भोजपुरी',
+        'गुजराती',
+        'नेपाली',
+        'मैथिली',
         'राजस्थानी',
+        'हरियाणवी',
+        'खड़ी बोली',
+        'उर्दू',
+        'सिंधी',
+        'संस्कृत',
+        'कन्नड़',
+        'तमिल',
+        'तेलुगु',
+        'मलयालम',
+        'मराठी',
+        'बांग्ला',
+        'असमिया',
+        'पंजाबी',
+        'कश्मीरी',
         'हिन्दी',
         'कविता कोश',
+        'गद्य कोश',
         'विशेष:',
         'श्रेणी:',
+        'सहायता:',
+        'दान',
         'Script',
         'Devanagari',
+        'Roman',
+        'मुखपृष्ठ',
+        'चौपाल',
+        'संपादकीय',
+        'लेखक सूची',
       ];
 
       for (final a in anchors) {
@@ -222,7 +265,12 @@ class KavitaKoshExtractor implements NovelSource {
         final href = a.attributes['href'] ?? '';
         if (text.isEmpty || href.isEmpty) continue;
 
-        if (ignoredPrefixes.any((p) => text.contains(p) || href.contains(Uri.encodeComponent(p)))) {
+        String normalizedHref = href;
+        try {
+          normalizedHref = Uri.decodeFull(href).replaceAll('_', ' ');
+        } catch (_) {}
+
+        if (ignoredPrefixes.any((p) => text == p || text.startsWith(p) || normalizedHref.contains(p))) {
           continue;
         }
 
@@ -259,7 +307,7 @@ class KavitaKoshExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
+    final response = await _client.get(_parseSafeUri(chapterUrl), headers: _headers);
     if (response.statusCode != 200) {
       throw Exception('Failed to load chapter content from $chapterUrl');
     }

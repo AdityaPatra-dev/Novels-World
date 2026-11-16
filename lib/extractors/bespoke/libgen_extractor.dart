@@ -65,8 +65,13 @@ class LibGenExtractor implements NovelSource {
 
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
-    final cleanQuery = query.trim();
+    var cleanQuery = query.trim();
     if (cleanQuery.isEmpty) return [];
+
+    // LibGen search engine rejects stop words and terms under 4 characters
+    if (cleanQuery.length < 4 || cleanQuery.toLowerCase() == 'the') {
+      cleanQuery = 'classic $cleanQuery'.trim();
+    }
 
     final encoded = Uri.encodeComponent(cleanQuery);
 
@@ -446,11 +451,38 @@ class LibGenExtractor implements NovelSource {
     if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
       return LocalEpubExtractor().getChapterList(novelUrl, onBatchLoaded: onBatchLoaded);
     }
-    return [];
+    final md5Match = RegExp(r'md5=([a-zA-Z0-9]+)').firstMatch(novelUrl);
+    final slug = md5Match?.group(1) ?? novelUrl.hashCode.abs().toString();
+    final single = [
+      Chapter(
+        id: '${id}_$slug',
+        novelId: '${id}_$slug',
+        title: 'Complete Book Edition',
+        url: novelUrl,
+        chapterNumber: 1.0,
+      ),
+    ];
+    onBatchLoaded?.call(single);
+    return single;
   }
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    return EpubService().loadChapterContent(chapterUrl);
+    if (chapterUrl.startsWith('file:') || chapterUrl.startsWith('/')) {
+      return EpubService().loadChapterContent(chapterUrl);
+    }
+    final novel = await getNovelDetails(chapterUrl);
+    return ChapterContent(
+      chapterId: '${id}_${novel.id}',
+      novelId: novel.id,
+      title: novel.title,
+      rawText: '${novel.title}\n\nBy ${novel.author}\n\n${novel.description}',
+      paragraphs: [
+        novel.title,
+        if (novel.author.isNotEmpty) 'Author: ${novel.author}',
+        if (novel.description.isNotEmpty) novel.description,
+        'Complete edition from Library Genesis. Tap Download to read offline in the built-in reader.',
+      ],
+    );
   }
 }

@@ -270,6 +270,13 @@ class OdiaWikisourceExtractor implements NovelSource {
           continue;
         }
 
+        if (text.startsWith('(') && text.endsWith(')')) continue;
+        if (text.contains('ରଚନାଗୁଡ଼ିକ ମୋଟା ଅକ୍ଷରରେ') ||
+            text.contains('ପ୍ରମୁଖ ରଚନା') ||
+            text.contains('ସମ୍ପାଦନା')) {
+          continue;
+        }
+
         final chapterUrl = href.startsWith('http') ? href : '$baseUrl$href';
         if (chapterUrl == novelUrl || !seenUrls.add(chapterUrl)) continue;
 

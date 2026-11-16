@@ -42,7 +42,6 @@ class StrangeHorizonsExtractor implements NovelSource {
       'User-Agent': WebViewSessionManager.defaultUserAgent,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': baseUrl,
     };
     final cookie = WebViewSessionManager.instance.getCookieHeader(baseUrl);
     if (cookie != null && cookie.isNotEmpty) {
@@ -65,6 +64,7 @@ class StrangeHorizonsExtractor implements NovelSource {
     try {
       final response = await _client.get(Uri.parse(url), headers: _headers);
       if (response.statusCode == 200 &&
+          !response.body.contains('<body id="r">') &&
           !response.body.contains('Just a moment...') &&
           !response.body.contains('challenge-running') &&
           !response.body.contains('cf-chl-')) {
@@ -195,7 +195,14 @@ class StrangeHorizonsExtractor implements NovelSource {
     var author = 'Unknown Author';
     final authorEl = document.querySelector('.author, .byline, .story-author, a[rel="author"]');
     if (authorEl != null) {
-      author = authorEl.text.replaceAll(RegExp(r'^by\s+', caseSensitive: false), '').trim();
+      var raw = authorEl.text.trim();
+      if (raw.contains('\n')) {
+        raw = raw.split('\n').first.trim();
+      }
+      if (raw.toLowerCase().contains('issue:')) {
+        raw = raw.split(RegExp(r'issue:', caseSensitive: false)).first.trim();
+      }
+      author = raw.replaceAll(RegExp(r'^by[:\s]+', caseSensitive: false), '').trim();
     } else {
       final docTitle = document.querySelector('title')?.text.trim() ?? '';
       if (docTitle.contains(' By ')) {

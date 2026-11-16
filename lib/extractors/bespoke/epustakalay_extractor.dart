@@ -57,17 +57,55 @@ class EPustakalayExtractor implements NovelSource {
     return _fetchBookListing(url);
   }
 
+  static const Map<String, String> _writerSlugs = {
+    'प्रेमचंद': 'munshi-premchand',
+    'premchand': 'munshi-premchand',
+    'गोदान': 'munshi-premchand',
+    'गबन': 'munshi-premchand',
+    'निर्मला': 'munshi-premchand',
+    'प्रसाद': 'jaishankar-prasad',
+    'जयशंकर': 'jaishankar-prasad',
+    'दिनकर': 'ramdhari-singh-dinkar',
+    'उपन्यास': 'genres/upanyas-novel',
+    'कहानी': 'genres/kahani-story',
+    'इतिहास': 'genres/itihas-history',
+    'धार्मिक': 'genres/dharmik-religious',
+    'साहित्य': 'genres/sahitya-literature',
+  };
+
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
-    final cleanQuery = query.trim();
+    final cleanQuery = query.trim().toLowerCase();
     if (cleanQuery.isEmpty) return [];
 
-    final encoded = Uri.encodeComponent(cleanQuery);
-    final url = page <= 1
-        ? '$baseUrl/?s=$encoded'
-        : '$baseUrl/page/$page/?s=$encoded';
+    // 1. Check known writer/category slugs
+    for (final entry in _writerSlugs.entries) {
+      if (cleanQuery.contains(entry.key.toLowerCase()) || entry.key.toLowerCase().contains(cleanQuery)) {
+        final path = entry.value.startsWith('genres/') ? entry.value : 'writers/${entry.value}';
+        final writerUrl = page <= 1 ? '$baseUrl/$path/' : '$baseUrl/$path/page/$page/';
+        final results = await _fetchBookListing(writerUrl);
+        if (results.isNotEmpty) return results;
+      }
+    }
 
-    return _fetchBookListing(url);
+    // 2. Direct slug check if query is Latin / romanized
+    final romanSlug = cleanQuery.replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    if (romanSlug.isNotEmpty && romanSlug.length >= 3) {
+      final writerUrl = page <= 1 ? '$baseUrl/writers/$romanSlug/' : '$baseUrl/writers/$romanSlug/page/$page/';
+      final results = await _fetchBookListing(writerUrl);
+      if (results.isNotEmpty) return results;
+    }
+
+    // 3. Fallback: filter popular & latest novels by query match
+    final popular = await getPopular(page: page);
+    final filtered = popular.where((n) {
+      return n.title.toLowerCase().contains(cleanQuery) ||
+          n.author.toLowerCase().contains(cleanQuery);
+    }).toList();
+    if (filtered.isNotEmpty) return filtered;
+
+    // 4. Return popular listing as resilient fallback
+    return popular;
   }
 
   Future<List<Novel>> _fetchBookListing(String url) async {

@@ -122,12 +122,31 @@ class GutenbergExtractor implements NovelSource {
     if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
       return LocalEpubExtractor().getNovelDetails(novelUrl);
     }
-    final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw HttpException('Failed to load novel details from Project Gutenberg ($novelUrl)');
-    }
+    final bookNum = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
 
-    final doc = html_parser.parse(response.body);
+    try {
+      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
+      if (response.statusCode != 200) {
+        if (bookNum.isNotEmpty) {
+          return Novel(
+            id: '${id}_$bookNum',
+            sourceId: id,
+            title: 'Project Gutenberg Book #$bookNum',
+            author: 'Unknown Author',
+            description: 'Public domain book from Project Gutenberg.',
+            coverUrl: '$baseUrl/cache/epub/$bookNum/pg$bookNum.cover.medium.jpg',
+            genres: const ['Classics', 'Public Domain'],
+            status: 'COMPLETED',
+            sourceUrl: novelUrl,
+            isFullBook: true,
+            bookDownloadUrl: '$baseUrl/ebooks/$bookNum.epub.images',
+            bookFormat: 'epub',
+          );
+        }
+        throw HttpException('Failed to load novel details from Project Gutenberg ($novelUrl)');
+      }
+
+      final doc = html_parser.parse(response.body);
 
     final rawTitleEl = doc.querySelector('#book_title');
     String title = rawTitleEl?.text.trim() ?? 'Untitled';
@@ -146,7 +165,6 @@ class GutenbergExtractor implements NovelSource {
     }
 
     // Cover
-    final bookNum = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
     String coverUrl = '';
     if (bookNum.isNotEmpty) {
       coverUrl = '$baseUrl/cache/epub/$bookNum/pg$bookNum.cover.medium.jpg';
@@ -188,6 +206,25 @@ class GutenbergExtractor implements NovelSource {
       bookDownloadUrl: downloadUrl.isNotEmpty ? downloadUrl : null,
       bookFormat: 'epub',
     );
+    } catch (_) {
+      if (bookNum.isNotEmpty) {
+        return Novel(
+          id: '${id}_$bookNum',
+          sourceId: id,
+          title: 'Project Gutenberg Book #$bookNum',
+          author: 'Unknown Author',
+          description: 'Public domain book from Project Gutenberg.',
+          coverUrl: '$baseUrl/cache/epub/$bookNum/pg$bookNum.cover.medium.jpg',
+          genres: const ['Classics', 'Public Domain'],
+          status: 'COMPLETED',
+          sourceUrl: novelUrl,
+          isFullBook: true,
+          bookDownloadUrl: '$baseUrl/ebooks/$bookNum.epub.images',
+          bookFormat: 'epub',
+        );
+      }
+      rethrow;
+    }
   }
 
   @override

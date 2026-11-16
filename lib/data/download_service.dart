@@ -198,6 +198,21 @@ class DownloadService extends ChangeNotifier {
     }
 
     // Auto-resolve exact file URLs and session tokens for whole-book sources
+    if ((targetNovel.bookDownloadUrl == null || targetNovel.bookDownloadUrl!.isEmpty || effectiveUrl == targetNovel.sourceUrl) &&
+        !effectiveUrl.endsWith('.epub') &&
+        !effectiveUrl.endsWith('.pdf')) {
+      try {
+        final extractor = SourceRegistry.getSource(novel.sourceId);
+        if (extractor != null) {
+          final detailed = await extractor.getNovelDetails(novel.sourceUrl);
+          if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty) {
+            effectiveUrl = detailed.bookDownloadUrl!;
+            targetNovel = detailed;
+          }
+        }
+      } catch (_) {}
+    }
+
     if ((novel.sourceId == 'internet_archive' ||
             novel.sourceId == 'openlibrary' ||
             novel.sourceId == 'open_library') &&
@@ -257,10 +272,11 @@ class DownloadService extends ChangeNotifier {
         } catch (_) {}
       }
       if (targetNovel.bookFormat != null &&
-          targetNovel.bookFormat!.toLowerCase() != 'epub') {
+          targetNovel.bookFormat!.toLowerCase() != 'epub' &&
+          targetNovel.bookFormat!.toLowerCase() != 'pdf') {
         throw StateError(
           'This book is in ${targetNovel.bookFormat!.toUpperCase()} format. '
-          'Novels-World supports EPUB digital editions. Please choose an EPUB edition of this title.',
+          'Novels-World supports EPUB and PDF digital editions. Please choose an EPUB or PDF edition of this title.',
         );
       }
     } else if (novel.sourceId == 'vdocpub') {
@@ -322,7 +338,9 @@ class DownloadService extends ChangeNotifier {
     try {
       final headers = <String, String>{
         'User-Agent': WebViewSessionManager.defaultUserAgent,
-        'Accept': 'application/epub+zip,application/octet-stream,*/*;q=0.9',
+        'Accept': (targetNovel.bookFormat?.toLowerCase() == 'pdf')
+            ? 'application/pdf,application/octet-stream,*/*;q=0.9'
+            : 'application/epub+zip,application/pdf,application/octet-stream,*/*;q=0.9',
       };
 
       if (targetNovel.sourceUrl.isNotEmpty) {

@@ -111,6 +111,7 @@ void main() {
       expect(novels.length, 2);
       expect(novels[0].title, 'गोदान');
       expect(novels[0].author, 'प्रेमचंद');
+      expect(novels[0].coverUrl, contains('Gadya-Kosh-Logo.png'));
       expect(novels[0].description, contains('होरी'));
       expect(novels[1].title, 'तगादा');
       expect(novels[1].author, 'प्रेमचंद');
@@ -137,6 +138,7 @@ void main() {
       expect(novels.length, 2);
       expect(novels[0].title, 'ଛମାଣ ଆଠଗୁଣ୍ଠ');
       expect(novels[0].sourceId, 'or_wikisource');
+      expect(novels[0].coverUrl, contains('orwikisource.png'));
       expect(novels[1].title, 'ରାଧାନାଥ ରାୟ');
       expect(novels[1].author, 'ରାଧାନାଥ ରାୟ');
     });
@@ -158,6 +160,7 @@ void main() {
       expect(novels.length, 2);
       expect(novels[0].title, 'रश्मिरथी');
       expect(novels[0].author, 'रामधारी सिंह "दिनकर"');
+      expect(novels[0].coverUrl, contains('KK-18-Years-Logo'));
       expect(novels[1].title, 'मधुशाला');
       expect(novels[1].author, 'हरिवंशराय बच्चन');
     });
@@ -197,6 +200,8 @@ void main() {
       expect(results.first.title, isNotEmpty);
       expect(results.first.isFullBook, isTrue);
       expect(results.first.bookFormat, 'pdf');
+      expect(results.first.coverUrl, isNotEmpty);
+      expect(results.first.coverUrl, contains('epustakalay.com'));
     });
 
     test('Hindi Samay live catalog returns Hindi classics', () async {

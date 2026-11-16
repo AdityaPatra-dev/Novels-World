@@ -806,7 +806,28 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                               return Container(color: Colors.black87);
                             },
                             errorBuilder: (context, error, stackTrace) => Container(color: Colors.black87),
-                          )),
+                          ))
+                  else
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF2E1065),
+                            Color(0xFF1E1E2C),
+                            Color(0xFF0B0B0F),
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.menu_book_rounded,
+                          size: 110,
+                          color: Colors.white.withValues(alpha: 0.05),
+                        ),
+                      ),
+                    ),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -1554,7 +1575,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'This book is available as a complete EPUB package. Download it once to unpack chapters, navigate the table of contents, and read offline.',
+                              'This book is available as a complete ${_novel.bookFormat?.toUpperCase() ?? "digital"} edition. Download it once to unpack chapters, navigate the table of contents, and read offline.',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.7), height: 1.4),
                             ),

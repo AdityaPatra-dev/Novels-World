@@ -130,7 +130,7 @@ class KavitaKoshExtractor implements NovelSource {
         title: title,
         author: author,
         description: snippet,
-        coverUrl: '',
+        coverUrl: 'https://kavitakosh.org/kk/otherapps/images/KK-18-Years-Logo-small.png',
         genres: const ['Hindi', 'Poetry', 'Epics', 'Sahitya'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,
@@ -170,7 +170,7 @@ class KavitaKoshExtractor implements NovelSource {
         title: title,
         author: author,
         description: desc,
-        coverUrl: '',
+        coverUrl: 'https://kavitakosh.org/kk/otherapps/images/KK-18-Years-Logo-small.png',
         genres: const ['Hindi', 'Poetry', 'Epics'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,
@@ -181,6 +181,7 @@ class KavitaKoshExtractor implements NovelSource {
         sourceId: id,
         title: 'Hindi Poem / Epic',
         author: 'Unknown Author',
+        coverUrl: 'https://kavitakosh.org/kk/otherapps/images/KK-18-Years-Logo-small.png',
         sourceUrl: novelUrl,
       );
     }

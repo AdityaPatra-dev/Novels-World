@@ -130,7 +130,7 @@ class GadyaKoshExtractor implements NovelSource {
         title: title,
         author: author,
         description: snippet,
-        coverUrl: '',
+        coverUrl: 'https://gadyakosh.org/gk/otherapps/images/Gadya-Kosh-Logo.png',
         genres: const ['Hindi', 'Classics', 'Sahitya'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,
@@ -170,7 +170,7 @@ class GadyaKoshExtractor implements NovelSource {
         title: title,
         author: author,
         description: desc,
-        coverUrl: '',
+        coverUrl: 'https://gadyakosh.org/gk/otherapps/images/Gadya-Kosh-Logo.png',
         genres: const ['Hindi', 'Classics', 'Sahitya'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,
@@ -181,6 +181,7 @@ class GadyaKoshExtractor implements NovelSource {
         sourceId: id,
         title: 'Hindi Classic',
         author: 'Unknown Author',
+        coverUrl: 'https://gadyakosh.org/gk/otherapps/images/Gadya-Kosh-Logo.png',
         sourceUrl: novelUrl,
       );
     }

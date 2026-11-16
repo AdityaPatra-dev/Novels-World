@@ -129,7 +129,7 @@ class HindiSamayExtractor implements NovelSource {
           title: title,
           author: author,
           description: 'Hindi literary classic on Hindi Samay.',
-          coverUrl: '',
+          coverUrl: 'https://www.hindisamay.com/images/logo.png',
           genres: const ['Hindi', 'Literature', 'Upanyas'],
           status: 'COMPLETED',
           sourceUrl: fullUrl,
@@ -170,7 +170,7 @@ class HindiSamayExtractor implements NovelSource {
         title: title,
         author: author,
         description: snippet,
-        coverUrl: '',
+        coverUrl: 'https://www.hindisamay.com/images/logo.png',
         genres: const ['Hindi', 'Literature'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,
@@ -181,6 +181,7 @@ class HindiSamayExtractor implements NovelSource {
         sourceId: id,
         title: 'Hindi Novel',
         author: 'Unknown Author',
+        coverUrl: 'https://www.hindisamay.com/images/logo.png',
         sourceUrl: novelUrl,
       );
     }

@@ -130,7 +130,7 @@ class OdiaWikisourceExtractor implements NovelSource {
         title: title,
         author: author,
         description: snippet,
-        coverUrl: '',
+        coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',
         genres: const ['Odia', 'Classics', 'Sahitya'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,
@@ -171,7 +171,7 @@ class OdiaWikisourceExtractor implements NovelSource {
         title: title,
         author: author,
         description: description,
-        coverUrl: '',
+        coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',
         genres: const ['Odia', 'Classics', 'Sahitya'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,
@@ -182,6 +182,7 @@ class OdiaWikisourceExtractor implements NovelSource {
         sourceId: id,
         title: 'Odia Literature',
         author: 'Unknown Author',
+        coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',
         sourceUrl: novelUrl,
       );
     }

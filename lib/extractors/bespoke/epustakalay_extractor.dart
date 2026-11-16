@@ -105,13 +105,24 @@ class EPustakalayExtractor implements NovelSource {
               .join(' ');
         }
 
+        // Extract thumbnail cover image, removing size suffixes for high definition
+        var coverUrl = '';
+        final imgElem = a.querySelector('img') ?? a.parent?.querySelector('img');
+        if (imgElem != null) {
+          var src = imgElem.attributes['src'] ?? imgElem.attributes['data-src'] ?? '';
+          if (src.isNotEmpty) {
+            if (!src.startsWith('http')) src = '$baseUrl$src';
+            coverUrl = src.replaceAll(RegExp(r'-\d+x\d+(\.[a-zA-Z]+)$'), r'$1');
+          }
+        }
+
         books.add(Novel(
           id: '${id}_${fullUrl.hashCode.abs()}',
           sourceId: id,
           title: cleanTitle.isNotEmpty ? cleanTitle : text,
           author: author,
           description: 'Hindi digital book on ePustakalay.',
-          coverUrl: '',
+          coverUrl: coverUrl,
           genres: const ['Hindi', 'History', 'Literature'],
           status: 'COMPLETED',
           sourceUrl: fullUrl,
@@ -147,6 +158,17 @@ class EPustakalayExtractor implements NovelSource {
             .join(' ');
       }
 
+      // Extract high-resolution book cover
+      var coverUrl = '';
+      final coverImg = doc.querySelector('img[alt*="Book Image"], .entry-content img, .book-description img, img[src*="wp-content/uploads/"]');
+      if (coverImg != null) {
+        var src = coverImg.attributes['src'] ?? coverImg.attributes['data-src'] ?? '';
+        if (src.isNotEmpty) {
+          if (!src.startsWith('http')) src = '$baseUrl$src';
+          coverUrl = src.replaceAll(RegExp(r'-\d+x\d+(\.[a-zA-Z]+)$'), r'$1');
+        }
+      }
+
       // Look for PDF download URL
       String? pdfUrl;
       final pdfAnchors = doc.querySelectorAll('a[href*=".pdf"], a[href*="archive.org/download/"]');
@@ -168,7 +190,7 @@ class EPustakalayExtractor implements NovelSource {
         title: cleanTitle,
         author: author,
         description: desc,
-        coverUrl: '',
+        coverUrl: coverUrl,
         genres: const ['Hindi', 'History', 'Literature'],
         status: 'COMPLETED',
         sourceUrl: novelUrl,

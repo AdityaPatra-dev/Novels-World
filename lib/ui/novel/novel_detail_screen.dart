@@ -39,7 +39,9 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   String? _error;
   bool _ascending = true;
   bool _isSynopsisExpanded = false;
+  bool _showAudioOnly = false;
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _headerKey = GlobalKey();
   ReadingProgress? _readingProgress;
   Set<String> _readChapterIds = {};
 
@@ -48,9 +50,14 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   List<Chapter> get _displayChapters {
-    if (_searchQuery.isEmpty) return _chapters;
+    List<Chapter> base = _chapters;
+    if (_showAudioOnly) {
+      final storage = context.read<StorageService>();
+      base = _chapters.where((c) => storage.hasOfflineAudiobook(_novel.id, c.id)).toList();
+    }
+    if (_searchQuery.isEmpty) return base;
     final q = _searchQuery.toLowerCase();
-    return _chapters.where((c) => c.title.toLowerCase().contains(q) || c.id.toLowerCase().contains(q)).toList();
+    return base.where((c) => c.title.toLowerCase().contains(q) || c.id.toLowerCase().contains(q)).toList();
   }
 
   String get _sanitizedCoverUrl {
@@ -240,16 +247,49 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
 
   void _jumpToCurrentChapter() {
     if (_lastReadChapter == null || _chapters.isEmpty) return;
+
+    // If currently filtered to audio-only and the target chapter is not downloaded as audio, switch to all chapters
+    if (_showAudioOnly) {
+      final storage = context.read<StorageService>();
+      if (!storage.hasOfflineAudiobook(_novel.id, _lastReadChapter!.id)) {
+        setState(() {
+          _showAudioOnly = false;
+        });
+      }
+    }
+
+    // If search is active and hides target chapter, clear search
+    if (_searchQuery.isNotEmpty) {
+      setState(() {
+        _searchQuery = '';
+        _searchController.clear();
+        _isSearchOpen = false;
+      });
+    }
+
     final displayList = _displayChapters;
     final rawIdx = displayList.indexWhere((c) => c.id == _lastReadChapter!.id || c.url == _lastReadChapter!.url);
     if (rawIdx >= 0) {
       final idx = _ascending ? rawIdx : (displayList.length - 1 - rawIdx);
       if (_scrollController.hasClients) {
-        final targetOffset = (520.0 + (idx * 56.0)).clamp(0.0, _scrollController.position.maxScrollExtent);
+        double headerHeight = 720.0;
+        final RenderBox? headerBox = _headerKey.currentContext?.findRenderObject() as RenderBox?;
+        if (headerBox != null && headerBox.hasSize) {
+          headerHeight = headerBox.size.height + 280.0 - kToolbarHeight;
+        }
+        final targetOffset = (headerHeight + (idx * 64.0) - 80.0).clamp(0.0, _scrollController.position.maxScrollExtent);
         _scrollController.animateTo(
           targetOffset,
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOut,
+        );
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Jumped to where you left off: ${_lastReadChapter!.title}'),
+            duration: const Duration(seconds: 1),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -269,18 +309,181 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       targetIdx = number - 1;
     }
     if (targetIdx >= 0) {
+      if (_showAudioOnly) {
+        setState(() => _showAudioOnly = false);
+      }
       final displayList = _displayChapters;
       final targetChapter = _chapters[targetIdx];
       final dispIdx = displayList.indexOf(targetChapter);
       if (dispIdx >= 0 && _scrollController.hasClients) {
         final listIdx = _ascending ? dispIdx : (displayList.length - 1 - dispIdx);
-        final targetOffset = (520.0 + (listIdx * 56.0)).clamp(0.0, _scrollController.position.maxScrollExtent);
+        double headerHeight = 720.0;
+        final RenderBox? headerBox = _headerKey.currentContext?.findRenderObject() as RenderBox?;
+        if (headerBox != null && headerBox.hasSize) {
+          headerHeight = headerBox.size.height + 280.0 - kToolbarHeight;
+        }
+        final targetOffset = (headerHeight + (listIdx * 64.0) - 80.0).clamp(0.0, _scrollController.position.maxScrollExtent);
         _scrollController.animateTo(
           targetOffset,
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOut,
         );
       }
+    }
+  }
+
+  void _showDeleteDownloadDialog(Chapter chapter, {required bool isDownloaded, required bool hasAudio}) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E2C),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 22),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Delete from Downloads',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                chapter.title,
+                style: const TextStyle(fontSize: 13, color: Color(0xFFA78BFA), fontWeight: FontWeight.w600),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Select what you want to delete from this chapter:',
+                style: TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              if (hasAudio)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.headphones_rounded, color: Color(0xFFA78BFA), size: 20),
+                  ),
+                  title: const Text('Audiobook (.mp3)', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Deletes downloaded offline audio', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  trailing: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                  onTap: () async {
+                    Navigator.pop(dialogCtx);
+                    await _deleteChapterAudio(chapter);
+                  },
+                ),
+              if (isDownloaded)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.article_rounded, color: Color(0xFF10B981), size: 20),
+                  ),
+                  title: const Text('Chapter Text', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Deletes offline text reading cache', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  trailing: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                  onTap: () async {
+                    Navigator.pop(dialogCtx);
+                    await _deleteChapterText(chapter);
+                  },
+                ),
+              if (hasAudio && isDownloaded)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 20),
+                  ),
+                  title: const Text('Both (Audio & Text)', style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Completely removes all offline files for this chapter', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                  onTap: () async {
+                    Navigator.pop(dialogCtx);
+                    await _deleteChapterBoth(chapter);
+                  },
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteChapterAudio(Chapter chapter) async {
+    final storage = context.read<StorageService>();
+    final langs = storage.getDownloadedAudiobookLanguages(_novel.id)[chapter.id] ?? [];
+    if (langs.isEmpty) {
+      await storage.deleteAudiobookChapter(_novel.id, chapter.id, 'en');
+    } else {
+      for (final l in langs) {
+        await storage.deleteAudiobookChapter(_novel.id, chapter.id, l);
+      }
+    }
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Deleted downloaded audio for ${chapter.title}'),
+          backgroundColor: const Color(0xFF8B5CF6),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteChapterText(Chapter chapter) async {
+    final downloadService = context.read<DownloadService>();
+    await downloadService.deleteSingleChapterDownload(chapter.id);
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Deleted offline text for ${chapter.title}'),
+          backgroundColor: const Color(0xFF10B981),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteChapterBoth(Chapter chapter) async {
+    final downloadService = context.read<DownloadService>();
+    await _deleteChapterAudio(chapter);
+    await downloadService.deleteSingleChapterDownload(chapter.id);
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Deleted all offline files for ${chapter.title}'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     }
   }
 
@@ -766,6 +969,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
+              key: _headerKey,
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1065,9 +1269,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             Row(
                               children: [
                                 Text(
-                                  _searchQuery.isNotEmpty
-                                      ? 'Chapters (${displayList.length}/${_chapters.length})'
-                                      : 'Chapters (${_chapters.length})',
+                                  _showAudioOnly
+                                      ? 'Audio Chapters (${displayList.length})'
+                                      : (_searchQuery.isNotEmpty
+                                          ? 'Chapters (${displayList.length}/${_chapters.length})'
+                                          : 'Chapters (${_chapters.length})'),
                                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                 ),
                                 if (_isStreamingChapters) ...[
@@ -1097,7 +1303,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                 ],
                               ],
                             ),
-                            if (_chapters.isNotEmpty && _readCount > 0)
+                            if (_chapters.isNotEmpty && _readCount > 0 && !_showAudioOnly)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Text(
@@ -1136,8 +1342,8 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             ),
                           if (_lastReadChapter != null)
                             IconButton(
-                              icon: const Icon(Icons.my_location_rounded, size: 19, color: Color(0xFFA78BFA)),
-                              tooltip: 'Jump to current chapter',
+                              icon: const Icon(Icons.visibility_rounded, size: 20, color: Color(0xFFA78BFA)),
+                              tooltip: 'Jump to where I left off (${_lastReadChapter!.title})',
                               onPressed: _jumpToCurrentChapter,
                             ),
                           IconButton(
@@ -1185,6 +1391,56 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                       ),
                     ],
                   ),
+                  if (!kIsWeb && _chapters.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Builder(
+                      builder: (context) {
+                        final storage = context.read<StorageService>();
+                        final audioCount = _chapters.where((c) => storage.hasOfflineAudiobook(_novel.id, c.id)).length;
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              ChoiceChip(
+                                label: Text('All Chapters (${_chapters.length})'),
+                                selected: !_showAudioOnly,
+                                selectedColor: const Color(0xFF8B5CF6),
+                                backgroundColor: const Color(0xFF1E1E2C),
+                                labelStyle: TextStyle(
+                                  color: !_showAudioOnly ? Colors.white : Colors.white70,
+                                  fontWeight: !_showAudioOnly ? FontWeight.bold : FontWeight.normal,
+                                  fontSize: 12,
+                                ),
+                                onSelected: (sel) {
+                                  if (sel) setState(() => _showAudioOnly = false);
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              ChoiceChip(
+                                avatar: Icon(
+                                  Icons.headphones_rounded,
+                                  size: 14,
+                                  color: _showAudioOnly ? Colors.white : const Color(0xFFA78BFA),
+                                ),
+                                label: Text('Downloaded Audio ($audioCount)'),
+                                selected: _showAudioOnly,
+                                selectedColor: const Color(0xFF8B5CF6),
+                                backgroundColor: const Color(0xFF1E1E2C),
+                                labelStyle: TextStyle(
+                                  color: _showAudioOnly ? Colors.white : Colors.white70,
+                                  fontWeight: _showAudioOnly ? FontWeight.bold : FontWeight.normal,
+                                  fontSize: 12,
+                                ),
+                                onSelected: (sel) {
+                                  if (sel) setState(() => _showAudioOnly = true);
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                   if (_isSearchOpen) ...[
                     const SizedBox(height: 8),
                     TextField(
@@ -1353,11 +1609,28 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                         ),
                       )
                     : Center(
-                        child: Text(
-                          _searchQuery.isNotEmpty
-                              ? 'No chapters found matching "$_searchQuery"'
-                              : 'No chapters available yet.',
-                          style: const TextStyle(color: Colors.white54, fontSize: 13),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _showAudioOnly ? Icons.headphones_outlined : Icons.menu_book_outlined,
+                                size: 48,
+                                color: Colors.white24,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'No chapters found matching "$_searchQuery"'
+                                    : (_showAudioOnly
+                                        ? 'No downloaded audio chapters for this novel yet.\nTurn on "Save Listening as Offline Audiobook" in TTS settings to save audio chapters for offline listening.'
+                                        : 'No chapters available yet.'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white54, fontSize: 13, height: 1.4),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
               ),
@@ -1555,6 +1828,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                 await storage.markChapterAsUnread(_novel.id, chapter.id);
                                 _loadReadingProgress();
                               } else if (action == 'set_as_current') {
+                                final scaffold = ScaffoldMessenger.of(context);
                                 await storage.saveProgress(
                                   ReadingProgress(
                                     novelId: _novel.id,
@@ -1564,7 +1838,16 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                     lastReadAt: DateTime.now(),
                                   ),
                                 );
-                                _loadReadingProgress();
+                                if (mounted) {
+                                  _loadReadingProgress();
+                                  scaffold.hideCurrentSnackBar();
+                                  scaffold.showSnackBar(
+                                    SnackBar(
+                                      content: Text('Reading position set to ${chapter.title}'),
+                                      backgroundColor: const Color(0xFF8B5CF6),
+                                    ),
+                                  );
+                                }
                               } else if (action == 'mark_previous_read') {
                                 final thisIdx = _chapters.indexOf(chapter);
                                 if (thisIdx >= 0) {
@@ -1572,9 +1855,36 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                   await storage.markChaptersAsRead(_novel.id, priorIds);
                                   _loadReadingProgress();
                                 }
+                              } else if (action == 'delete_downloads') {
+                                _showDeleteDownloadDialog(
+                                  chapter,
+                                  isDownloaded: isDownloaded,
+                                  hasAudio: hasAudio,
+                                );
+                              } else if (action == 'play_audio') {
+                                final langs = audioLangs ?? ['en'];
+                                final lang = langs.isNotEmpty ? langs.first : 'en';
+                                AudiobookPlayerScreen.open(
+                                  context,
+                                  novel: _novel,
+                                  chapter: chapter,
+                                  language: lang,
+                                  allChapters: _chapters,
+                                );
                               }
                             },
                             itemBuilder: (context) => [
+                              if (hasAudio)
+                                const PopupMenuItem(
+                                  value: 'play_audio',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.headphones_rounded, size: 18, color: Color(0xFFA78BFA)),
+                                      SizedBox(width: 8),
+                                      Text('Play Audiobook'),
+                                    ],
+                                  ),
+                                ),
                               PopupMenuItem(
                                 value: isRead ? 'mark_unread' : 'mark_read',
                                 child: Text(isRead ? 'Mark as unread' : 'Mark as read'),
@@ -1587,11 +1897,36 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                 value: 'mark_previous_read',
                                 child: Text('Mark all prior as read'),
                               ),
+                              if (isDownloaded || hasAudio)
+                                const PopupMenuItem(
+                                  value: 'delete_downloads',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                      SizedBox(width: 8),
+                                      Text('Delete from downloads...', style: TextStyle(color: Colors.redAccent)),
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
                         ],
                       ),
-                      onTap: () => _openReader(chapter),
+                      onTap: () {
+                        if (_showAudioOnly && hasAudio) {
+                          final langs = audioLangs ?? ['en'];
+                          final lang = langs.isNotEmpty ? langs.first : 'en';
+                          AudiobookPlayerScreen.open(
+                            context,
+                            novel: _novel,
+                            chapter: chapter,
+                            language: lang,
+                            allChapters: _chapters,
+                          );
+                        } else {
+                          _openReader(chapter);
+                        }
+                      },
                     ),
                   ),
                 );

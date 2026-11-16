@@ -408,6 +408,12 @@ class DownloadService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> deleteSingleChapterDownload(String chapterId) async {
+    await _storage.deleteDownloadedChapter(chapterId);
+    _downloadedChapterIds.remove(chapterId);
+    notifyListeners();
+  }
+
   Future<void> deleteNovelDownloads(String novelId, List<Chapter> chapters) async {
     for (final ch in chapters) {
       await _storage.deleteDownloadedChapter(ch.id);

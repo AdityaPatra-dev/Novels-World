@@ -64,15 +64,21 @@ class ReaderProvider extends ChangeNotifier {
         _preloadedNextContent = null;
         _preloadedNextSentences = [];
         if (_novel != null && currentChapter != null) {
-          _storage.saveProgress(
-            ReadingProgress(
-              novelId: _novel!.id,
-              chapterId: currentChapter!.id,
-              chapterTitle: currentChapter!.title,
-              activeSentenceIndex: 0,
-              lastReadAt: DateTime.now(),
-            ),
-          );
+          final savedProgress = _storage.getProgress(_novel!.id);
+          final savedIdx = savedProgress != null
+              ? _chapters.indexWhere((c) => c.id == savedProgress.chapterId || c.url == savedProgress.chapterId)
+              : -1;
+          if (savedProgress == null || savedIdx == -1 || _currentChapterIndex >= savedIdx) {
+            _storage.saveProgress(
+              ReadingProgress(
+                novelId: _novel!.id,
+                chapterId: currentChapter!.id,
+                chapterTitle: currentChapter!.title,
+                activeSentenceIndex: 0,
+                lastReadAt: DateTime.now(),
+              ),
+            );
+          }
         }
         notifyListeners();
       }
@@ -187,7 +193,7 @@ class ReaderProvider extends ChangeNotifier {
     await loadCurrentChapter();
   }
 
-  Future<void> loadCurrentChapter() async {
+  Future<void> loadCurrentChapter({bool isAdvancingForward = false}) async {
     final chapter = currentChapter;
     if (chapter == null || _novel == null) return;
 
@@ -269,17 +275,34 @@ class ReaderProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
 
-      // Record last read
-      await _storage.saveProgress(
-        ReadingProgress(
-          novelId: _novel!.id,
-          chapterId: chapter.id,
-          chapterTitle: chapter.title,
-          scrollOffset: progress != null && progress.chapterId == chapter.id ? progress.scrollOffset : 0.0,
-          activeSentenceIndex: _activeSentenceIndex,
-          lastReadAt: DateTime.now(),
-        ),
-      );
+      // Reading position safety rule:
+      // Only overwrite the novel's saved reading position if:
+      // 1. Novel has no saved reading progress yet (first time reading)
+      // 2. Currently reading the saved chapter itself
+      // 3. Advancing forward from the saved position (e.g. Next chapter within novel)
+      // Simply checking out an earlier chapter from the list does NOT demote the saved reading position.
+      final savedProgress = _storage.getProgress(_novel!.id);
+      final savedIdx = savedProgress != null
+          ? _chapters.indexWhere((c) => c.id == savedProgress.chapterId || c.url == savedProgress.chapterId)
+          : -1;
+
+      final shouldUpdateProgress = savedProgress == null ||
+          savedIdx == -1 ||
+          _currentChapterIndex == savedIdx ||
+          (isAdvancingForward && _currentChapterIndex > savedIdx);
+
+      if (shouldUpdateProgress) {
+        await _storage.saveProgress(
+          ReadingProgress(
+            novelId: _novel!.id,
+            chapterId: chapter.id,
+            chapterTitle: chapter.title,
+            scrollOffset: progress != null && progress.chapterId == chapter.id ? progress.scrollOffset : 0.0,
+            activeSentenceIndex: _activeSentenceIndex,
+            lastReadAt: DateTime.now(),
+          ),
+        );
+      }
     } catch (e) {
       _errorMessage = 'Failed to load chapter content: $e';
       _isLoading = false;
@@ -342,43 +365,55 @@ class ReaderProvider extends ChangeNotifier {
         _preloadedNextSentences = [];
         ttsManager.loadSentences(_sentences, startIndex: 0);
         if (_novel != null && currentChapter != null) {
-          await _storage.saveProgress(
-            ReadingProgress(
-              novelId: _novel!.id,
-              chapterId: currentChapter!.id,
-              chapterTitle: currentChapter!.title,
-              activeSentenceIndex: 0,
-              lastReadAt: DateTime.now(),
-            ),
-          );
+          final savedProgress = _storage.getProgress(_novel!.id);
+          final savedIdx = savedProgress != null
+              ? _chapters.indexWhere((c) => c.id == savedProgress.chapterId || c.url == savedProgress.chapterId)
+              : -1;
+          if (savedProgress == null || savedIdx == -1 || _currentChapterIndex >= savedIdx) {
+            await _storage.saveProgress(
+              ReadingProgress(
+                novelId: _novel!.id,
+                chapterId: currentChapter!.id,
+                chapterTitle: currentChapter!.title,
+                activeSentenceIndex: 0,
+                lastReadAt: DateTime.now(),
+              ),
+            );
+          }
         }
         notifyListeners();
         return;
       }
       _currentChapterIndex++;
-      await loadCurrentChapter();
+      await loadCurrentChapter(isAdvancingForward: true);
     }
   }
 
   Future<void> previousChapter() async {
     if (hasPreviousChapter) {
       _currentChapterIndex--;
-      await loadCurrentChapter();
+      await loadCurrentChapter(isAdvancingForward: false);
     }
   }
 
   void saveScrollProgress(double scrollOffset) {
     if (_novel != null && currentChapter != null) {
-      _storage.saveProgress(
-        ReadingProgress(
-          novelId: _novel!.id,
-          chapterId: currentChapter!.id,
-          chapterTitle: currentChapter!.title,
-          scrollOffset: scrollOffset,
-          activeSentenceIndex: _activeSentenceIndex,
-          lastReadAt: DateTime.now(),
-        ),
-      );
+      final savedProgress = _storage.getProgress(_novel!.id);
+      final savedIdx = savedProgress != null
+          ? _chapters.indexWhere((c) => c.id == savedProgress.chapterId || c.url == savedProgress.chapterId)
+          : -1;
+      if (savedProgress == null || savedIdx == -1 || _currentChapterIndex >= savedIdx) {
+        _storage.saveProgress(
+          ReadingProgress(
+            novelId: _novel!.id,
+            chapterId: currentChapter!.id,
+            chapterTitle: currentChapter!.title,
+            scrollOffset: scrollOffset,
+            activeSentenceIndex: _activeSentenceIndex,
+            lastReadAt: DateTime.now(),
+          ),
+        );
+      }
     }
   }
 
@@ -387,15 +422,21 @@ class ReaderProvider extends ChangeNotifier {
       _activeSentenceIndex = index;
       notifyListeners();
       if (_novel != null && currentChapter != null) {
-        _storage.saveProgress(
-          ReadingProgress(
-            novelId: _novel!.id,
-            chapterId: currentChapter!.id,
-            chapterTitle: currentChapter!.title,
-            activeSentenceIndex: index,
-            lastReadAt: DateTime.now(),
-          ),
-        );
+        final savedProgress = _storage.getProgress(_novel!.id);
+        final savedIdx = savedProgress != null
+            ? _chapters.indexWhere((c) => c.id == savedProgress.chapterId || c.url == savedProgress.chapterId)
+            : -1;
+        if (savedProgress == null || savedIdx == -1 || _currentChapterIndex >= savedIdx) {
+          _storage.saveProgress(
+            ReadingProgress(
+              novelId: _novel!.id,
+              chapterId: currentChapter!.id,
+              chapterTitle: currentChapter!.title,
+              activeSentenceIndex: index,
+              lastReadAt: DateTime.now(),
+            ),
+          );
+        }
       }
       // If user reaches within 2-3 sentences of chapter end, trigger background preload
       if (index >= _sentences.length - 3 && hasNextChapter) {

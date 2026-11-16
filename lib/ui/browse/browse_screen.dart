@@ -12,6 +12,7 @@ import '../../providers/library_provider.dart';
 import '../novel/novel_detail_screen.dart';
 import '../widgets/novel_card.dart';
 import '../widgets/source_webview_screen.dart';
+import '../widgets/source_selection_modal.dart';
 import '../search/global_search_screen.dart';
 import '../widgets/update_dialog.dart';
 
@@ -181,13 +182,12 @@ class _BrowseScreenState extends State<BrowseScreen> {
       });
       return;
     }
-    if (source.id != _currentSource.id) {
-      setState(() {
-        _currentSource = source;
-      });
-      _searchController.clear();
-      _loadPopular();
-    }
+    setState(() {
+      _isGlobalSearch = false;
+      _currentSource = source;
+    });
+    _searchController.clear();
+    _loadPopular();
   }
 
   Future<void> _openSourceWebView() async {
@@ -315,8 +315,6 @@ class _BrowseScreenState extends State<BrowseScreen> {
       );
     }
 
-    final allSources = SourceRegistry.getAllSources();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Browse Novels', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -360,74 +358,75 @@ class _BrowseScreenState extends State<BrowseScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
-                    const Icon(Icons.source, size: 18, color: Color(0xFF8B5CF6)),
+                    const Icon(Icons.source_rounded, size: 18, color: Color(0xFF8B5CF6)),
                     const SizedBox(width: 8),
                     const Text('Source:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E1E28),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white12),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<NovelSource?>(
-                            value: _currentSource,
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF1E1E28),
-                            items: [
-                              const DropdownMenuItem<NovelSource?>(
-                                value: null,
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.travel_explore_rounded, size: 18, color: Color(0xFFA78BFA)),
-                                    SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'All Sources (Global Search)',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFFA78BFA),
-                                        ),
+                      child: InkWell(
+                        onTap: () {
+                          SourceSelectionModal.show(
+                            context: context,
+                            currentSource: _isGlobalSearch ? null : _currentSource,
+                            onSourceSelected: _onSourceChanged,
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E1E28),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Row(
+                            children: [
+                              if (_isGlobalSearch) ...[
+                                const Icon(Icons.travel_explore_rounded, size: 18, color: Color(0xFFA78BFA)),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Text(
+                                    'All Sources (Global Search)',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFA78BFA),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ] else ...[
+                                if (_currentSource.iconUrl.isNotEmpty) ...[
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Image.network(
+                                      _currentSource.iconUrl,
+                                      width: 18,
+                                      height: 18,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, _, _) => const Icon(
+                                        Icons.auto_stories_rounded,
+                                        size: 16,
+                                        color: Color(0xFFA78BFA),
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                              ...allSources.map((s) {
-                                return DropdownMenuItem<NovelSource?>(
-                                  value: s,
-                                  child: Row(
-                                    children: [
-                                      if (s.iconUrl.isNotEmpty) ...[
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(4),
-                                          child: Image.network(
-                                            s.iconUrl,
-                                            width: 18,
-                                            height: 18,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                      Expanded(
-                                        child: Text(
-                                          '${s.name} (${s.lang.toUpperCase()})',
-                                          style: const TextStyle(fontSize: 13),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
                                   ),
-                                );
-                              }),
+                                  const SizedBox(width: 8),
+                                ] else ...[
+                                  const Icon(Icons.auto_stories_rounded, size: 16, color: Color(0xFFA78BFA)),
+                                  const SizedBox(width: 8),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    '${_currentSource.name} (${_currentSource.lang.toUpperCase()})',
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(width: 6),
+                              const Icon(Icons.unfold_more_rounded, size: 18, color: Colors.white54),
                             ],
-                            onChanged: _onSourceChanged,
                           ),
                         ),
                       ),

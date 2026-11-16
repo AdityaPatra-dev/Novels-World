@@ -18,6 +18,7 @@
 | **6** | **Literary Fiction & Standalone Novellas** | Completely Missing | Award-winning short fiction digests, curated novellas |
 | **7** | **Young Adult (YA) & Coming-of-Age** | Moderate (LN only) | Western YA portals, indie serialized fiction |
 | **8** | **Eastern Web Fiction & Light Novels** | Saturated (~85% catalog) | Top verified aggregators & translation collectives |
+| **9** | **Hindi Books, Historical Chronicles & Literature (हिंदी पुस्तकें, इतिहास व साहित्य)** | Expanding (New Dedicated Track) | Classic Hindi prose, historical chronicles, epic mythology, and modern Hindi serials |
 
 ---
 
@@ -155,6 +156,38 @@
 
 ---
 
+## 9. Hindi Books, Historical Chronicles, Classical Literature & Modern Fiction (हिंदी पुस्तकें, इतिहास व साहित्य)
+
+*Target audience: Readers seeking authentic Hindi literature, historical treatises (इतिहास), ancient scriptures/mythology (पौराणिक ग्रंथ), classic novels (उपन्यास), short stories (कहानियां), and modern serialized web fiction.*
+
+### 9.1 Classical Literature, Historical Chronicles & Ebook Archives
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **ePustakalay (ई-पुस्तकालय)** | `https://epustakalay.com` | Custom Web Portal / PDF & Reader | India's largest Hindi digital library. Massive collection of Indian history (`/genres/itihas-history/`), classical literature (`/genres/literature-sahitya/`), timeless novels (`/genres/upanyas-novel/`), and mythology (`/genres/pauranik-mythological/`). | [x] Working |
+| **Gadya Kosh (गद्य कोश)** | `http://gadyakosh.org/gk/` | MediaWiki Engine | The definitive digital repository of Hindi prose. Thousands of full-text novels and stories by Munshi Premchand, Hazari Prasad Dwivedi, Rahul Sankrityayan, Jaishankar Prasad, etc. | [x] Working |
+| **Hindi Samay (हिंदी समय)** | `https://www.hindisamay.com` | Custom ASP.NET Portal | Managed by Mahatma Gandhi International Hindi University. Curated canonical Hindi novels, short stories, memoirs, historical accounts, and literary essays. | [x] Working |
+| **Kavita Kosh (कविता कोश)** | `http://kavitakosh.org/kk/` | MediaWiki Engine | India's grandest treasury of Hindi, Braj Bhasha, Awadhi, and Maithili poetry, epics (Ramcharitmanas, Kamayani, Rashmirathi), and historical ballads. | [x] Working |
+| **Bharat Discovery / Bharatkosh (भारतकोश)** | `https://bharatdiscovery.org` | MediaWiki Engine | Encyclopedic knowledge portal dedicated to Indian history, ancient dynasties, regional freedom struggles, cultural treatises, and Hindi literary masters. | [x] Working |
+| **Hindwi (हिन्दवी)** | `https://www.hindwi.org` | Modern Next.js / REST API | Rekhta Foundation's dedicated Hindi initiative. Pristine typography and curated Hindi literature, poetry, folktales, and literary heritage. | [x] Working |
+| **Internet Archive Hindi Texts** | `https://archive.org/details/texts?and%5B%5D=languageSorter%3A%22Hindi%22` | Internet Archive API / Reader | Over 100,000+ public-domain Hindi books, rare out-of-print historical chronicles, gazetteers, and Sanskrit-Hindi translated treatises. | [x] Working |
+| **Gita Press Gorakhpur** | `https://gitapress.org` | E-Commerce / Ebook Reader | World's largest publisher of Hindu religious texts, epics, Puranas, Mahabharata, Ramayana, and cultural philosophical literature in authentic Hindi. | [x] Working |
+| **Pustak.org** | `http://www.pustak.org` | Custom Web Portal | Expansive catalog of free downloadable and readable Hindi books spanning Indian culture, spirituality, biographies, and historical narratives. | [x] Working |
+| **Hindi Sahitya Darpan** | `https://hindisahityadarpan.in/` | WordPress Editorial | Curated Hindi literature platform featuring essays, renowned Hindi stories, poems, biographies of historical personalities, and educational prose. | [x] Working |
+| **Geeta-Kavita** | `https://www.geeta-kavita.com` | Lightweight HTML Portal | Well-known collection of Hindi spiritual literature, Shrimad Bhagavad Gita verse-by-verse Hindi translations, poems, and inspiring stories. | [x] Working |
+| **Anubhuti Hindi (अनुभूति)** | `http://www.anubhuti-hindi.org` | Web Portal CMS | Premier online Hindi literary magazine publishing selected contemporary Hindi short fiction, cultural prose, and literary reviews since 2000. | [x] Working |
+| **Vedic Heritage Portal** | `https://vedicheritage.gov.in` | Government of India (IGNCA) | Dedicated repository by Ministry of Culture covering Vedic texts, ancient sciences, audio chanting, and historical Hindi & Sanskrit commentaries. | [x] Working |
+
+### 9.2 Modern Serialized Hindi Web Novels & Story Portals
+
+| Source Name | Website URL | Engine / Architecture | Content Highlights | Verified Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Pratilipi Hindi (प्रतिलिपि हिंदी)** | `https://hindi.pratilipi.com` | React SPA / REST API | Largest Indian storytelling community with millions of Hindi serialized novels, romance, suspense, horror, and historical fiction from modern authors. | [x] Working |
+| **Matrubharti Hindi** | `https://www.matrubharti.com` | Web App / JSON API | Popular vernacular publishing platform offering thousands of free Hindi ebooks, serialized fiction, romance, and community literature. | [x] Working |
+| **KahaniGanj (कहानीगंज)** | `https://kahaniganj.com/` | WordPress / Modern Web | Online portal dedicated to Hindi stories, modern serialized web novels, motivational articles, and historical story retellings. | [x] Working |
+
+---
+
 ## Next Steps for Integration
 
 1. **Your Inspection**: Browse the URLs above that interest you, check whether they load cleanly in your browser without aggressive IP blocking, and mark `[x]` on your choices.
@@ -162,3 +195,4 @@
    * **Tier 1 (Instant Plug-in)**: Enable `Royal Road` and `Scribble Hub` (extractors are already written in your codebase).
    * **Tier 2 (Template Reuse)**: Sites running **WordPress Madara** (BoxNovel, Woopread, RainOfSnow) or **NovelFull** (Novel12, Novel80, LightNovelWorld) can be activated in `source_registry.dart` with simple config entries without writing new extractors.
    * **Tier 3 (Bespoke APIs)**: Build bespoke extractors for high-impact content sources (Standard Ebooks, Clarkesworld, Baen Free Library).
+   * **Tier 4 (MediaWiki & Vernacular Readers)**: Connect MediaWiki-based Hindi platforms (Gadya Kosh, Kavita Kosh, Bharatkosh) using the standardized MediaWiki action API (`api.php`), and create lightweight chapter scrapers for ePustakalay, Hindi Samay, and Pratilipi.

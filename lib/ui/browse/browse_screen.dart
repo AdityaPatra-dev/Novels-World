@@ -25,6 +25,7 @@ class BrowseScreen extends StatefulWidget {
 class _BrowseScreenState extends State<BrowseScreen> {
   final TextEditingController _searchController = TextEditingController();
   late NovelSource _currentSource;
+  bool _isGlobalSearch = true;
 
   List<Novel> _novels = [];
   bool _isLoading = true;
@@ -42,11 +43,8 @@ class _BrowseScreenState extends State<BrowseScreen> {
   void initState() {
     super.initState();
     _currentSource = SourceRegistry.getDefaultSource();
-    _loadPopular();
-    final isTest = Platform.environment.containsKey('FLUTTER_TEST');
-    if (!_prewarmingStarted && !isTest) {
-      _prewarmingStarted = true;
-      _prewarmPopularSources();
+    if (!_isGlobalSearch) {
+      _loadPopular();
     }
   }
 
@@ -177,7 +175,13 @@ class _BrowseScreenState extends State<BrowseScreen> {
   }
 
   void _onSourceChanged(NovelSource? source) {
-    if (source != null && source.id != _currentSource.id) {
+    if (source == null) {
+      setState(() {
+        _isGlobalSearch = true;
+      });
+      return;
+    }
+    if (source.id != _currentSource.id) {
       setState(() {
         _currentSource = source;
       });
@@ -292,6 +296,25 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isGlobalSearch) {
+      return GlobalSearchScreen(
+        isEmbeddedInTab: true,
+        onSwitchToSources: () {
+          setState(() {
+            _isGlobalSearch = false;
+          });
+          if (_novels.isEmpty) {
+            _loadPopular();
+          }
+          final isTest = Platform.environment.containsKey('FLUTTER_TEST');
+          if (!_prewarmingStarted && !isTest) {
+            _prewarmingStarted = true;
+            _prewarmPopularSources();
+          }
+        },
+      );
+    }
+
     final allSources = SourceRegistry.getAllSources();
 
     return Scaffold(
@@ -313,14 +336,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
           IconButton(
             icon: const Icon(Icons.travel_explore_rounded, size: 24, color: Color(0xFFA78BFA)),
             tooltip: 'Global Search (All Sources)',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => GlobalSearchScreen(initialQuery: _searchController.text),
-                ),
-              );
-            },
+            onPressed: () => setState(() => _isGlobalSearch = true),
           ),
           if (!kIsWeb)
             IconButton(
@@ -357,39 +373,60 @@ class _BrowseScreenState extends State<BrowseScreen> {
                           border: Border.all(color: Colors.white12),
                         ),
                         child: DropdownButtonHideUnderline(
-                          child: DropdownButton<NovelSource>(
+                          child: DropdownButton<NovelSource?>(
                             value: _currentSource,
                             isExpanded: true,
                             dropdownColor: const Color(0xFF1E1E28),
-                            items: allSources.map((s) {
-                              return DropdownMenuItem(
-                                value: s,
+                            items: [
+                              const DropdownMenuItem<NovelSource?>(
+                                value: null,
                                 child: Row(
                                   children: [
-                                    if (s.iconUrl.isNotEmpty) ...[
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: Image.network(
-                                          s.iconUrl,
-                                          width: 18,
-                                          height: 18,
-                                          fit: BoxFit.contain,
-                                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
+                                    Icon(Icons.travel_explore_rounded, size: 18, color: Color(0xFFA78BFA)),
+                                    SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        '${s.name} (${s.lang.toUpperCase()})',
-                                        style: const TextStyle(fontSize: 13),
-                                        overflow: TextOverflow.ellipsis,
+                                        'All Sources (Global Search)',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFA78BFA),
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                              );
-                            }).toList(),
+                              ),
+                              ...allSources.map((s) {
+                                return DropdownMenuItem<NovelSource?>(
+                                  value: s,
+                                  child: Row(
+                                    children: [
+                                      if (s.iconUrl.isNotEmpty) ...[
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Image.network(
+                                            s.iconUrl,
+                                            width: 18,
+                                            height: 18,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      Expanded(
+                                        child: Text(
+                                          '${s.name} (${s.lang.toUpperCase()})',
+                                          style: const TextStyle(fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
                             onChanged: _onSourceChanged,
                           ),
                         ),
@@ -423,14 +460,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                         IconButton(
                           icon: const Icon(Icons.travel_explore_rounded, size: 20, color: Color(0xFF8B5CF6)),
                           tooltip: 'Global Search across all sources',
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => GlobalSearchScreen(initialQuery: _searchController.text),
-                              ),
-                            );
-                          },
+                          onPressed: () => setState(() => _isGlobalSearch = true),
                         ),
                       ],
                     ),

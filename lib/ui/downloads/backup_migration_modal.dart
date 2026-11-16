@@ -35,6 +35,10 @@ class _BackupMigrationModalState extends State<BackupMigrationModal> with Single
   String _exportStatus = '';
   BackupExportResult? _exportResult;
 
+  // Data estimate
+  BackupDataEstimate? _dataEstimate;
+  bool _isLoadingEstimate = true;
+
   // Import State
   List<String> _selectedImportFiles = [];
   BackupManifestSummary? _importSummary;
@@ -49,6 +53,17 @@ class _BackupMigrationModalState extends State<BackupMigrationModal> with Single
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _loadDataEstimate();
+  }
+
+  Future<void> _loadDataEstimate() async {
+    final est = await _backupService.estimateBackup();
+    if (mounted) {
+      setState(() {
+        _dataEstimate = est;
+        _isLoadingEstimate = false;
+      });
+    }
   }
 
   @override
@@ -265,6 +280,61 @@ class _BackupMigrationModalState extends State<BackupMigrationModal> with Single
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Current Offline Data Size Card
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E2C),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.storage_rounded, color: Color(0xFFA78BFA), size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Current Offline Data Size',
+                        style: TextStyle(fontSize: 12, color: Colors.white60),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _isLoadingEstimate
+                            ? 'Calculating size...'
+                            : (_dataEstimate?.formattedSize ?? '0 B'),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      if (_dataEstimate != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_dataEstimate!.novelCount} novel${_dataEstimate!.novelCount == 1 ? '' : 's'} • ${_dataEstimate!.totalFiles} files (${_dataEstimate!.chapterFilesCount} text, ${_dataEstimate!.audioFilesCount} audio)',
+                          style: const TextStyle(fontSize: 11, color: Colors.white54),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (_isLoadingEstimate)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+
           const Text(
             'Export Archive Mode',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
@@ -282,6 +352,9 @@ class _BackupMigrationModalState extends State<BackupMigrationModal> with Single
             title: '1.5 GB Batched Splits',
             subtitle: 'Recommended for cloud drives and FAT32 cards. Splits into 1.5 GB batches with atomic chapter integrity.',
             icon: Icons.splitscreen_rounded,
+            badgeText: _dataEstimate != null
+                ? '${_dataEstimate!.partCount} ${_dataEstimate!.partCount == 1 ? 'Part' : 'Parts'}'
+                : null,
           ),
           const SizedBox(height: 20),
 
@@ -355,6 +428,7 @@ class _BackupMigrationModalState extends State<BackupMigrationModal> with Single
     required String title,
     required String subtitle,
     required IconData icon,
+    String? badgeText,
   }) {
     final isSelected = _selectedExportMode == mode;
     return InkWell(
@@ -370,58 +444,116 @@ class _BackupMigrationModalState extends State<BackupMigrationModal> with Single
             width: isSelected ? 1.5 : 1.0,
           ),
         ),
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              icon,
-              color: isSelected ? const Color(0xFFA78BFA) : Colors.white60,
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? Colors.white : Colors.white70,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  icon,
+                  color: isSelected ? const Color(0xFFA78BFA) : Colors.white60,
+                  size: 22,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? Colors.white : Colors.white70,
+                            ),
+                          ),
+                          if (badgeText != null) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFA78BFA).withValues(alpha: 0.5)),
+                              ),
+                              child: Text(
+                                badgeText,
+                                style: const TextStyle(
+                                  color: Color(0xFFA78BFA),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(fontSize: 11, color: Colors.white60, height: 1.3),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected ? const Color(0xFFA78BFA) : Colors.white38,
+                      width: 2,
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 11, color: Colors.white60, height: 1.3),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? const Color(0xFFA78BFA) : Colors.white38,
-                  width: 2,
+                  child: isSelected
+                      ? Center(
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFFA78BFA),
+                            ),
+                          ),
+                        )
+                      : null,
                 ),
-              ),
-              child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color(0xFFA78BFA),
+              ],
+            ),
+            if (isSelected && mode == BackupMode.splitBatches && _dataEstimate != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFA78BFA).withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFA78BFA)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _dataEstimate!.totalBytes == 0
+                            ? 'No offline data: 0 parts will be created'
+                            : 'Calculated split: ${_dataEstimate!.partCount} part${_dataEstimate!.partCount == 1 ? '' : 's'} (~1.5 GB each) based on current ${_dataEstimate!.formattedSize} data size',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
                         ),
                       ),
-                    )
-                  : null,
-            ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

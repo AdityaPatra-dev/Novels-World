@@ -18,8 +18,15 @@ import '../novel/novel_detail_screen.dart';
 /// clusters identical novel titles across sources, and provides one-tap direct navigation.
 class GlobalSearchScreen extends StatefulWidget {
   final String? initialQuery;
+  final bool isEmbeddedInTab;
+  final VoidCallback? onSwitchToSources;
 
-  const GlobalSearchScreen({super.key, this.initialQuery});
+  const GlobalSearchScreen({
+    super.key,
+    this.initialQuery,
+    this.isEmbeddedInTab = false,
+    this.onSwitchToSources,
+  });
 
   @override
   State<GlobalSearchScreen> createState() => _GlobalSearchScreenState();
@@ -83,7 +90,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _executeSearch(_textController.text);
       });
-    } else {
+    } else if (!widget.isEmbeddedInTab) {
       _focusNode.requestFocus();
     }
   }
@@ -223,18 +230,22 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canPop = !widget.isEmbeddedInTab && Navigator.canPop(context);
     return Scaffold(
       backgroundColor: const Color(0xFF121218),
       appBar: AppBar(
         backgroundColor: const Color(0xFF181822),
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        titleSpacing: 0,
+        automaticallyImplyLeading: false,
+        leading: canPop
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
+        titleSpacing: canPop ? 0 : 16,
         title: Padding(
-          padding: const EdgeInsets.only(right: 16),
+          padding: EdgeInsets.only(right: widget.onSwitchToSources != null ? 0 : 16),
           child: Container(
             height: 44,
             decoration: BoxDecoration(
@@ -286,6 +297,17 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             ),
           ),
         ),
+        actions: [
+          if (widget.onSwitchToSources != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                icon: const Icon(Icons.source_outlined, color: Color(0xFFA78BFA), size: 22),
+                tooltip: 'Browse Single Source',
+                onPressed: widget.onSwitchToSources,
+              ),
+            ),
+        ],
       ),
       body: !_hasSubmitted
           ? _buildYouTubeSuggestionsOverlay()
@@ -851,78 +873,40 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             const SizedBox(height: 24),
           ],
 
-          Row(
-            children: [
-              const Icon(Icons.flash_on_rounded, size: 18, color: Color(0xFFF59E0B)),
-              const SizedBox(width: 8),
-              Text(
-                'Popular Across All Sources',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+          if (_recentSearches.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.travel_explore_rounded,
+                      size: 56,
+                      color: Colors.white.withValues(alpha: 0.18),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Global Multi-Source Search',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Search titles, authors, or genres across all registered sources.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _popularSuggestions.map((title) {
-              return ActionChip(
-                backgroundColor: const Color(0xFF1E1E28),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: Color(0xFF2D2D3C)),
-                ),
-                label: Text(
-                  title,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-                avatar: const Icon(Icons.search, size: 14, color: Color(0xFFA78BFA)),
-                onPressed: () {
-                  _textController.text = title;
-                  _textController.selection = TextSelection.fromPosition(
-                    TextPosition(offset: title.length),
-                  );
-                  _executeSearch(title);
-                },
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 28),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1B1B26),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF2A2A3C)),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.auto_awesome, color: Color(0xFF6C5CE7), size: 22),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'True Global Search',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'One search query simultaneously browses web novels, Gutenberg classics, and complete book libraries. Results appear instantly as each source responds.',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12, height: 1.4),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

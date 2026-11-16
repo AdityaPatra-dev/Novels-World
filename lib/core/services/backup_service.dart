@@ -190,6 +190,28 @@ class BackupImportResult {
   });
 }
 
+class BackupDataEstimate {
+  final int totalBytes;
+  final int totalFiles;
+  final int novelCount;
+  final int chapterFilesCount;
+  final int audioFilesCount;
+  final int translationFilesCount;
+  final int partCount;
+  final String formattedSize;
+
+  const BackupDataEstimate({
+    required this.totalBytes,
+    required this.totalFiles,
+    required this.novelCount,
+    this.chapterFilesCount = 0,
+    this.audioFilesCount = 0,
+    this.translationFilesCount = 0,
+    required this.partCount,
+    required this.formattedSize,
+  });
+}
+
 class BackupService {
   final StorageService _storageService;
 
@@ -198,6 +220,135 @@ class BackupService {
 
   BackupService({StorageService? storageService})
       : _storageService = storageService ?? StorageService();
+
+  /// Estimates the current offline data size and the number of 1.5 GB parts that will be produced.
+  Future<BackupDataEstimate> estimateBackup({
+    int maxBatchSizeBytes = defaultBatchSizeBytes,
+  }) async {
+    try {
+      await _storageService.init();
+      final novels = await _storageService.getDownloadedNovels();
+      if (novels.isEmpty) {
+        return const BackupDataEstimate(
+          totalBytes: 0,
+          totalFiles: 0,
+          novelCount: 0,
+          partCount: 0,
+          formattedSize: '0 B',
+        );
+      }
+
+      int grandTotalFiles = 0;
+      int grandTotalBytes = 0;
+      int totalChapters = 0;
+      int totalAudios = 0;
+      int totalTrans = 0;
+
+      final novelByteMap = <String, int>{};
+
+      for (final novel in novels) {
+        final downloadedChapterIds = _storageService.getDownloadedChapterIds(novel.id);
+        int novelBytes = 0;
+
+        // 1. Text chapters
+        for (final chId in downloadedChapterIds) {
+          final safeName = chId.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+          final chFile = File('${_storageService.chaptersDirectoryPath}/$safeName.json');
+          if (chFile.existsSync()) {
+            final len = chFile.lengthSync();
+            novelBytes += len;
+            grandTotalFiles++;
+            totalChapters++;
+          }
+        }
+
+        // 2. Audiobooks
+        final novelAudioDir = _storageService.getNovelAudiobookDirectory(novel.id);
+        if (novelAudioDir.existsSync()) {
+          final audioEntities = novelAudioDir.listSync().whereType<File>();
+          for (final f in audioEntities) {
+            if (f.path.endsWith('.mp3')) {
+              novelBytes += f.lengthSync();
+              grandTotalFiles++;
+              totalAudios++;
+            }
+          }
+        }
+
+        // 3. Translations
+        final novelTransDir = Directory('${_storageService.translationsDirectoryPath}/${novel.id}');
+        if (novelTransDir.existsSync()) {
+          final transEntities = novelTransDir.listSync().whereType<File>();
+          for (final f in transEntities) {
+            if (f.path.endsWith('.json')) {
+              novelBytes += f.lengthSync();
+              grandTotalFiles++;
+              totalTrans++;
+            }
+          }
+        }
+
+        // 4. Imported novel folder if EPUB / full book
+        final importedNovelDir = Directory('${_storageService.appDirectoryPath}/imported_novels/${novel.id}');
+        if (importedNovelDir.existsSync()) {
+          final importedFiles = importedNovelDir.listSync(recursive: true).whereType<File>();
+          for (final f in importedFiles) {
+            novelBytes += f.lengthSync();
+            grandTotalFiles++;
+          }
+        }
+
+        novelByteMap[novel.id] = novelBytes;
+        grandTotalBytes += novelBytes;
+      }
+
+      int partCount = 0;
+      if (grandTotalBytes > 0) {
+        int batches = 1;
+        int currentBatchBytes = 0;
+        for (final novel in novels) {
+          final nBytes = novelByteMap[novel.id] ?? 0;
+          if (currentBatchBytes + nBytes > maxBatchSizeBytes && currentBatchBytes > 0) {
+            batches++;
+            currentBatchBytes = nBytes;
+          } else {
+            currentBatchBytes += nBytes;
+          }
+        }
+        partCount = batches;
+      }
+
+      String formatted;
+      if (grandTotalBytes < 1024) {
+        formatted = '$grandTotalBytes B';
+      } else if (grandTotalBytes < 1024 * 1024) {
+        formatted = '${(grandTotalBytes / 1024).toStringAsFixed(1)} KB';
+      } else if (grandTotalBytes < 1024 * 1024 * 1024) {
+        formatted = '${(grandTotalBytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+      } else {
+        formatted = '${(grandTotalBytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+      }
+
+      return BackupDataEstimate(
+        totalBytes: grandTotalBytes,
+        totalFiles: grandTotalFiles,
+        novelCount: novels.length,
+        chapterFilesCount: totalChapters,
+        audioFilesCount: totalAudios,
+        translationFilesCount: totalTrans,
+        partCount: partCount,
+        formattedSize: formatted,
+      );
+    } catch (_) {
+      return const BackupDataEstimate(
+        totalBytes: 0,
+        totalFiles: 0,
+        novelCount: 0,
+        partCount: 0,
+        formattedSize: '0 B',
+      );
+    }
+  }
 
   /// Gets the directory where export files are saved.
   Future<Directory> getBackupDirectory() async {

@@ -86,8 +86,9 @@ class StorageService {
   }
 
   Future<void> removeNovelFromLibrary(String novelId) async {
+    final safeNovelId = _safeId(novelId);
     final list = getLibraryNovels();
-    list.removeWhere((n) => n.id == novelId);
+    list.removeWhere((n) => n.id == novelId || _safeId(n.id) == safeNovelId || (novelId.isNotEmpty && n.id.contains(novelId)));
     final rawList = list.map((n) => jsonEncode(n.toJson())).toList();
     await _safePrefs.setStringList(_libraryKey, rawList);
     try {
@@ -466,6 +467,10 @@ class StorageService {
         await deleteDownloadedChapter(chId);
       } catch (_) {}
     }
+    await _safePrefs.remove('downloaded_chapters_${novel.id}');
+    if (safeNovelId != novel.id) {
+      await _safePrefs.remove('downloaded_chapters_$safeNovelId');
+    }
 
     // 3. Delete any chapter files in chapters/ directory tagged with this novelId
     final chaptersDir = Directory('${_safeAppDir.path}/chapters');
@@ -698,10 +703,15 @@ class StorageService {
 
   Future<void> removeDownloadedNovel(String novelId) async {
     await init();
-    final list = _getDownloadedNovelsList()..removeWhere((n) => n.id == novelId);
+    final safeNovelId = _safeId(novelId);
+    final list = _getDownloadedNovelsList()
+      ..removeWhere((n) => n.id == novelId || _safeId(n.id) == safeNovelId || (novelId.isNotEmpty && n.id.contains(novelId)));
     final rawList = list.map((n) => jsonEncode(n.toJson())).toList();
     await _safePrefs.setStringList(_downloadedNovelsKey, rawList);
     await _safePrefs.remove('downloaded_chapters_$novelId');
+    if (safeNovelId != novelId) {
+      await _safePrefs.remove('downloaded_chapters_$safeNovelId');
+    }
   }
 
   // --- Audiobook Storage & Indexing ---

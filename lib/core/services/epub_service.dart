@@ -404,28 +404,84 @@ class EpubService {
         );
       }
     } else {
-      // Scanned document fallback without OCR text layer
-      final chapterFile = File('${chaptersDir.path}/chapter_1.xhtml');
-      final sb = StringBuffer();
-      sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
-      sb.writeln('<!DOCTYPE html>');
-      sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
-      sb.writeln('<head><title>Document Overview</title></head>');
-      sb.writeln('<body>');
-      sb.writeln('<h2>Document Overview</h2>');
-      sb.writeln('<p>This digital book was successfully imported. The document contains scanned graphical pages.</p>');
-      sb.writeln('</body></html>');
-      await chapterFile.writeAsString(sb.toString());
+      // Scanned document: extract image pages
+      final imagePages = PdfBookParser.extractAllImages(pdfBytes);
+      if (imagePages.isNotEmpty) {
+        const pagesPerChapter = 5;
+        final totalChapters = (imagePages.length / pagesPerChapter).ceil();
+        for (int c = 0; c < totalChapters; c++) {
+          final startIdx = c * pagesPerChapter;
+          final endIdx = (startIdx + pagesPerChapter > imagePages.length) ? imagePages.length : startIdx + pagesPerChapter;
+          final chapterIndex = c + 1;
+          final chapterTitle = 'Pages ${startIdx + 1}-$endIdx';
+          final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
 
-      chapters.add(
-        Chapter(
-          id: '${novelId}_ch_1',
-          novelId: novelId,
-          title: 'Document Overview',
-          url: chapterFile.uri.toString(),
-          chapterNumber: 1.0,
-        ),
-      );
+          final sb = StringBuffer();
+          sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+          sb.writeln('<!DOCTYPE html>');
+          sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+          sb.writeln('<head><title>$chapterTitle</title></head>');
+          sb.writeln('<body>');
+          sb.writeln('<h2>$chapterTitle</h2>');
+
+          for (int imgIdx = startIdx; imgIdx < endIdx; imgIdx++) {
+            final imgFile = File('${bookDir.path}/page_${imgIdx + 1}.jpg');
+            if (!await imgFile.exists()) {
+              await imgFile.writeAsBytes(imagePages[imgIdx]);
+            }
+            sb.writeln('<p>[IMAGE:file://${imgFile.path}]</p>');
+          }
+
+          sb.writeln('</body></html>');
+          await chapterFile.writeAsString(sb.toString());
+
+          chapters.add(
+            Chapter(
+              id: '${novelId}_ch_$chapterIndex',
+              novelId: novelId,
+              title: chapterTitle,
+              url: chapterFile.uri.toString(),
+              chapterNumber: chapterIndex.toDouble(),
+            ),
+          );
+        }
+      } else {
+        // Fallback with authentic localized metadata
+        final isOdia = (originalNovel?.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or') == true) ||
+            (originalNovel?.id.startsWith('or_') == true || originalNovel?.id.startsWith('odiabibhaba') == true);
+        final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
+            (originalNovel?.id.startsWith('hindisamay') == true ||
+                originalNovel?.id.startsWith('gadyakosh') == true ||
+                originalNovel?.id.startsWith('kavitakosh') == true ||
+                originalNovel?.id.startsWith('epustakalay') == true);
+
+        final title = isOdia ? 'ସମ୍ପୂର୍ଣ୍ଣ ଗ୍ରନ୍ଥ ବିବରଣୀ' : (isHindi ? 'सम्पूर्ण ग्रन्थ विवरण' : 'Document Overview');
+        final chapterFile = File('${chaptersDir.path}/chapter_1.xhtml');
+        final sb = StringBuffer();
+        sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+        sb.writeln('<!DOCTYPE html>');
+        sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+        sb.writeln('<head><title>$title</title></head>');
+        sb.writeln('<body>');
+        sb.writeln('<h2>$title</h2>');
+        if (originalNovel?.title != null) sb.writeln('<p>${_escapeHtml(originalNovel!.title)}</p>');
+        if (originalNovel?.author != null) {
+          sb.writeln('<p>${isOdia ? "ରଚୟିତା: " : (isHindi ? "लेखक: " : "Author: ")}${_escapeHtml(originalNovel!.author)}</p>');
+        }
+        if (originalNovel?.description != null) sb.writeln('<p>${_escapeHtml(originalNovel!.description)}</p>');
+        sb.writeln('</body></html>');
+        await chapterFile.writeAsString(sb.toString());
+
+        chapters.add(
+          Chapter(
+            id: '${novelId}_ch_1',
+            novelId: novelId,
+            title: title,
+            url: chapterFile.uri.toString(),
+            chapterNumber: 1.0,
+          ),
+        );
+      }
     }
 
     // Cover image extraction
@@ -800,9 +856,30 @@ class EpubService {
 
       if (!isPdf && !isZip) {
         try {
-          final previewBytes = await tempTmpFile.openRead(0, 300).first;
-          final previewStr = String.fromCharCodes(previewBytes).toLowerCase();
-          if (previewStr.contains('<!doctype') || previewStr.contains('<html') || previewStr.contains('just a moment')) {
+          final previewBytes = await tempTmpFile.openRead(0, 4096).first;
+          final previewStr = String.fromCharCodes(previewBytes);
+
+          // Check if server returned a meta-refresh redirection page (e.g. Standard Ebooks landing page)
+          final metaRefresh = RegExp(r'<meta[^>]+http-equiv=["\x27]?refresh["\x27]?[^>]+url=([^"\x27\s>]+)', caseSensitive: false).firstMatch(previewStr);
+          if (metaRefresh != null) {
+            var refreshTarget = metaRefresh.group(1)!.trim();
+            if (refreshTarget.startsWith('/')) {
+              final u = Uri.parse(url);
+              refreshTarget = '${u.scheme}://${u.host}$refreshTarget';
+            }
+            if (refreshTarget != url) {
+              await tempTmpFile.delete();
+              return importEpubFromUrl(
+                refreshTarget,
+                headers: headers,
+                originalNovel: originalNovel,
+                onProgress: onProgress,
+              );
+            }
+          }
+
+          final previewLower = previewStr.toLowerCase();
+          if (previewLower.contains('<!doctype') || previewLower.contains('<html') || previewLower.contains('just a moment')) {
             throw const FormatException(
               'The source returned an HTML verification or protection page instead of a book file. '
               'Please open in the In-App Browser to solve the challenge or verify session.',
@@ -964,6 +1041,55 @@ class PdfBookParser {
       }
     }
     return null;
+  }
+
+  static List<List<int>> extractAllImages(List<int> bytes, {int maxImages = 500}) {
+    final images = <List<int>>[];
+    int searchIdx = 0;
+    final streamMarker = [115, 116, 114, 101, 97, 109];
+    final endStreamMarker = [101, 110, 100, 115, 116, 114, 101, 97, 109];
+
+    while (searchIdx < bytes.length && images.length < maxImages) {
+      final streamPos = _indexOf(bytes, streamMarker, searchIdx);
+      if (streamPos == -1) break;
+
+      int lookBackStart = streamPos > 300 ? streamPos - 300 : 0;
+      final headerStr = String.fromCharCodes(bytes.sublist(lookBackStart, streamPos));
+      final isJpeg = headerStr.contains('/DCTDecode') ||
+          (headerStr.contains('/Subtype') && headerStr.contains('/Image'));
+      final isJpx = headerStr.contains('/JPXDecode');
+
+      int dataStart = streamPos + streamMarker.length;
+      if (dataStart < bytes.length && bytes[dataStart] == 13) dataStart++;
+      if (dataStart < bytes.length && bytes[dataStart] == 10) dataStart++;
+
+      final endPos = _indexOf(bytes, endStreamMarker, dataStart);
+      if (endPos == -1) break;
+
+      int dataEnd = endPos;
+      if (dataEnd > dataStart && bytes[dataEnd - 1] == 10) dataEnd--;
+      if (dataEnd > dataStart && bytes[dataEnd - 1] == 13) dataEnd--;
+
+      final streamData = bytes.sublist(dataStart, dataEnd);
+      searchIdx = endPos + endStreamMarker.length;
+
+      if ((isJpeg || isJpx) && streamData.length > 5000) {
+        if (streamData.length > 3 &&
+            streamData[0] == 0xFF &&
+            streamData[1] == 0xD8 &&
+            streamData[2] == 0xFF) {
+          images.add(streamData);
+        } else if (isJpx &&
+            streamData.length > 8 &&
+            streamData[0] == 0x00 &&
+            streamData[1] == 0x00 &&
+            streamData[2] == 0x00 &&
+            streamData[3] == 0x0C) {
+          images.add(streamData);
+        }
+      }
+    }
+    return images;
   }
 
   static String _extractTextFromDecompressed(List<int> decompressed) {

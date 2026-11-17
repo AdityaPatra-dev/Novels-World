@@ -278,7 +278,7 @@ class DownloadService extends ChangeNotifier {
           final extractor = SourceRegistry.getSource('libgen');
           if (extractor != null) {
             final detailed = await extractor.getNovelDetails(novel.sourceUrl);
-            if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty) {
+            if (detailed.bookDownloadUrl != null && detailed.bookDownloadUrl!.isNotEmpty && detailed.bookDownloadUrl!.contains('key=')) {
               effectiveUrl = detailed.bookDownloadUrl!;
               targetNovel = detailed;
             }
@@ -291,6 +291,12 @@ class DownloadService extends ChangeNotifier {
         throw StateError(
           'This book is in ${targetNovel.bookFormat!.toUpperCase()} format. '
           'Novels-World supports EPUB and PDF digital editions. Please choose an EPUB or PDF edition of this title.',
+        );
+      }
+      if (!effectiveUrl.contains('key=')) {
+        throw StateError(
+          'Library Genesis download key could not be obtained from active mirrors. '
+          'Please tap "Open Browser" to download or read online.',
         );
       }
     } else if (novel.sourceId == 'vdocpub') {

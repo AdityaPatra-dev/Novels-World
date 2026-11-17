@@ -20,6 +20,7 @@ import '../../core/utils/text_cleaner.dart';
 import '../../core/utils/chapter_range_parser.dart';
 import '../../core/utils/http_client_factory.dart';
 import '../../core/services/epub_service.dart';
+import '../../extractors/bespoke/local_epub_extractor.dart';
 import '../audiobook/audiobook_player_screen.dart';
 
 class NovelDetailScreen extends StatefulWidget {
@@ -607,11 +608,36 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         unawaited(storage.cacheNovelDetails(_novel));
       }
 
+      if (!mounted) return;
+      final downloadService = context.read<DownloadService>();
+      final isDownloadedBook = !kIsWeb && (_novel.isFullBook || _novel.sourceId == 'local_epub') && downloadService.isBookDownloaded(_novel.id);
+      if (isDownloadedBook) {
+        final localDir = Directory('${storage.appStorageDirectory.path}/imported_novels/${_novel.id}');
+        if (localDir.existsSync()) {
+          final localExtractor = SourceRegistry.getSource('local_epub') ?? LocalEpubExtractor();
+          final localChapters = await localExtractor.getChapterList(localDir.uri.toString());
+          if (localChapters.isNotEmpty && mounted) {
+            setState(() {
+              _chapters = localChapters;
+              _isLoading = false;
+              _isStreamingChapters = false;
+            });
+            _loadReadingProgress();
+            context.read<DownloadService>().checkChaptersDownloaded(localChapters);
+            unawaited(storage.cacheChapterList(_novel.id, localChapters));
+            return;
+          }
+        }
+      }
+
       // Fetch chapter list with streaming batch callbacks
       final chapters = await source.getChapterList(
         _novel.sourceUrl,
         onBatchLoaded: (batch) {
           if (!mounted) return;
+          if (_novel.isFullBook && _chapters.length > 1 && batch.length <= 1) {
+            return;
+          }
           if (batch.length > _chapters.length || _chapters.isEmpty) {
             setState(() {
               _chapters = batch;
@@ -624,14 +650,22 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       );
 
       if (mounted) {
-        setState(() {
-          _chapters = chapters;
-          _isLoading = false;
-          _isStreamingChapters = false;
-        });
-        _loadReadingProgress();
-        context.read<DownloadService>().checkChaptersDownloaded(chapters);
-        unawaited(storage.cacheChapterList(_novel.id, chapters));
+        if (_novel.isFullBook && _chapters.length > 1 && chapters.length <= 1) {
+          // Preserve already unpacked multi-chapter book
+          setState(() {
+            _isLoading = false;
+            _isStreamingChapters = false;
+          });
+        } else {
+          setState(() {
+            _chapters = chapters;
+            _isLoading = false;
+            _isStreamingChapters = false;
+          });
+          _loadReadingProgress();
+          context.read<DownloadService>().checkChaptersDownloaded(chapters);
+          unawaited(storage.cacheChapterList(_novel.id, chapters));
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -651,6 +685,16 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
   }
 
   void _openReader(Chapter chapter) async {
+    final downloadService = context.read<DownloadService>();
+    final isDownloaded = !kIsWeb && downloadService.isBookDownloaded(_novel.id);
+    if ((_novel.isFullBook || _novel.sourceId == 'local_epub') &&
+        !isDownloaded &&
+        _chapters.length <= 1 &&
+        !chapter.url.contains('/text/')) {
+      await _downloadFullBook();
+      return;
+    }
+
     final readerProvider = context.read<ReaderProvider>();
     await readerProvider.initializeNovelReader(
       novel: _novel,
@@ -1963,7 +2007,24 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             allChapters: _chapters,
                           );
                         } else {
-                          _openReader(chapter);
+                          if (isFullBook &&
+                              _novel.bookFormat == 'pdf' &&
+                              !isBookDownloaded &&
+                              _novel.sourceUrl.isNotEmpty &&
+                              !kIsWeb) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => SourceWebViewScreen(
+                                  initialUrl: _novel.sourceUrl,
+                                  sourceName: _novel.title,
+                                  targetNovel: _novel,
+                                ),
+                              ),
+                            );
+                          } else {
+                            _openReader(chapter);
+                          }
                         }
                       },
                     ),

@@ -16,7 +16,7 @@ void main() {
       expect(detected, equals('or'));
 
       final deva = OdiaTransliteration.toDevanagari(odiaText);
-      expect(deva, contains('उपन्य़ास'));
+      expect(deva, contains('उपन्यास'));
       expect(deva, contains('स्वागत'));
       print('Transliterated Devanagari: $deva');
     });

@@ -572,8 +572,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
               ),
             ),
           );
-          continue;
         }
+        continue;
       }
 
       final isHighlighted = reader.isTtsPlaying && reader.activeSentenceIndex == i;

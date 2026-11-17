@@ -72,6 +72,11 @@ class LocalEpubExtractor implements NovelSource {
       return Novel.fromJson(novelJson);
     }
 
+    final docPdf = File('$path/document.pdf');
+    if (await docPdf.exists()) {
+      return _epubService.importPdf(docPdf, targetDir: Directory(path).parent);
+    }
+
     throw HttpException('Could not find local EPUB metadata at $path');
   }
 
@@ -84,13 +89,54 @@ class LocalEpubExtractor implements NovelSource {
     final rawPath = uri.scheme == 'file' ? uri.toFilePath() : novelUrl;
     final path = rawPath.endsWith('/') ? rawPath.substring(0, rawPath.length - 1) : rawPath;
 
+    final docPdf = File('$path/document.pdf');
     final metaFile = File('$path/metadata.json');
+
+    if (!await metaFile.exists() && await docPdf.exists()) {
+      try {
+        await _epubService.importPdf(docPdf, targetDir: Directory(path).parent);
+      } catch (_) {}
+    }
+
     if (await metaFile.exists()) {
       final json = jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
       final rawChapters = json['chapters'] as List;
-      final chs = rawChapters
+      var chs = rawChapters
           .map((c) => Chapter.fromJson(c as Map<String, dynamic>))
           .toList();
+
+      // Auto-heal previously stubbed or image-only scanned PDFs: re-import with OCR
+      if (await docPdf.exists()) {
+        final chaptersDir = Directory('$path/chapters');
+        bool hasOnlyImageChapters = chs.length <= 1;
+        if (!hasOnlyImageChapters && await chaptersDir.exists()) {
+          final firstChFile = File('${chaptersDir.path}/chapter_1.xhtml');
+          if (await firstChFile.exists()) {
+            final content = await firstChFile.readAsString();
+            if (content.contains('[IMAGE:') && content.contains('/pages/page_')) {
+              hasOnlyImageChapters = true;
+            }
+          }
+        }
+
+        if (hasOnlyImageChapters) {
+          try {
+            Novel? orig;
+            if (json['novel'] != null) {
+              orig = Novel.fromJson(json['novel'] as Map<String, dynamic>);
+            }
+            await _epubService.importPdf(docPdf, targetDir: Directory(path).parent, originalNovel: orig);
+            if (await metaFile.exists()) {
+              final updatedJson = jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+              final updatedRawChapters = updatedJson['chapters'] as List;
+              chs = updatedRawChapters
+                  .map((c) => Chapter.fromJson(c as Map<String, dynamic>))
+                  .toList();
+            }
+          } catch (_) {}
+        }
+      }
+
       if (chs.isNotEmpty) {
         onBatchLoaded?.call(chs);
       }

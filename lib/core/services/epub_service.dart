@@ -13,6 +13,7 @@ import '../models/chapter.dart';
 import '../models/chapter_content.dart';
 import '../utils/text_cleaner.dart';
 import 'webview_session_manager.dart';
+import 'pdf_page_renderer.dart';
 
 /// Service responsible for parsing, extracting, and importing local EPUB and PDF files
 /// into the Novels-World offline library.
@@ -358,17 +359,41 @@ class EpubService {
     }
 
     // Extract text from PDF content streams
-    final pages = PdfBookParser.extractPages(pdfBytes);
+    final rawPages = PdfBookParser.extractPages(pdfBytes);
+    final meaningfulPages = <String>[];
+    for (final page in rawPages) {
+      final filteredLines = page.split('\n').where((line) {
+        final t = line.trim().toLowerCase();
+        if (t.isEmpty) return false;
+        if (t.contains('digitized by') ||
+            t.contains('scanned by') ||
+            t.contains('pprachin') ||
+            t.contains('archive.org')) {
+          return false;
+        }
+        return true;
+      }).toList();
+      final filteredText = filteredLines.join('\n').trim();
+      if (filteredText.isNotEmpty) {
+        meaningfulPages.add(filteredText);
+      }
+    }
+
+    final totalTextChars = meaningfulPages.fold<int>(0, (sum, p) => sum + p.length);
+    final hasSufficientText = (meaningfulPages.length >= 2 && totalTextChars > 200) || totalTextChars > 500;
 
     // Group extracted pages into reader chapters (5 pages per chapter)
     final chapters = <Chapter>[];
-    if (pages.isNotEmpty) {
+    String coverUrl = originalNovel?.coverUrl ?? '';
+    List<String> renderedImagePaths = [];
+
+    if (hasSufficientText) {
       const pagesPerChapter = 5;
-      final totalChapters = (pages.length / pagesPerChapter).ceil();
+      final totalChapters = (meaningfulPages.length / pagesPerChapter).ceil();
       for (int c = 0; c < totalChapters; c++) {
         final startPage = c * pagesPerChapter;
-        final endPage = (startPage + pagesPerChapter > pages.length) ? pages.length : startPage + pagesPerChapter;
-        final chapterPages = pages.sublist(startPage, endPage);
+        final endPage = (startPage + pagesPerChapter > meaningfulPages.length) ? meaningfulPages.length : startPage + pagesPerChapter;
+        final chapterPages = meaningfulPages.sublist(startPage, endPage);
         final chapterIndex = c + 1;
         final chapterTitle = 'Chapter $chapterIndex (Pages ${startPage + 1}-$endPage)';
         final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
@@ -404,16 +429,34 @@ class EpubService {
         );
       }
     } else {
-      // Scanned document: extract image pages
-      final imagePages = PdfBookParser.extractAllImages(pdfBytes);
-      if (imagePages.isNotEmpty) {
+      // Scanned document or image-based PDF: extract text via on-device OCR
+      final pagesDir = Directory('${bookDir.path}/pages');
+      final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
+          (originalNovel?.id.startsWith('hindisamay') == true ||
+              originalNovel?.id.startsWith('gadyakosh') == true ||
+              originalNovel?.id.startsWith('kavitakosh') == true ||
+              originalNovel?.id.startsWith('epustakalay') == true);
+      final ocrScript = isHindi ? 'devanagari' : 'latin';
+
+      List<PdfOcrPage> ocrPages = [];
+      try {
+        ocrPages = await PdfPageRenderer.extractPagesWithOcr(
+          docCopy.path,
+          pagesDir.path,
+          script: ocrScript,
+        );
+      } catch (e) {
+        debugPrint('[EpubService] Native OCR extraction failed: $e');
+      }
+
+      if (ocrPages.isNotEmpty) {
         const pagesPerChapter = 5;
-        final totalChapters = (imagePages.length / pagesPerChapter).ceil();
+        final totalChapters = (ocrPages.length / pagesPerChapter).ceil();
         for (int c = 0; c < totalChapters; c++) {
           final startIdx = c * pagesPerChapter;
-          final endIdx = (startIdx + pagesPerChapter > imagePages.length) ? imagePages.length : startIdx + pagesPerChapter;
+          final endIdx = (startIdx + pagesPerChapter > ocrPages.length) ? ocrPages.length : startIdx + pagesPerChapter;
           final chapterIndex = c + 1;
-          final chapterTitle = 'Pages ${startIdx + 1}-$endIdx';
+          final chapterTitle = 'Chapter $chapterIndex (Pages ${startIdx + 1}-$endIdx)';
           final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
 
           final sb = StringBuffer();
@@ -424,12 +467,19 @@ class EpubService {
           sb.writeln('<body>');
           sb.writeln('<h2>$chapterTitle</h2>');
 
-          for (int imgIdx = startIdx; imgIdx < endIdx; imgIdx++) {
-            final imgFile = File('${bookDir.path}/page_${imgIdx + 1}.jpg');
-            if (!await imgFile.exists()) {
-              await imgFile.writeAsBytes(imagePages[imgIdx]);
+          for (int pageIdx = startIdx; pageIdx < endIdx; pageIdx++) {
+            final page = ocrPages[pageIdx];
+            final cleanText = _filterWatermarks(page.text);
+            final lines = cleanText.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+
+            if (lines.isNotEmpty) {
+              for (final line in lines) {
+                sb.writeln('<p>${_escapeHtml(line)}</p>');
+              }
+            } else if (page.imagePath != null && File(page.imagePath!).existsSync()) {
+              sb.writeln('<p>[IMAGE:file://${page.imagePath}]</p>');
             }
-            sb.writeln('<p>[IMAGE:file://${imgFile.path}]</p>');
+            sb.writeln('<hr/>');
           }
 
           sb.writeln('</body></html>');
@@ -445,53 +495,122 @@ class EpubService {
             ),
           );
         }
-      } else {
-        // Fallback with authentic localized metadata
-        final isOdia = (originalNovel?.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or') == true) ||
-            (originalNovel?.id.startsWith('or_') == true || originalNovel?.id.startsWith('odiabibhaba') == true);
-        final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
-            (originalNovel?.id.startsWith('hindisamay') == true ||
-                originalNovel?.id.startsWith('gadyakosh') == true ||
-                originalNovel?.id.startsWith('kavitakosh') == true ||
-                originalNovel?.id.startsWith('epustakalay') == true);
 
-        final title = isOdia ? 'ସମ୍ପୂର୍ଣ୍ଣ ଗ୍ରନ୍ଥ ବିବରଣୀ' : (isHindi ? 'सम्पूर्ण ग्रन्थ विवरण' : 'Document Overview');
-        final chapterFile = File('${chaptersDir.path}/chapter_1.xhtml');
-        final sb = StringBuffer();
-        sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
-        sb.writeln('<!DOCTYPE html>');
-        sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
-        sb.writeln('<head><title>$title</title></head>');
-        sb.writeln('<body>');
-        sb.writeln('<h2>$title</h2>');
-        if (originalNovel?.title != null) sb.writeln('<p>${_escapeHtml(originalNovel!.title)}</p>');
-        if (originalNovel?.author != null) {
-          sb.writeln('<p>${isOdia ? "ରଚୟିତା: " : (isHindi ? "लेखक: " : "Author: ")}${_escapeHtml(originalNovel!.author)}</p>');
+        // Cover from first OCR page image if available
+        if (coverUrl.isEmpty && ocrPages.first.imagePath != null) {
+          final firstImg = File(ocrPages.first.imagePath!);
+          if (await firstImg.exists()) {
+            final coverFile = File('${bookDir.path}/cover.jpg');
+            try {
+              await firstImg.copy(coverFile.path);
+              coverUrl = coverFile.uri.toString();
+            } catch (_) {
+              coverUrl = firstImg.uri.toString();
+            }
+          }
         }
-        if (originalNovel?.description != null) sb.writeln('<p>${_escapeHtml(originalNovel!.description)}</p>');
-        sb.writeln('</body></html>');
-        await chapterFile.writeAsString(sb.toString());
+      } else {
+        // Fallback: extract JPEG byte streams via PdfBookParser
+        final imagePages = PdfBookParser.extractAllImages(pdfBytes);
+        if (imagePages.isNotEmpty) {
+          const pagesPerChapter = 5;
+          final totalChapters = (imagePages.length / pagesPerChapter).ceil();
+          for (int c = 0; c < totalChapters; c++) {
+            final startIdx = c * pagesPerChapter;
+            final endIdx = (startIdx + pagesPerChapter > imagePages.length) ? imagePages.length : startIdx + pagesPerChapter;
+            final chapterIndex = c + 1;
+            final chapterTitle = 'Chapter $chapterIndex (Pages ${startIdx + 1}-$endIdx)';
+            final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
 
-        chapters.add(
-          Chapter(
-            id: '${novelId}_ch_1',
-            novelId: novelId,
-            title: title,
-            url: chapterFile.uri.toString(),
-            chapterNumber: 1.0,
-          ),
-        );
+            final sb = StringBuffer();
+            sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+            sb.writeln('<!DOCTYPE html>');
+            sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+            sb.writeln('<head><title>$chapterTitle</title></head>');
+            sb.writeln('<body>');
+            sb.writeln('<h2>$chapterTitle</h2>');
+
+            for (int imgIdx = startIdx; imgIdx < endIdx; imgIdx++) {
+              final imgFile = File('${bookDir.path}/page_${imgIdx + 1}.jpg');
+              if (!await imgFile.exists()) {
+                await imgFile.writeAsBytes(imagePages[imgIdx]);
+              }
+              sb.writeln('<p>[IMAGE:file://${imgFile.path}]</p>');
+            }
+
+            sb.writeln('</body></html>');
+            await chapterFile.writeAsString(sb.toString());
+
+            chapters.add(
+              Chapter(
+                id: '${novelId}_ch_$chapterIndex',
+                novelId: novelId,
+                title: chapterTitle,
+                url: chapterFile.uri.toString(),
+                chapterNumber: chapterIndex.toDouble(),
+              ),
+            );
+          }
+        } else {
+          // Fallback with authentic localized metadata
+          final isOdia = (originalNovel?.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or') == true) ||
+              (originalNovel?.id.startsWith('or_') == true || originalNovel?.id.startsWith('odiabibhaba') == true);
+          final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
+              (originalNovel?.id.startsWith('hindisamay') == true ||
+                  originalNovel?.id.startsWith('gadyakosh') == true ||
+                  originalNovel?.id.startsWith('kavitakosh') == true ||
+                  originalNovel?.id.startsWith('epustakalay') == true);
+
+          final title = isOdia ? 'ସମ୍ପୂର୍ଣ୍ଣ ଗ୍ରନ୍ଥ ବିବରଣୀ' : (isHindi ? 'सम्पूर्ण ग्रन्थ विवरण' : 'Document Overview');
+          final chapterFile = File('${chaptersDir.path}/chapter_1.xhtml');
+          final sb = StringBuffer();
+          sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+          sb.writeln('<!DOCTYPE html>');
+          sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+          sb.writeln('<head><title>$title</title></head>');
+          sb.writeln('<body>');
+          sb.writeln('<h2>$title</h2>');
+          if (originalNovel?.title != null) sb.writeln('<p>${_escapeHtml(originalNovel!.title)}</p>');
+          if (originalNovel?.author != null) {
+            sb.writeln('<p>${isOdia ? "ରଚୟିତା: " : (isHindi ? "लेखक: " : "Author: ")}${_escapeHtml(originalNovel!.author)}</p>');
+          }
+          if (originalNovel?.description != null) sb.writeln('<p>${_escapeHtml(originalNovel!.description)}</p>');
+          sb.writeln('</body></html>');
+          await chapterFile.writeAsString(sb.toString());
+
+          chapters.add(
+            Chapter(
+              id: '${novelId}_ch_1',
+              novelId: novelId,
+              title: title,
+              url: chapterFile.uri.toString(),
+              chapterNumber: 1.0,
+            ),
+          );
+        }
       }
     }
 
-    // Cover image extraction
-    String coverUrl = originalNovel?.coverUrl ?? '';
+    // Cover image extraction fallback
     if (coverUrl.isEmpty) {
-      final imgBytes = PdfBookParser.extractFirstImage(pdfBytes);
-      if (imgBytes != null && imgBytes.isNotEmpty) {
-        final coverFile = File('${bookDir.path}/cover.jpg');
-        await coverFile.writeAsBytes(imgBytes);
-        coverUrl = coverFile.uri.toString();
+      if (renderedImagePaths.isNotEmpty) {
+        final firstPage = File(renderedImagePaths.first);
+        if (await firstPage.exists()) {
+          final coverFile = File('${bookDir.path}/cover.jpg');
+          try {
+            await firstPage.copy(coverFile.path);
+            coverUrl = coverFile.uri.toString();
+          } catch (_) {
+            coverUrl = firstPage.uri.toString();
+          }
+        }
+      } else {
+        final imgBytes = PdfBookParser.extractFirstImage(pdfBytes);
+        if (imgBytes != null && imgBytes.isNotEmpty) {
+          final coverFile = File('${bookDir.path}/cover.jpg');
+          await coverFile.writeAsBytes(imgBytes);
+          coverUrl = coverFile.uri.toString();
+        }
       }
     }
 
@@ -534,6 +653,26 @@ class EpubService {
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
+  }
+
+  static String _filterWatermarks(String rawText) {
+    final lines = rawText.split('\n');
+    final validLines = <String>[];
+    for (final l in lines) {
+      final t = l.trim();
+      final lower = t.toLowerCase();
+      if (lower.isEmpty) continue;
+      if (lower.contains('digitized by') ||
+          lower.contains('scanned by') ||
+          lower.contains('srujanika@') ||
+          lower.contains('pprachin') ||
+          lower.contains('archive.org') ||
+          lower.contains('dli.ernet.in')) {
+        continue;
+      }
+      validLines.add(t);
+    }
+    return validLines.join('\n');
   }
 
   /// Reads and parses an XHTML chapter file into cleaned paragraphs.

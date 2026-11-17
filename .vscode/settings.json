@@ -1,31 +1,109 @@
 {
-  // Java & Gradle: Disable Java language server from treating Flutter android/ subproject as a pure Eclipse Java project
+  // =========================================================================
+  // Java & Gradle: Suppress Java LS, Gradle auto-build, and dual-server popups
+  // =========================================================================
+  // Red Hat Java (redhat.java)
+  "java.silentNotification": true,
   "java.import.gradle.enabled": false,
   "java.import.maven.enabled": false,
   "java.autobuild.enabled": false,
   "java.server.launchMode": "LightWeight",
   "java.completion.enabled": false,
   "java.errors.incompleteClasspath.severity": "ignore",
+  "java.configuration.checkProjectSettingsExclusions": false,
+  "java.project.importOnFirstTimeStartup": "never",
+  "java.help.showWhenCommandLineArgumentPrompt": false,
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.metadata/**",
+    "**/archetype/**",
+    "**/META-INF/maven/**",
+    "/**/test/**",
+    "**/android/**",
+    "**/.gradle/**"
+  ],
+
+  // Oracle Java (oracle.oracle-java)
+  "jdk.project.openInNBLS": "never",
+  "jdk.project.guessEnclosing": false,
+  "jdk.autobuild": false,
+  "jdk.telemetry.enabled": false,
+
+  // Gradle for Java (vscjava.vscode-gradle)
   "gradle.autoDetect": "off",
   "gradle.nestedProjects": false,
+  "gradle.showWelcome": false,
+  "gradle.disableDaemonWarning": true,
+  "gradle.allowExecution": false,
+  "gradle.daemon.statusCheck": false,
+  "gradle.javaDebug.cleanOutput": false,
 
-  // CMake Tools: Disable CMake automatic configure and prompts for linux/windows desktop folders
+  // Maven (vscjava.vscode-maven)
+  "maven.autoDetect": false,
+  "maven.showWelcome": false,
+
+  // =========================================================================
+  // CMake Tools: Suppress kit selection, configure prompts, and status popups
+  // =========================================================================
   "cmake.configureOnOpen": false,
   "cmake.autoSelectActiveFolder": false,
   "cmake.ignoreCMakeListsMissing": true,
   "cmake.showConfigureWithDebuggerNotification": false,
+  "cmake.enableAutomaticKitScan": false,
+  "cmake.showOptionsMovementNotification": false,
+  "cmake.options.statusBarVisibility": "hidden",
+  "cmake.pinnedCommands": [],
 
-  // C/C++: Disable intrusive error squiggles for native desktop runners
+  // =========================================================================
+  // C/C++: Disable intrusive error squiggles and compiler warnings for runners
+  // =========================================================================
   "C_Cpp.errorSquiggles": "disabled",
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.configurationWarnings": "disabled",
+  "C_Cpp.default.compilerPath": "",
 
-  // Dart & Flutter optimizations
+  // =========================================================================
+  // Python: Suppress interpreter selection popup for scripts in tool/
+  // =========================================================================
+  "python.disableInstallationCheck": true,
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingImports": "none"
+  },
+
+  // =========================================================================
+  // GitHub: Suppress context errors, workflow notifications, and sign-in prompts
+  // =========================================================================
+  "github-actions.remote-name": "origin",
+  "github-actions.workflows.pinned.workflows": [],
+  "githubPullRequests.showInStatusBar": false,
+  "githubPullRequests.queries": [],
+  "githubPullRequests.remotes": [],
+
+  // =========================================================================
+  // Dart & Flutter: Clean development experience without unprompted popups
+  // =========================================================================
   "dart.openDevTools": "never",
   "dart.warnWhenScanningOncePerWorkspace": false,
+  "dart.checkForSdkUpdates": false,
+  "dart.promptToGetPackages": false,
+  "dart.promptToRunIfOffline": false,
+  "dart.showDevToolsNotificationIfInstalled": false,
+  "dart.suppressTestStatusNotifications": true,
 
-  // File watcher excludes
+  // =========================================================================
+  // File Watcher & Search Excludes: Reduce CPU load, disk I/O, and noise
+  // =========================================================================
   "files.watcherExclude": {
     "**/.git/objects/**": true,
     "**/.git/subtree-cache/**": true,
+    "**/build/**": true,
+    "**/.dart_tool/**": true,
+    "**/.gradle/**": true,
+    "**/android/.gradle/**": true,
+    "**/linux/flutter/ephemeral/**": true,
+    "**/windows/flutter/ephemeral/**": true
+  },
+  "search.exclude": {
     "**/build/**": true,
     "**/.dart_tool/**": true,
     "**/.gradle/**": true

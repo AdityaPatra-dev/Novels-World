@@ -630,7 +630,14 @@ class RingBufferManager extends ChangeNotifier {
 
     String sample = sampleText ?? '';
     if (sample.isEmpty) {
-      final langCode = voice.contains('-') ? voice.split('-').first.toLowerCase() : currentLanguage;
+      String langCode = currentLanguage;
+      if (voice.startsWith('system_')) {
+        langCode = voice.replaceFirst('system_', '').toLowerCase();
+      } else if (voice.contains('Subhasini') || voice.contains('Sukant') || voice.startsWith('or-') || voice.startsWith('or_')) {
+        langCode = 'or';
+      } else if (voice.contains('-')) {
+        langCode = voice.split('-').first.toLowerCase();
+      }
       final langConfig = LanguageVoiceRegistry.getByCode(langCode);
       if (langCode != 'en' && langConfig.samplePhrase.isNotEmpty) {
         sample = langConfig.samplePhrase;
@@ -647,9 +654,16 @@ class RingBufferManager extends ChangeNotifier {
       }
     }
 
-    await _activeEngine.speakSentenceDirect(
+    final isSystemVoice = voice.startsWith('system_') || voice == 'default';
+    final targetEngine = isSystemVoice
+        ? (_engines[TtsModelRegistry.systemId] ?? _activeEngine)
+        : (_engines[TtsModelRegistry.edgeNeuralId] ?? _activeEngine);
+
+    final cleanVoice = voice.split(' ').first.trim();
+
+    await targetEngine.speakSentenceDirect(
       sample,
-      voice: voice,
+      voice: cleanVoice,
       speed: _speed,
       pitch: _pitch,
       onDone: () {},

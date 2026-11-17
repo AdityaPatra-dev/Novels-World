@@ -274,24 +274,11 @@ class ReaderProvider extends ChangeNotifier {
         final langInfo = LanguageVoiceRegistry.getByCode(_targetLanguageCode!);
         await translateCurrentChapter(langInfo);
       } else {
-        final sampleText = _sentences.take(5).join(' ');
-        final detectedLang = OdiaTransliteration.detectScript(sampleText) ??
-            (SourceRegistry.getSource(_novel!.sourceId)?.lang) ??
-            'en';
-
-        ttsManager.loadSentences(
-          _sentences,
-          startIndex: _activeSentenceIndex,
-          novelId: _novel!.id,
-          chapterId: chapter.id,
-          lang: detectedLang,
-          novel: _novel,
-          chapterTitle: chapter.title,
-          trackNumber: _currentChapterIndex + 1,
-        );
+        final detectedLang = _resolveLanguageForChapter(_sentences);
 
         if (detectedLang != 'en') {
           final langInfo = LanguageVoiceRegistry.getByCode(detectedLang);
+          ttsManager.currentLanguage = detectedLang;
           final currentVoice = ttsManager.activeVoice;
           final isCurrentEnglishVoice = currentVoice.startsWith('en-') ||
               currentVoice.startsWith('en_') ||
@@ -307,6 +294,17 @@ class ReaderProvider extends ChangeNotifier {
             ttsManager.setVoice(langInfo.defaultFemaleVoice);
           }
         }
+
+        ttsManager.loadSentences(
+          _sentences,
+          startIndex: _activeSentenceIndex,
+          novelId: _novel!.id,
+          chapterId: chapter.id,
+          lang: detectedLang,
+          novel: _novel,
+          chapterTitle: chapter.title,
+          trackNumber: _currentChapterIndex + 1,
+        );
       }
 
       _isLoading = false;
@@ -400,11 +398,25 @@ class ReaderProvider extends ChangeNotifier {
         _activeSentenceIndex = 0;
         _preloadedNextContent = null;
         _preloadedNextSentences = [];
-        final sampleText = _sentences.take(5).join(' ');
-        final detectedLang = _targetLanguageCode ??
-            OdiaTransliteration.detectScript(sampleText) ??
-            (SourceRegistry.getSource(_novel!.sourceId)?.lang) ??
-            'en';
+        final detectedLang = _resolveLanguageForChapter(_sentences);
+        if (detectedLang != 'en') {
+          final langInfo = LanguageVoiceRegistry.getByCode(detectedLang);
+          ttsManager.currentLanguage = detectedLang;
+          final currentVoice = ttsManager.activeVoice;
+          final isCurrentEnglishVoice = currentVoice.startsWith('en-') ||
+              currentVoice.startsWith('en_') ||
+              currentVoice.contains('Christopher') ||
+              currentVoice.contains('Jenny') ||
+              currentVoice.contains('Guy') ||
+              currentVoice.contains('Aria') ||
+              currentVoice.contains('Sonia') ||
+              currentVoice.contains('Ryan') ||
+              currentVoice.contains('Brian') ||
+              currentVoice.contains('Ava');
+          if (isCurrentEnglishVoice && langInfo.defaultFemaleVoice.isNotEmpty) {
+            ttsManager.setVoice(langInfo.defaultFemaleVoice);
+          }
+        }
         ttsManager.loadSentences(
           _sentences,
           startIndex: 0,
@@ -507,6 +519,55 @@ class ReaderProvider extends ChangeNotifier {
         ttsManager.playFrom(_activeSentenceIndex);
       }
     }
+  }
+
+  String _resolveLanguageForChapter(List<String> sentences) {
+    if (_targetLanguageCode != null) return _targetLanguageCode!;
+
+    // 1. Check first 10 sentences
+    final sampleText = sentences.take(10).join(' ');
+    String? detected = OdiaTransliteration.detectScript(sampleText);
+
+    // 2. Scan all sentences if sampleText didn't detect Indic script
+    if (detected == null) {
+      for (final s in sentences) {
+        final d = OdiaTransliteration.detectScript(s);
+        if (d != null) {
+          detected = d;
+          break;
+        }
+      }
+    }
+
+    // 3. Fallback to novel title and description
+    detected ??= OdiaTransliteration.detectScript(_novel?.title ?? '') ??
+        OdiaTransliteration.detectScript(_novel?.description ?? '');
+
+    // 4. Fallback to novel genres
+    if (detected == null && _novel?.genres != null) {
+      if (_novel!.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or')) {
+        detected = 'or';
+      } else if (_novel!.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi')) {
+        detected = 'hi';
+      }
+    }
+
+    // 5. Fallback to novel ID / source prefix
+    if (detected == null && _novel != null) {
+      if (_novel!.id.startsWith('or_') || _novel!.id.startsWith('odiabibhaba')) {
+        detected = 'or';
+      } else if (_novel!.id.startsWith('hindisamay') ||
+          _novel!.id.startsWith('gadyakosh') ||
+          _novel!.id.startsWith('kavitakosh') ||
+          _novel!.id.startsWith('epustakalay')) {
+        detected = 'hi';
+      }
+    }
+
+    // 6. Source registry fallback
+    detected ??= (SourceRegistry.getSource(_novel?.sourceId ?? '')?.lang);
+
+    return detected ?? 'en';
   }
 
   void playFromSentence(int index) {

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'edge_drm.dart';
+import 'odia_transliteration.dart';
 
 /// Direct high-performance WebSocket client for Microsoft Edge Neural TTS.
 /// Provides pristine, studio-quality MP3 audio without third-party package issues,
@@ -56,26 +57,98 @@ class EdgeTtsClient {
   }) async {
     if (text.trim().isEmpty) return null;
 
+    var processedText = text;
+    final hasOdia = processedText.contains(RegExp(r'[\u0B00-\u0B7F]'));
+    if (hasOdia) {
+      processedText = OdiaTransliteration.toDevanagari(processedText);
+    }
+
+    var effectiveVoice = voice.split(' ').first.trim();
+    if (effectiveVoice.startsWith('or-') || effectiveVoice.startsWith('or_')) {
+      if (effectiveVoice.contains('Sukant')) {
+        effectiveVoice = 'hi-IN-MadhurNeural';
+      } else {
+        effectiveVoice = 'hi-IN-SwaraNeural';
+      }
+    }
+
+    final hasIndicScript = hasOdia || processedText.contains(RegExp(r'[\u0900-\u097F]'));
+    if (hasIndicScript &&
+        !effectiveVoice.startsWith('hi-') &&
+        !effectiveVoice.startsWith('mr-') &&
+        !effectiveVoice.startsWith('ne-')) {
+      final isMale = effectiveVoice.contains('Christopher') ||
+          effectiveVoice.contains('Andrew') ||
+          effectiveVoice.contains('Guy') ||
+          effectiveVoice.contains('Eric') ||
+          effectiveVoice.contains('Thomas') ||
+          effectiveVoice.contains('Wayne') ||
+          effectiveVoice.contains('Sukant') ||
+          effectiveVoice.toLowerCase().contains('male');
+      effectiveVoice = isMale ? 'hi-IN-MadhurNeural' : 'hi-IN-SwaraNeural';
+    }
+
     for (int attempt = 0; attempt < 2; attempt++) {
       try {
+        debugPrint('[EdgeTtsClient] attempt $attempt synthesizing voice=$effectiveVoice textLen=${processedText.length}');
         final bytes = await _performSynthesis(
-          text,
-          voice: voice,
+          processedText,
+          voice: effectiveVoice,
           rate: rate,
           pitch: pitch,
           volume: volume,
         ).timeout(timeout);
 
         if (bytes != null && bytes.isNotEmpty) {
+          debugPrint('[EdgeTtsClient] attempt $attempt succeeded, bytes=${bytes.length}');
           return bytes;
+        } else {
+          debugPrint('[EdgeTtsClient] attempt $attempt returned null or empty bytes');
+          if (attempt == 0) {
+            await calibrateClock(force: true);
+          }
         }
-      } catch (e) {
+      } catch (e, st) {
+        debugPrint('[EdgeTtsClient] attempt $attempt error: $e\n$st');
         dev.log('Synthesis attempt $attempt failed: $e', name: 'EdgeTtsClient');
         if (attempt == 0) {
           await calibrateClock(force: true);
         }
       }
     }
+
+    // Flagship neural fallback: If a specific regional/multilingual voice was rejected,
+    // fallback to Microsoft's flagship studio voices so the user never hears robotic TTS
+    final isFemale = effectiveVoice.contains('Jenny') ||
+        effectiveVoice.contains('Aria') ||
+        effectiveVoice.contains('Sonia') ||
+        effectiveVoice.contains('Ava') ||
+        effectiveVoice.contains('Emma') ||
+        effectiveVoice.contains('Michelle') ||
+        effectiveVoice.contains('Libby') ||
+        effectiveVoice.contains('Clara') ||
+        effectiveVoice.contains('Natasha') ||
+        effectiveVoice.contains('Luna') ||
+        effectiveVoice.contains('Neerja') ||
+        effectiveVoice.contains('Yan') ||
+        effectiveVoice.toLowerCase().contains('female');
+    final flagshipFallback = isFemale ? 'en-US-JennyNeural' : 'en-US-ChristopherNeural';
+    if (effectiveVoice != flagshipFallback && !hasIndicScript) {
+      try {
+        debugPrint('[EdgeTtsClient] Falling back to flagship neural voice $flagshipFallback');
+        final fbBytes = await _performSynthesis(
+          processedText,
+          voice: flagshipFallback,
+          rate: rate,
+          pitch: pitch,
+          volume: volume,
+        ).timeout(timeout);
+        if (fbBytes != null && fbBytes.isNotEmpty) {
+          return fbBytes;
+        }
+      } catch (_) {}
+    }
+
     return null;
   }
 
@@ -113,7 +186,7 @@ class EdgeTtsClient {
         },
         compression: CompressionOptions.compressionDefault,
         customClient: httpClient,
-      );
+      ).timeout(const Duration(seconds: 6));
 
       final timestamp = EdgeDrm.generateTimestamp();
 
@@ -127,9 +200,15 @@ class EdgeTtsClient {
       ws.add(configMsg);
 
       // 2. Send SSML payload
-      final longVoice = _voiceShortToLong(voice);
+      final cleanVoice = voice.split(' ').first.trim();
+      final longVoice = _voiceShortToLong(cleanVoice);
+      String voiceLocale = 'en-US';
+      final locMatch = RegExp(r'^([a-z]{2,})-([A-Z]{2,})-(.+Neural)$').firstMatch(cleanVoice);
+      if (locMatch != null) {
+        voiceLocale = '${locMatch.group(1)}-${locMatch.group(2)}';
+      }
       final escapedText = _xmlEscape(text);
-      final ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>"
+      final ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='$voiceLocale'>"
           "<voice name='$longVoice'>"
           "<prosody pitch='$pitch' rate='$rate' volume='$volume'>"
           "$escapedText"
@@ -174,13 +253,21 @@ class EdgeTtsClient {
   }
 
   static String _voiceShortToLong(String shortName) {
-    final match = RegExp(r'^([a-z]{2,})-([A-Z]{2,})-(.+Neural)$').firstMatch(shortName);
+    var voice = shortName;
+    if (voice.startsWith('or-') || voice.startsWith('or_')) {
+      if (voice.contains('Sukant')) {
+        voice = 'hi-IN-MadhurNeural';
+      } else {
+        voice = 'hi-IN-SwaraNeural';
+      }
+    }
+    final match = RegExp(r'^([a-z]{2,})-([A-Z]{2,})-(.+Neural)$').firstMatch(voice);
     if (match != null) {
       final locale = '${match.group(1)}-${match.group(2)}';
       final name = match.group(3);
       return 'Microsoft Server Speech Text to Speech Voice ($locale, $name)';
     }
-    return shortName;
+    return voice;
   }
 
   static String _xmlEscape(String input) {

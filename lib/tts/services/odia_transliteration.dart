@@ -17,9 +17,24 @@ class OdiaTransliteration {
       if (cp >= 0x0B01 && cp <= 0x0B71) {
         // Special case mappings:
         switch (cp) {
-          // 0x0B33 is Odia ଳ (retroflex L) -> Devanagari ळ (0x0933)
+          // 0x0B5F is Odia ୟ (antahstha YA, e.g. ଉପନ୍ୟାସ, ସମୟ, ଦୟା) -> Devanagari य (0x092F)
+          // Crucial: Devanagari 0x095F (य़) causes neural TTS engines to choke/mutilate pronunciation.
+          case 0x0B5F:
+            sb.writeCharCode(0x092F);
+            break;
+          // 0x0B2F is Odia ଯ (Ja). In Odia initial/standalone position it is pronounced 'J',
+          // but in conjuncts preceded by Halanta/Virama (e.g. ସୂର୍ଯ୍ୟ) it is pronounced 'Ya'.
+          case 0x0B2F:
+            final prevCp = i > 0 ? runes[i - 1] : 0;
+            if (prevCp == 0x0B4D) {
+              sb.writeCharCode(0x092F); // Devanagari य
+            } else {
+              sb.writeCharCode(0x091C); // Devanagari ज
+            }
+            break;
+          // 0x0B33 is Odia ଳ (retroflex L) -> Devanagari ल (0x0932) for flawless neural flow
           case 0x0B33:
-            sb.writeCharCode(0x0933);
+            sb.writeCharCode(0x0932);
             break;
           // 0x0B35 is Odia ଵ (Va) -> Devanagari व (0x0935)
           case 0x0B35:
@@ -36,10 +51,6 @@ class OdiaTransliteration {
           // 0x0B5D is Odia ଢ଼ (RHA) -> Devanagari ढ़ (0x095D)
           case 0x0B5D:
             sb.writeCharCode(0x095D);
-            break;
-          // 0x0B5F is Odia ୟ (Yya) -> Devanagari य़ (0x095F)
-          case 0x0B5F:
-            sb.writeCharCode(0x095F);
             break;
           // 0x0B56 is Odia AI length mark -> Devanagari AI
           case 0x0B56:

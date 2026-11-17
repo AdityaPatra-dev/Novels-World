@@ -128,11 +128,27 @@ class EdgeNeuralEngine implements TtsEngineInterface {
     var cleanText = TextCleaner.prepareSentenceForSpeech(sentence);
     if (cleanText.isEmpty) return null;
 
-    if (cleanText.contains(RegExp(r'[\u0B00-\u0B7F]'))) {
+    final hasOdia = cleanText.contains(RegExp(r'[\u0B00-\u0B7F]'));
+    final hasDevanagari = cleanText.contains(RegExp(r'[\u0900-\u097F]'));
+    if (hasOdia) {
       cleanText = OdiaTransliteration.toDevanagari(cleanText);
     }
 
-    final edgeVoice = _cleanVoiceId(voice);
+    var edgeVoice = _cleanVoiceId(voice);
+    if ((hasOdia || hasDevanagari) &&
+        !edgeVoice.startsWith('hi-') &&
+        !edgeVoice.startsWith('mr-') &&
+        !edgeVoice.startsWith('ne-')) {
+      final isMale = edgeVoice.contains('Christopher') ||
+          edgeVoice.contains('Andrew') ||
+          edgeVoice.contains('Guy') ||
+          edgeVoice.contains('Eric') ||
+          edgeVoice.contains('Thomas') ||
+          edgeVoice.contains('Wayne') ||
+          edgeVoice.contains('Sukant') ||
+          edgeVoice.toLowerCase().contains('male');
+      edgeVoice = isMale ? 'hi-IN-MadhurNeural' : 'hi-IN-SwaraNeural';
+    }
     final rateCode = (speed * 100).round();
     final pitchCode = (pitch * 100).round();
     final cacheKey = '${edgeVoice}_r${rateCode}_p${pitchCode}_${cleanText.hashCode.abs()}';

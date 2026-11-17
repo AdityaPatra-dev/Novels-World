@@ -199,18 +199,32 @@ class SystemFallbackEngine implements TtsEngineInterface {
     try {
       final profile = VoiceCalibration.getProfile(voice);
 
-      // Set language on flutterTts if it changed
-      final targetLocale = profile.locale ??
+      // Resolve best matching native voice
+      final matchedVoice = _resolveBestVoice(profile);
+      final hasNativeOdia = matchedVoice != null &&
+          (matchedVoice['locale']?.toLowerCase().startsWith('or') == true);
+      final isOdia = profile.locale?.toLowerCase().startsWith('or') == true ||
+          cleanText.contains(RegExp(r'[\u0B00-\u0B7F]'));
+
+      String textToSpeak = cleanText;
+      String effectiveLocale = profile.locale ??
           (profile.targetVoiceKeywords.isNotEmpty ? profile.targetVoiceKeywords.first : 'en-US');
-      if (_appliedLanguage != targetLocale) {
+
+      // For Odia on devices without dedicated hardware voice pack, speak Devanagari phonetics with Hindi locale
+      if (isOdia && !hasNativeOdia) {
+        textToSpeak = OdiaTransliteration.toDevanagari(cleanText);
+        effectiveLocale = 'hi-IN';
+      }
+
+      // Set language on flutterTts if it changed
+      if (_appliedLanguage != effectiveLocale) {
         try {
-          await _flutterTts.setLanguage(targetLocale.replaceAll('_', '-'));
-          _appliedLanguage = targetLocale;
+          await _flutterTts.setLanguage(effectiveLocale.replaceAll('_', '-'));
+          _appliedLanguage = effectiveLocale;
         } catch (_) {}
       }
 
       // ONLY reload voice if it actually changed — avoiding Android voice pack reset delay!
-      final matchedVoice = _resolveBestVoice(profile);
       if (matchedVoice != null && matchedVoice['name'] != _appliedVoiceName) {
         try {
           await _flutterTts.setVoice(matchedVoice);
@@ -230,22 +244,6 @@ class SystemFallbackEngine implements TtsEngineInterface {
       if (_appliedPitch != effectivePitch) {
         await _flutterTts.setPitch(effectivePitch);
         _appliedPitch = effectivePitch;
-      }
-
-      // Transliterate Odia phonetics to Devanagari if device does not have native Odia voice pack
-      String textToSpeak = cleanText;
-      if (cleanText.contains(RegExp(r'[\u0B00-\u0B7F]'))) {
-        final hasNativeOdia = matchedVoice != null &&
-            (matchedVoice['locale']?.toLowerCase().startsWith('or') == true);
-        if (!hasNativeOdia) {
-          textToSpeak = OdiaTransliteration.toDevanagari(cleanText);
-          if (_appliedLanguage == null || _appliedLanguage!.startsWith('or') || _appliedLanguage!.startsWith('en')) {
-            try {
-              await _flutterTts.setLanguage('hi-IN');
-              _appliedLanguage = 'hi-IN';
-            } catch (_) {}
-          }
-        }
       }
 
       debugPrint('[TTS_DEBUG] SystemFallbackEngine: calling flutterTts.speak for "$textToSpeak"');

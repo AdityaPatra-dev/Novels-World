@@ -1,10 +1,10 @@
 import 'dart:convert';
+import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 import '../../core/models/novel.dart';
 import '../../core/models/chapter.dart';
 import '../../core/models/chapter_content.dart';
-import '../../core/services/webview_session_manager.dart';
 import '../../core/utils/http_client_factory.dart';
 import '../novel_source.dart';
 
@@ -38,7 +38,7 @@ class OdiaWikisourceExtractor implements NovelSource {
   }
 
   Map<String, String> get _headers => {
-    'User-Agent': WebViewSessionManager.defaultUserAgent,
+    'User-Agent': 'NovelsWorldApp/2.0 (https://github.com/adityapatra/Novels-World; contact: app@novelsworld.org)',
     'Accept': 'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'or,en-US,en;q=0.9',
   };
@@ -47,11 +47,11 @@ class OdiaWikisourceExtractor implements NovelSource {
   Future<List<Novel>> getPopular({int page = 1}) async {
     const popularQueries = [
       'ଛମାଣ ଆଠଗୁଣ୍ଠ',
-      'ଫକୀର ମୋହନ ସେନାପତି',
-      'ରାଧାନାଥ ରାୟ',
-      'ଗଙ୍ଗାଧର ମେହେର',
-      'ସାରଳା ଦାସ',
-      'ଉପେନ୍ଦ୍ର ଭଞ୍ଜ',
+      'ତପସ୍ଵିନୀ',
+      'ଅର୍ଘ୍ୟଥାଳୀ',
+      'ଚିଲିକା',
+      'ଦରବାର',
+      'ମାଟିର ମଣିଷ',
     ];
     final query = popularQueries[(page - 1) % popularQueries.length];
     return search(query, page: 1);
@@ -76,64 +76,84 @@ class OdiaWikisourceExtractor implements NovelSource {
     if (cleanQuery.isEmpty) return [];
 
     final offset = (page - 1) * 25;
-    final encodedQuery = Uri.encodeComponent(cleanQuery);
-    final url = '$baseUrl/w/api.php?action=query&list=search&srsearch=$encodedQuery&srlimit=25&sroffset=$offset&format=json';
-
-    try {
-      final response = await _client.get(Uri.parse(url), headers: _headers);
-      if (response.statusCode != 200) return [];
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final searchResults = data['query']?['search'] as List<dynamic>? ?? [];
-
-      return parseSearchResults(searchResults);
-    } catch (_) {
-      return [];
+    // Normalize Odia Va variants (ୱ U+0B71 vs ଵ U+0B35) for search resiliency
+    final searchTerms = <String>[cleanQuery];
+    if (cleanQuery.contains('\u0B71')) {
+      searchTerms.add(cleanQuery.replaceAll('\u0B71', '\u0B35'));
+    } else if (cleanQuery.contains('\u0B35')) {
+      searchTerms.add(cleanQuery.replaceAll('\u0B35', '\u0B71'));
     }
+
+    final List<Novel> combined = [];
+    final seenIds = <String>{};
+
+    for (final term in searchTerms) {
+      final encodedQuery = Uri.encodeComponent(term);
+      final url = '$baseUrl/w/api.php?action=query&list=search&srsearch=$encodedQuery&srlimit=25&sroffset=$offset&srnamespace=0&format=json';
+
+      try {
+        final response = await _client.get(Uri.parse(url), headers: _headers);
+        if (response.statusCode != 200) continue;
+
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final searchResults = data['query']?['search'] as List<dynamic>? ?? [];
+
+        final parsed = parseSearchResults(searchResults);
+        for (final n in parsed) {
+          if (seenIds.add(n.id)) {
+            combined.add(n);
+          }
+        }
+      } catch (_) {}
+    }
+
+    return combined;
   }
 
   List<Novel> parseSearchResults(List<dynamic> results) {
     final List<Novel> novels = [];
+    final seenRootTitles = <String>{};
 
     for (final item in results) {
       final rawTitle = item['title']?.toString() ?? '';
       if (rawTitle.isEmpty) continue;
 
-      // Ignore MediaWiki internal and user namespaces
+      // Ignore MediaWiki internal, author index, and user namespaces
       if (rawTitle.startsWith('ଶ୍ରେଣୀ:') ||
           rawTitle.startsWith('ବ୍ୟବହାରକାରୀ:') ||
           rawTitle.startsWith('ଉଇକିପାଠାଗାର:') ||
           rawTitle.startsWith('ମିଡ଼ିଆ:') ||
           rawTitle.startsWith('ମିଡ଼ିଆଉଇକି:') ||
+          rawTitle.startsWith('ଲେଖକ:') ||
+          rawTitle.startsWith('ପୃଷ୍ଠା:') ||
+          rawTitle.startsWith('ସୂଚୀ:') ||
+          rawTitle.startsWith('ଫାଇଲ:') ||
           rawTitle.startsWith('Special:') ||
           rawTitle.startsWith('Help:')) {
         continue;
       }
 
-      var title = rawTitle;
-      var author = 'ଓଡ଼ିଆ କ୍ଲାସିକ (Odia Classic)';
-
-      if (rawTitle.startsWith('ଲେଖକ:')) {
-        title = rawTitle.replaceFirst('ଲେଖକ:', '').trim();
-        author = title;
-      } else if (rawTitle.contains('/')) {
-        final parts = rawTitle.split('/');
-        title = parts[0].trim();
+      // Group subchapters under their root work title to prevent duplicate novel cards
+      final rootTitle = rawTitle.contains('/') ? rawTitle.split('/').first.trim() : rawTitle.trim();
+      if (!seenRootTitles.add(rootTitle)) {
+        continue;
       }
 
       final snippetRaw = item['snippet']?.toString() ?? '';
       final snippet = snippetRaw.replaceAll(RegExp(r'<[^>]*>'), '').trim();
 
       final pageId = item['pageid']?.toString() ?? '';
-      final novelUrl = pageId.isNotEmpty
-          ? '$baseUrl/?curid=$pageId'
-          : '$baseUrl/wiki/${Uri.encodeComponent(rawTitle.replaceAll(' ', '_'))}';
+      final novelUrl = rawTitle.contains('/')
+          ? '$baseUrl/wiki/${Uri.encodeComponent(rootTitle.replaceAll(' ', '_'))}'
+          : (pageId.isNotEmpty
+              ? '$baseUrl/?curid=$pageId'
+              : '$baseUrl/wiki/${Uri.encodeComponent(rootTitle.replaceAll(' ', '_'))}');
 
       novels.add(Novel(
-        id: '${id}_${pageId.isNotEmpty ? pageId : rawTitle.hashCode.abs()}',
+        id: '${id}_${rootTitle.hashCode.abs()}',
         sourceId: id,
-        title: title,
-        author: author,
+        title: rootTitle,
+        author: 'ଓଡ଼ିଆ କ୍ଲାସିକ (Odia Classic)',
         description: snippet.isNotEmpty ? snippet : 'ଓଡ଼ିଆ ଉଇକିପାଠାଗାର ସାହିତ୍ୟ କୃତି।',
         coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',
         genres: const ['Odia', 'Classics', 'Sahitya'],
@@ -172,7 +192,7 @@ class OdiaWikisourceExtractor implements NovelSource {
 
           final headerTitle = doc.querySelector('#header_title_text')?.text.trim();
           final headerAuthor = doc.querySelector('#header_author_text')?.text.trim();
-          final authorLink = doc.querySelector('a[href*="/wiki/ଲେଖକ:"]')?.text.trim();
+          final authorLink = doc.querySelector('a[href*="/wiki/%E0%AC%B2%E0%AD%87%E0%AC%96%E0%AC%95:"], a[href*="ଲେଖକ:"]')?.text.trim();
 
           if (headerTitle != null && headerTitle.isNotEmpty) {
             title = headerTitle;
@@ -183,7 +203,6 @@ class OdiaWikisourceExtractor implements NovelSource {
             author = authorLink;
           }
 
-          // Look for cover image
           final img = doc.querySelector('.infobox img, #mw-content-text img, .thumbimage, img');
           if (img != null) {
             final src = img.attributes['src'] ?? '';
@@ -192,17 +211,23 @@ class OdiaWikisourceExtractor implements NovelSource {
             }
           }
 
-          final firstP = doc.querySelector('p')?.text.trim() ?? '';
-          if (firstP.isNotEmpty && firstP.length > 20) {
-            description = firstP;
-          } else {
+          // Extract first narrative description
+          for (final p in doc.querySelectorAll('p')) {
+            final t = p.text.trim();
+            if (t.length > 25 && !t.contains('ଲେଖକ/କବି')) {
+              description = t;
+              break;
+            }
+          }
+
+          if (description.isEmpty) {
             description = '$title - $author ଙ୍କ ଦ୍ୱାରା ରଚିତ ଓଡ଼ିଆ କ୍ଲାସିକ ସାହିତ୍ୟ କୃତି।';
           }
         }
       }
 
       return Novel(
-        id: '${id}_${pageId.isNotEmpty ? pageId : pageTitle.hashCode.abs()}',
+        id: '${id}_${title.hashCode.abs()}',
         sourceId: id,
         title: title,
         author: author,
@@ -215,7 +240,7 @@ class OdiaWikisourceExtractor implements NovelSource {
     } catch (_) {
       final fallbackTitle = _extractPageTitleFromUrl(novelUrl);
       return Novel(
-        id: '${id}_${novelUrl.hashCode.abs()}',
+        id: '${id}_${fallbackTitle.hashCode.abs()}',
         sourceId: id,
         title: fallbackTitle.isNotEmpty ? fallbackTitle : 'Odia Literature',
         author: 'ଓଡ଼ିଆ ଲେଖକ',
@@ -233,47 +258,73 @@ class OdiaWikisourceExtractor implements NovelSource {
     try {
       final pageId = _extractPageIdFromUrl(novelUrl);
       final pageTitle = _extractPageTitleFromUrl(novelUrl);
+      final novelId = '${id}_${pageTitle.hashCode.abs()}';
 
       final apiUrl = pageId.isNotEmpty
           ? '$baseUrl/w/api.php?action=parse&pageid=$pageId&format=json&prop=text'
           : '$baseUrl/w/api.php?action=parse&page=${Uri.encodeComponent(pageTitle.replaceAll(' ', '_'))}&format=json&prop=text';
 
       final response = await _client.get(Uri.parse(apiUrl), headers: _headers);
-
       if (response.statusCode != 200) return [];
+
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final html = data['parse']?['text']?['*']?.toString() ?? '';
       if (html.isEmpty) return [];
 
       final doc = html_parser.parse(html);
+
+      // Clean out headers, author infoboxes, and navigation elements before parsing chapters
+      for (final bad in doc.querySelectorAll(
+        '#headertemplate, .headertemplate, .ws-noexport, #ws-data, .catlinks, .printfooter, .mw-jump-link, .thumb, figure, #toc',
+      )) {
+        bad.remove();
+      }
+
       final List<Chapter> chapters = [];
       final seenUrls = <String>{};
-      final novelId = '${id}_${pageId.isNotEmpty ? pageId : pageTitle.hashCode.abs()}';
 
-      final links = doc.querySelectorAll('a[href*="/wiki/"]');
-      final ignoredPrefixes = [
+      const ignoredPrefixes = [
         'ଶ୍ରେଣୀ:',
         'ବ୍ୟବହାରକାରୀ:',
         'ଉଇକିପାଠାଗାର:',
         'ଲେଖକ:',
+        'ପୃଷ୍ଠା:',
+        'ସୂଚୀ:',
+        'ଫାଇଲ:',
         'Help:',
         'Special:',
         'MediaWiki:',
+        'Wikipedia:',
+        'portal:',
       ];
 
+      // 1. Look for chapters in ordered list (<ol><li>) or subpage links
+      final links = doc.querySelectorAll('ol li a, ul li a, p a[href*="/wiki/"], a[href*="/wiki/"]');
       for (final a in links) {
         final text = a.text.trim();
         final href = a.attributes['href'] ?? '';
         if (text.isEmpty || href.isEmpty) continue;
 
-        if (ignoredPrefixes.any((p) => href.contains(Uri.encodeComponent(p)) || href.contains(p))) {
+        final decodedHref = Uri.decodeComponent(href);
+
+        // Filter out redlinks / non-existent stub pages
+        if (a.classes.contains('new') || href.contains('redlink=1')) {
           continue;
         }
 
+        // Filter out non-chapter namespaces
+        if (ignoredPrefixes.any((p) => decodedHref.contains(p))) {
+          continue;
+        }
+
+        // Filter out metadata and navigation links
         if (text.startsWith('(') && text.endsWith(')')) continue;
         if (text.contains('ରଚନାଗୁଡ଼ିକ ମୋଟା ଅକ୍ଷରରେ') ||
             text.contains('ପ୍ରମୁଖ ରଚନା') ||
-            text.contains('ସମ୍ପାଦନା')) {
+            text.contains('ସମ୍ପାଦନା') ||
+            text.contains('sister projects') ||
+            text.contains('Wikipedia article') ||
+            text.contains('Author Index')) {
           continue;
         }
 
@@ -289,7 +340,28 @@ class OdiaWikisourceExtractor implements NovelSource {
         ));
       }
 
-      // If no subchapters were found, the page itself is a full work or poem!
+      // 2. If no chapters were found from page HTML, query MediaWiki subpages API
+      if (chapters.isEmpty) {
+        final subpages = await _queryMediaWikiSubpages(pageTitle);
+        for (final sp in subpages) {
+          final spTitle = sp['title']?.toString() ?? '';
+          if (spTitle.isEmpty) continue;
+
+          final chapterTitle = spTitle.contains('/') ? spTitle.split('/').last.trim() : spTitle;
+          final chapterUrl = '$baseUrl/wiki/${Uri.encodeComponent(spTitle.replaceAll(' ', '_'))}';
+          if (!seenUrls.add(chapterUrl)) continue;
+
+          chapters.add(Chapter(
+            id: '${id}_${chapterUrl.hashCode.abs()}',
+            novelId: novelId,
+            title: chapterTitle,
+            url: chapterUrl,
+            chapterNumber: (chapters.length + 1).toDouble(),
+          ));
+        }
+      }
+
+      // 3. If still no chapters, the page itself is a complete standalone work or poem!
       if (chapters.isEmpty) {
         final mainTitle = doc.querySelector('#header_title_text')?.text.trim() ?? pageTitle;
         chapters.add(Chapter(
@@ -306,6 +378,37 @@ class OdiaWikisourceExtractor implements NovelSource {
     } catch (_) {
       return [];
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _queryMediaWikiSubpages(String pageTitle) async {
+    final clean = pageTitle.trim();
+    if (clean.isEmpty) return [];
+
+    final variants = <String>[clean];
+    if (clean.contains('\u0B71')) {
+      variants.add(clean.replaceAll('\u0B71', '\u0B35'));
+    } else if (clean.contains('\u0B35')) {
+      variants.add(clean.replaceAll('\u0B35', '\u0B71'));
+    }
+
+    for (final v in variants) {
+      try {
+        final encodedPrefix = Uri.encodeComponent('$v/');
+        final url = '$baseUrl/w/api.php?action=query&list=allpages&apprefix=$encodedPrefix&aplimit=100&format=json';
+        final resp = await _client.get(Uri.parse(url), headers: _headers);
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body) as Map<String, dynamic>;
+          final list = (data['query']?['allpages'] as List<dynamic>?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList();
+          if (list != null && list.isNotEmpty) {
+            return list;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return [];
   }
 
   @override
@@ -333,34 +436,80 @@ class OdiaWikisourceExtractor implements NovelSource {
     }
 
     if (html.isEmpty) {
-      throw Exception('Failed to load chapter content from $chapterUrl');
+      return ChapterContent(
+        chapterId: '${id}_${chapterUrl.hashCode.abs()}',
+        novelId: '${id}_${pageTitle.hashCode.abs()}',
+        title: pageTitle,
+        rawText: '$pageTitle\n\nଏହି ଅଧ୍ୟାୟର ପାଠ୍ୟ ଉଇକିପାଠାଗାରରେ ଏପର୍ଯ୍ୟନ୍ତ ସମ୍ପୂର୍ଣ୍ଣ ହୋଇନାହିଁ।',
+        paragraphs: [
+          pageTitle,
+          'ଏହି ଅଧ୍ୟାୟର ପାଠ୍ୟ ଉଇକିପାଠାଗାରରେ ଏପର୍ଯ୍ୟନ୍ତ ସମ୍ପୂର୍ଣ୍ଣ ହୋଇନାହିଁ।',
+        ],
+      );
     }
 
     final doc = html_parser.parse(html);
 
-    // Remove headers, navbars, category footers
+    // Replace <br> tags with newlines so line breaks in poems are preserved
+    for (final br in doc.querySelectorAll('br')) {
+      br.replaceWith(dom.Text('\n'));
+    }
+
+    // Remove headers, navbars, metadata, and category footers
     for (final bad in doc.querySelectorAll(
-      'script, style, nav, table, .catlinks, #toc, .ws-header, .printfooter, .mw-jump-link',
+      'script, style, nav, table, .catlinks, #toc, .ws-header, .printfooter, .mw-jump-link, #headertemplate, .headertemplate, .ws-noexport, #ws-data, .pagenum, .ws-pagenum',
     )) {
       bad.remove();
     }
 
     final List<String> paragraphs = [];
-    final pElements = doc.querySelectorAll('p, div.poem');
 
-    for (final p in pElements) {
-      final t = p.text.trim();
-      if (t.length >= 2) {
-        paragraphs.add(t);
+    // 1. Extract from <div class="poem"> blocks if present
+    final poemElements = doc.querySelectorAll('div.poem');
+    if (poemElements.isNotEmpty) {
+      for (final poem in poemElements) {
+        final text = poem.text.trim();
+        if (text.isEmpty) continue;
+
+        // Split poem by double newlines into distinct stanzas
+        final stanzas = text.split(RegExp(r'\n\s*\n+'));
+        for (final stanza in stanzas) {
+          final cleanStanza = stanza
+              .split('\n')
+              .map((line) => line.trim())
+              .where((line) => line.isNotEmpty && !line.startsWith('•••'))
+              .join('\n');
+          if (cleanStanza.length >= 3) {
+            paragraphs.add(cleanStanza);
+          }
+        }
       }
     }
 
+    // 2. If no poem blocks, extract standard paragraphs
+    if (paragraphs.isEmpty) {
+      final pElements = doc.querySelectorAll('p');
+      for (final p in pElements) {
+        final t = p.text.trim();
+        if (t.length >= 2 &&
+            !t.startsWith('(ପ୍ରମୁଖ ରଚନା') &&
+            !t.startsWith('•••') &&
+            !t.contains('ଲେଖକ/କବି')) {
+          paragraphs.add(t);
+        }
+      }
+    }
+
+    // 3. Fallback: extract line-by-line from main content container
     if (paragraphs.isEmpty) {
       final container = doc.querySelector('#mw-content-text') ?? doc.body;
       if (container != null) {
-        for (final line in container.text.split('\n')) {
+        final lines = container.text.split('\n');
+        for (final line in lines) {
           final t = line.trim();
-          if (t.length >= 5) {
+          if (t.length >= 5 &&
+              !t.startsWith('(ପ୍ରମୁଖ ରଚନା') &&
+              !t.startsWith('•••')) {
             paragraphs.add(t);
           }
         }

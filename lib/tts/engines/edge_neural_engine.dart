@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/utils/text_cleaner.dart';
 import '../services/edge_tts_client.dart';
+import '../services/odia_transliteration.dart';
 import '../tts_engine_interface.dart';
 import '../tts_model_registry.dart';
 import 'system_fallback_engine.dart';
@@ -63,6 +64,12 @@ class EdgeNeuralEngine implements TtsEngineInterface {
 
   String _cleanVoiceId(String voice) {
     final token = voice.split(' ').first.trim();
+    if (token.startsWith('or-') || token.startsWith('or_') || token.contains('Subhasini') || token.contains('Sukant')) {
+      if (token.contains('Sukant') || token.toLowerCase().contains('male')) {
+        return 'hi-IN-MadhurNeural';
+      }
+      return 'hi-IN-SwaraNeural';
+    }
     if (token.startsWith('en-') || token.startsWith('en_')) {
       return token.replaceAll('_', '-');
     }
@@ -118,8 +125,12 @@ class EdgeNeuralEngine implements TtsEngineInterface {
     required double pitch,
   }) async {
     await initialize();
-    final cleanText = TextCleaner.prepareSentenceForSpeech(sentence);
+    var cleanText = TextCleaner.prepareSentenceForSpeech(sentence);
     if (cleanText.isEmpty) return null;
+
+    if (cleanText.contains(RegExp(r'[\u0B00-\u0B7F]'))) {
+      cleanText = OdiaTransliteration.toDevanagari(cleanText);
+    }
 
     final edgeVoice = _cleanVoiceId(voice);
     final rateCode = (speed * 100).round();

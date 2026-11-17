@@ -9,6 +9,7 @@ import '../data/storage_service.dart';
 import '../extractors/source_registry.dart';
 import '../tts/language_voice_registry.dart';
 import '../tts/ring_buffer_manager.dart';
+import '../tts/services/odia_transliteration.dart';
 import '../tts/tts_model_registry.dart';
 
 class ReaderProvider extends ChangeNotifier {
@@ -234,7 +235,6 @@ class ReaderProvider extends ChangeNotifier {
         ChapterContent fetched;
         if (chapter.url.startsWith('file:') ||
             chapter.url.startsWith('/') ||
-            _novel!.isFullBook ||
             _novel!.sourceId == 'local_epub') {
           fetched = await EpubService().loadChapterContent(chapter.url);
         } else {
@@ -274,16 +274,39 @@ class ReaderProvider extends ChangeNotifier {
         final langInfo = LanguageVoiceRegistry.getByCode(_targetLanguageCode!);
         await translateCurrentChapter(langInfo);
       } else {
+        final sampleText = _sentences.take(5).join(' ');
+        final detectedLang = OdiaTransliteration.detectScript(sampleText) ??
+            (SourceRegistry.getSource(_novel!.sourceId)?.lang) ??
+            'en';
+
         ttsManager.loadSentences(
           _sentences,
           startIndex: _activeSentenceIndex,
           novelId: _novel!.id,
           chapterId: chapter.id,
-          lang: 'en',
+          lang: detectedLang,
           novel: _novel,
           chapterTitle: chapter.title,
           trackNumber: _currentChapterIndex + 1,
         );
+
+        if (detectedLang != 'en') {
+          final langInfo = LanguageVoiceRegistry.getByCode(detectedLang);
+          final currentVoice = ttsManager.activeVoice;
+          final isCurrentEnglishVoice = currentVoice.startsWith('en-') ||
+              currentVoice.startsWith('en_') ||
+              currentVoice.contains('Christopher') ||
+              currentVoice.contains('Jenny') ||
+              currentVoice.contains('Guy') ||
+              currentVoice.contains('Aria') ||
+              currentVoice.contains('Sonia') ||
+              currentVoice.contains('Ryan') ||
+              currentVoice.contains('Brian') ||
+              currentVoice.contains('Ava');
+          if (isCurrentEnglishVoice && langInfo.defaultFemaleVoice.isNotEmpty) {
+            ttsManager.setVoice(langInfo.defaultFemaleVoice);
+          }
+        }
       }
 
       _isLoading = false;
@@ -377,7 +400,21 @@ class ReaderProvider extends ChangeNotifier {
         _activeSentenceIndex = 0;
         _preloadedNextContent = null;
         _preloadedNextSentences = [];
-        ttsManager.loadSentences(_sentences, startIndex: 0);
+        final sampleText = _sentences.take(5).join(' ');
+        final detectedLang = _targetLanguageCode ??
+            OdiaTransliteration.detectScript(sampleText) ??
+            (SourceRegistry.getSource(_novel!.sourceId)?.lang) ??
+            'en';
+        ttsManager.loadSentences(
+          _sentences,
+          startIndex: 0,
+          novelId: _novel!.id,
+          chapterId: currentChapter?.id,
+          lang: detectedLang,
+          novel: _novel,
+          chapterTitle: currentChapter?.title,
+          trackNumber: _currentChapterIndex + 1,
+        );
         if (_novel != null && currentChapter != null) {
           final savedProgress = _storage.getProgress(_novel!.id);
           final savedIdx = savedProgress != null

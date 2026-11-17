@@ -192,18 +192,21 @@ class OdiaBibhabaExtractor implements NovelSource {
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
     final novel = await getNovelDetails(chapterUrl);
-    final text = '${novel.title}\n\nଲେଖକ: ${novel.author}\n\nବିବରଣୀ: ${novel.description}\n\nଡାଉନଲୋଡ଼ ଲିଙ୍କ: ${novel.bookDownloadUrl ?? "Direct PDF Stream"}';
+    final slug = chapterUrl.split('/').last.trim();
+    final paragraphs = [
+      novel.title,
+      'ରଚୟିତା: ${novel.author}',
+      'ବିଭାଗ ଓ ବିବରଣୀ: ${novel.description}',
+      'ଓଡ଼ିଆ ବିଭବ (Odia Bibhaba) ଡିଜିଟାଲ୍ ସଂଗ୍ରହାଗାରର ଏହି ମହତ୍ତ୍ୱପୂର୍ଣ୍ଣ ଗ୍ରନ୍ଥଟି ସମ୍ପୂର୍ଣ୍ଣ ମୂଳ ଡିଜିଟାଇଜ୍ଡ୍ PDF ସଂସ୍କରଣ ଭାବରେ ସଂରକ୍ଷିତ।',
+      'ଏହି ପୁସ୍ତକର ସମସ୍ତ ପୃଷ୍ଠା, ଚିତ୍ର ଏବଂ ମୂଳ ଲେଖାଗୁଡ଼ିକୁ ସିଧାସଳଖ ପଢ଼ିବା ପାଇଁ "Preview Online" ମାଧ୍ୟମରେ ଇନ୍-ଆପ୍ ବ୍ରାଉଜର୍ରେ ପୃଷ୍ଠା ପଲଟାଇ ଅଧ୍ୟୟନ କରନ୍ତୁ କିମ୍ବା "Download Entire Book" ବଟନ୍ ବ୍ୟବହାର କରି ଅଫଲାଇନ୍ ସଂରକ୍ଷଣ କରନ୍ତୁ।',
+      'ଡିଜିଟାଲ୍ ଷ୍ଟ୍ରିମ୍ ଲିଙ୍କ: ${novel.bookDownloadUrl ?? "$baseUrl/api/books/$slug/stream"}',
+    ];
     return ChapterContent(
       chapterId: '${id}_${novel.id}',
       novelId: novel.id,
       title: novel.title,
-      rawText: text,
-      paragraphs: [
-        novel.title,
-        'ଲେଖକ: ${novel.author}',
-        novel.description,
-        'ଏହି ପୁସ୍ତକଟି ସମ୍ପୂର୍ଣ୍ଣ PDF ଆକାରରେ ପଢ଼ିବା ପାଇଁ ଉପଲବ୍ଧ।',
-      ],
+      rawText: paragraphs.join('\n\n'),
+      paragraphs: paragraphs,
     );
   }
 }

@@ -1119,7 +1119,25 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                               )
                             : ElevatedButton.icon(
                                 onPressed: _chapters.isNotEmpty
-                                    ? () => _openReader(_lastReadChapter ?? EpubService.getFirstNarrativeChapter(_chapters))
+                                    ? () {
+                                        if (isFullBook &&
+                                            _novel.bookFormat == 'pdf' &&
+                                            !isBookDownloaded &&
+                                            _novel.sourceUrl.isNotEmpty &&
+                                            !kIsWeb) {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => SourceWebViewScreen(
+                                                initialUrl: _novel.sourceUrl,
+                                                sourceName: _novel.title,
+                                              ),
+                                            ),
+                                          );
+                                        } else {
+                                          _openReader(_lastReadChapter ?? EpubService.getFirstNarrativeChapter(_chapters));
+                                        }
+                                      }
                                     : null,
                                 icon: Icon(_lastReadChapter != null
                                     ? Icons.play_circle_fill_rounded

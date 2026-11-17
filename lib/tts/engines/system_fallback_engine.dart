@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../../core/utils/text_cleaner.dart';
+import '../services/odia_transliteration.dart';
 import '../services/web_speech_interop.dart';
 import '../tts_engine_interface.dart';
 import '../tts_model_registry.dart';
@@ -98,6 +100,25 @@ class SystemFallbackEngine implements TtsEngineInterface {
               ? (locale == keyword || locale.startsWith('${keyword}_') || locale.startsWith('$keyword-'))
               : (name.contains(keyword) || locale.contains(keyword));
           if (matches) {
+            final resolved = {
+              'name': v['name'].toString(),
+              'locale': v['locale'].toString(),
+            };
+            _voiceCache[profile.id] = resolved;
+            return resolved;
+          }
+        }
+      }
+    }
+
+    // For Odia profiles without dedicated voice pack, prefer Hindi/Bengali Indian phonetics
+    final isOdiaProfile = profile.targetVoiceKeywords.contains('or') ||
+        (profile.locale != null && profile.locale!.toLowerCase().startsWith('or'));
+    if (isOdiaProfile) {
+      for (final v in _availableSystemVoices) {
+        if (v is Map) {
+          final locale = (v['locale'] ?? '').toString().toLowerCase();
+          if (locale.startsWith('hi') || locale.startsWith('bn')) {
             final resolved = {
               'name': v['name'].toString(),
               'locale': v['locale'].toString(),
@@ -211,12 +232,42 @@ class SystemFallbackEngine implements TtsEngineInterface {
         _appliedPitch = effectivePitch;
       }
 
-      debugPrint('[TTS_DEBUG] SystemFallbackEngine: calling flutterTts.speak for "$cleanText"');
+      // Transliterate Odia phonetics to Devanagari if device does not have native Odia voice pack
+      String textToSpeak = cleanText;
+      if (cleanText.contains(RegExp(r'[\u0B00-\u0B7F]'))) {
+        final hasNativeOdia = matchedVoice != null &&
+            (matchedVoice['locale']?.toLowerCase().startsWith('or') == true);
+        if (!hasNativeOdia) {
+          textToSpeak = OdiaTransliteration.toDevanagari(cleanText);
+          if (_appliedLanguage == null || _appliedLanguage!.startsWith('or') || _appliedLanguage!.startsWith('en')) {
+            try {
+              await _flutterTts.setLanguage('hi-IN');
+              _appliedLanguage = 'hi-IN';
+            } catch (_) {}
+          }
+        }
+      }
+
+      debugPrint('[TTS_DEBUG] SystemFallbackEngine: calling flutterTts.speak for "$textToSpeak"');
+      
+      // Safety timer to prevent speech engine hanging indefinitely
+      final timeoutDuration = Duration(seconds: ((textToSpeak.length / 5).ceil() + 4).clamp(5, 25));
+      Timer? safetyTimer;
+      safetyTimer = Timer(timeoutDuration, () {
+        if (_currentCompletion != null) {
+          debugPrint('[TTS_DEBUG] SystemFallbackEngine: safety timeout triggered for "$textToSpeak"');
+          final cb = _currentCompletion;
+          _currentCompletion = null;
+          cb?.call();
+        }
+      });
+
       _currentCompletion = () {
-        debugPrint('[TTS_DEBUG] SystemFallbackEngine: flutterTts finished "$cleanText"');
+        safetyTimer?.cancel();
+        debugPrint('[TTS_DEBUG] SystemFallbackEngine: flutterTts finished "$textToSpeak"');
         onDone();
       };
-      await _flutterTts.speak(cleanText);
+      await _flutterTts.speak(textToSpeak);
     } catch (e, st) {
       debugPrint('[TTS_DEBUG] SystemFallbackEngine error: $e\n$st');
       onDone();

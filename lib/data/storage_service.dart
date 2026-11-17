@@ -410,39 +410,108 @@ class StorageService {
       await removeDownloadedNovel(novel.id);
       return;
     }
+
+    final safeNovelId = _safeId(novel.id);
+
+    // 1. Delete imported book directory or file if present
     String path = '';
     if (novel.sourceUrl.isNotEmpty) {
       final uri = Uri.tryParse(novel.sourceUrl);
       if (uri != null && uri.scheme == 'file') {
         path = uri.toFilePath();
-      } else {
+      } else if (!novel.sourceUrl.startsWith('http://') && !novel.sourceUrl.startsWith('https://')) {
         path = novel.sourceUrl;
       }
     }
-    if (path.isEmpty || !Directory(path).existsSync()) {
-      path = '${_safeAppDir.path}/imported_novels/${novel.id}';
-    }
-    final dir = Directory(path);
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
+
+    if (path.isNotEmpty) {
+      try {
+        final f = File(path);
+        if (await f.exists()) {
+          final parent = f.parent;
+          await f.delete();
+          if (parent.path.contains('imported_novels') && await parent.exists()) {
+            await parent.delete(recursive: true);
+          }
+        }
+      } catch (_) {}
+      try {
+        final d = Directory(path);
+        if (await d.exists()) {
+          await d.delete(recursive: true);
+        }
+      } catch (_) {}
     }
 
+    // Also check standard imported_novels directories
+    final candidateDirs = [
+      Directory('${_safeAppDir.path}/imported_novels/${novel.id}'),
+      if (safeNovelId != novel.id) Directory('${_safeAppDir.path}/imported_novels/$safeNovelId'),
+    ];
+    for (final dir in candidateDirs) {
+      try {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      } catch (_) {}
+    }
+
+    // 2. Delete all tracked downloaded chapters for this novel
+    final chIds = <String>{
+      ...getDownloadedChapterIds(novel.id),
+      if (safeNovelId != novel.id) ...getDownloadedChapterIds(safeNovelId),
+    };
+    for (final chId in chIds) {
+      try {
+        await deleteDownloadedChapter(chId);
+      } catch (_) {}
+    }
+
+    // 3. Delete any chapter files in chapters/ directory tagged with this novelId
     final chaptersDir = Directory('${_safeAppDir.path}/chapters');
     if (await chaptersDir.exists()) {
-      await for (final entity in chaptersDir.list()) {
-        if (entity is File && entity.path.endsWith('.json')) {
-          try {
-            final raw = await entity.readAsString();
-            if (raw.contains('"novelId":"${novel.id}"')) {
-              await entity.delete();
-            }
-          } catch (_) {}
+      try {
+        await for (final entity in chaptersDir.list()) {
+          if (entity is File && entity.path.endsWith('.json')) {
+            try {
+              final raw = await entity.readAsString();
+              if (raw.contains('"novelId":"${novel.id}"') ||
+                  (safeNovelId.isNotEmpty && raw.contains('"novelId":"$safeNovelId"'))) {
+                await entity.delete();
+              }
+            } catch (_) {}
+          }
         }
-      }
+      } catch (_) {}
     }
+
+    // 4. Delete audiobooks, chapter cache & details cache
+    try {
+      await deleteAllNovelAudiobooks(novel.id);
+      if (safeNovelId != novel.id) {
+        await deleteAllNovelAudiobooks(safeNovelId);
+      }
+    } catch (_) {}
+
+    try {
+      final chapCache = _getNovelChaptersCacheFile(novel.id);
+      if (await chapCache.exists()) await chapCache.delete();
+      final detailsCache = _getNovelDetailsCacheFile(novel.id);
+      if (await detailsCache.exists()) await detailsCache.delete();
+    } catch (_) {}
+
+    // 5. Remove downloaded novel entries from SharedPreferences
     await removeDownloadedNovel(novel.id);
-    if (novel.sourceId == 'local_epub') {
+    if (safeNovelId != novel.id) {
+      await removeDownloadedNovel(safeNovelId);
+    }
+
+    // 6. If it's a full book or local epub, remove it from Library as well
+    if (novel.isFullBook || novel.sourceId == 'local_epub') {
       await removeNovelFromLibrary(novel.id);
+      if (safeNovelId != novel.id) {
+        await removeNovelFromLibrary(safeNovelId);
+      }
     }
   }
 
@@ -591,8 +660,11 @@ class StorageService {
         novelMap[n.id] = n;
       } else {
         final chs = getDownloadedChapterIds(n.id);
-        final importDir = Directory('${_safeAppDir.path}/imported_novels/${n.id}');
-        final hasImportDir = importDir.existsSync() && (importDir.listSync().isNotEmpty);
+        final safeNovelId = _safeId(n.id);
+        final importDir1 = Directory('${_safeAppDir.path}/imported_novels/${n.id}');
+        final importDir2 = Directory('${_safeAppDir.path}/imported_novels/$safeNovelId');
+        final hasImportDir = (importDir1.existsSync() && (importDir1.listSync().isNotEmpty)) ||
+            (importDir2.existsSync() && (importDir2.listSync().isNotEmpty));
         if (chs.isNotEmpty || hasImportDir) {
           novelMap[n.id] = n;
         }
@@ -604,8 +676,12 @@ class StorageService {
       if (novelMap.containsKey(n.id)) continue;
       if (n.sourceId == 'local_epub' || n.isFullBook) {
         if (!kIsWeb) {
-          final dir = Directory('${_safeAppDir.path}/imported_novels/${n.id}');
-          if (dir.existsSync() && (dir.listSync().isNotEmpty)) {
+          final safeNovelId = _safeId(n.id);
+          final dir1 = Directory('${_safeAppDir.path}/imported_novels/${n.id}');
+          final dir2 = Directory('${_safeAppDir.path}/imported_novels/$safeNovelId');
+          final hasImportDir = (dir1.existsSync() && (dir1.listSync().isNotEmpty)) ||
+              (dir2.existsSync() && (dir2.listSync().isNotEmpty));
+          if (hasImportDir) {
             novelMap[n.id] = n;
           }
         }

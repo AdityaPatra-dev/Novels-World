@@ -23,6 +23,10 @@ Map<String, String> getCoverImageHeaders(String coverUrl, [String? sourceUrl]) {
   };
   final coverUri = Uri.tryParse(coverUrl);
   if (coverUri != null &&
+      (coverUri.host.contains('wikisource.org') || coverUri.host.contains('wikimedia.org'))) {
+    headers['User-Agent'] = 'NovelsWorldApp/1.0 (https://github.com/adityapatra/Novels-World; contact@novelsworld.app)';
+  }
+  if (coverUri != null &&
       (coverUri.scheme == 'http' || coverUri.scheme == 'https') &&
       coverUri.origin.isNotEmpty) {
     headers['Referer'] = '${coverUri.origin}/';

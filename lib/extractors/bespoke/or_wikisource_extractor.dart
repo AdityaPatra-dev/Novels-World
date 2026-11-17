@@ -118,13 +118,12 @@ class OdiaWikisourceExtractor implements NovelSource {
       final rawTitle = item['title']?.toString() ?? '';
       if (rawTitle.isEmpty) continue;
 
-      // Ignore MediaWiki internal, author index, and user namespaces
+      // Ignore MediaWiki internal and system namespaces
       if (rawTitle.startsWith('ଶ୍ରେଣୀ:') ||
           rawTitle.startsWith('ବ୍ୟବହାରକାରୀ:') ||
           rawTitle.startsWith('ଉଇକିପାଠାଗାର:') ||
           rawTitle.startsWith('ମିଡ଼ିଆ:') ||
           rawTitle.startsWith('ମିଡ଼ିଆଉଇକି:') ||
-          rawTitle.startsWith('ଲେଖକ:') ||
           rawTitle.startsWith('ପୃଷ୍ଠା:') ||
           rawTitle.startsWith('ସୂଚୀ:') ||
           rawTitle.startsWith('ଫାଇଲ:') ||
@@ -133,8 +132,18 @@ class OdiaWikisourceExtractor implements NovelSource {
         continue;
       }
 
-      // Group subchapters under their root work title to prevent duplicate novel cards
-      final rootTitle = rawTitle.contains('/') ? rawTitle.split('/').first.trim() : rawTitle.trim();
+      var title = rawTitle;
+      var author = 'ଓଡ଼ିଆ କ୍ଲାସିକ (Odia Classic)';
+
+      if (rawTitle.startsWith('ଲେଖକ:')) {
+        title = rawTitle.replaceFirst('ଲେଖକ:', '').trim();
+        author = title;
+      } else if (rawTitle.contains('/')) {
+        final parts = rawTitle.split('/');
+        title = parts[0].trim();
+      }
+
+      final rootTitle = title.trim();
       if (!seenRootTitles.add(rootTitle)) {
         continue;
       }
@@ -153,7 +162,7 @@ class OdiaWikisourceExtractor implements NovelSource {
         id: '${id}_${rootTitle.hashCode.abs()}',
         sourceId: id,
         title: rootTitle,
-        author: 'ଓଡ଼ିଆ କ୍ଲାସିକ (Odia Classic)',
+        author: author,
         description: snippet.isNotEmpty ? snippet : 'ଓଡ଼ିଆ ଉଇକିପାଠାଗାର ସାହିତ୍ୟ କୃତି।',
         coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',
         genres: const ['Odia', 'Classics', 'Sahitya'],

@@ -344,8 +344,23 @@ class TextCleaner {
     if (u.isEmpty || u == '#' || u == '/') return false;
     if (u.startsWith('data:')) return false;
 
-    // NovelCool and similar novel sources store legitimate covers under /logo/ paths or specific subdomains
-    if (u.contains('novelcool.com') || u.contains('img.novelcool.com') || u.contains('vdoc.pub')) {
+    // Whitelist specific legitimate sources where logos or source badges are used as default covers
+    if (u.contains('novelcool.com') ||
+        u.contains('img.novelcool.com') ||
+        u.contains('vdoc.pub') ||
+        u.contains('wikisource.org') ||
+        u.contains('wikimedia.org') ||
+        u.contains('gadyakosh.org') ||
+        u.contains('kavitakosh.org') ||
+        u.contains('hindisamay.com') ||
+        u.contains('clarkesworldmagazine.com') ||
+        u.contains('strangehorizons.com') ||
+        u.contains('eastoftheweb.com') ||
+        u.contains('uncannymagazine.com') ||
+        u.contains('odiabibhaba.in') ||
+        u.contains('epustakalay.com') ||
+        u.contains('gutenberg.org') ||
+        u.contains('archive.org')) {
       return true;
     }
 

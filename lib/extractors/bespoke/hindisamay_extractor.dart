@@ -42,7 +42,8 @@ class HindiSamayExtractor implements NovelSource {
   };
 
   String _normalizeContentUrl(String url) {
-    final idMatch = RegExp(r'(?:content/|id=)(\d+)').firstMatch(url);
+    if (url.contains('content.aspx')) return url;
+    final idMatch = RegExp(r'(?:content/|contentDetail\.aspx\?id=)(\d+)').firstMatch(url);
     if (idMatch != null) {
       final workId = idMatch.group(1)!;
       final pageMatch = RegExp(r'(?:content/\d+/|pageno=)(\d+)').firstMatch(url);
@@ -168,7 +169,19 @@ class HindiSamayExtractor implements NovelSource {
         final href = a.attributes['href'] ?? '';
         final text = a.text.trim();
         if (text.isEmpty || href.isEmpty || text.length < 2) continue;
+        if (href.contains('content.aspx')) continue;
         if (text.contains('क्लिक करें') || text.contains('मुखपृष्ठ') || text.contains('आगे')) continue;
+
+        final cleanText = text.replaceAll(RegExp(r'[\(\)\[\]]'), '').trim();
+        final lowerText = cleanText.toLowerCase();
+        const categoryNames = {
+          'उपन्यास', 'कहानियाँ', 'कहानियां', 'कविता', 'नाटक', 'लेख', 'निबंध',
+          'आलोचना', 'संस्मरण', 'जीवनी', 'यात्रा वृतांत', 'व्यंग्य', 'बाल साहित्य',
+          'डायरी', 'साक्षात्कार', 'हिंदी उपन्यास', 'hindi novel', 'novel', 'stories'
+        };
+        if (categoryNames.contains(cleanText) || categoryNames.contains(lowerText)) {
+          continue;
+        }
 
         String rawUrl;
         if (href.startsWith('//')) {
@@ -257,7 +270,7 @@ class HindiSamayExtractor implements NovelSource {
         }
       }
 
-      if (title.isEmpty) {
+      if (title.isEmpty || title == 'उपन्यास' || title.toLowerCase() == 'hindi novel') {
         title = 'हिंदी रचना';
       }
       if (author.isEmpty) {
@@ -412,9 +425,15 @@ class HindiSamayExtractor implements NovelSource {
       paragraphs.add('सामग्री लोड करने में असमर्थ।');
     }
 
+    final workIdMatch = RegExp(r'(?:content/|contentDetail\.aspx\?id=)(\d+)').firstMatch(cleanUrl);
+    final baseNovelUrl = workIdMatch != null
+        ? '$baseUrl/contentDetail.aspx?id=${workIdMatch.group(1)}&pageno=1&lang=hi'
+        : cleanUrl;
+    final parentNovelId = '${id}_${baseNovelUrl.hashCode.abs()}';
+
     return ChapterContent(
       chapterId: '${id}_${cleanUrl.hashCode.abs()}',
-      novelId: '${id}_${cleanUrl.hashCode.abs()}',
+      novelId: parentNovelId,
       title: title,
       rawText: paragraphs.join('\n\n'),
       paragraphs: paragraphs,

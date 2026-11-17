@@ -951,6 +951,7 @@ class _DownloadedNovelCardState extends State<_DownloadedNovelCard> {
                       if (confirm == true && mounted) {
                         try {
                           downloadService.removeBookTask(widget.novel.id);
+                          downloadService.cancelBookDownload(widget.novel.id);
                         } catch (_) {}
                         await _storageService.deleteNovelStorage(widget.novel);
                         if (mounted) {

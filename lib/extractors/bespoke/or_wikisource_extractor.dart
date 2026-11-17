@@ -118,7 +118,7 @@ class OdiaWikisourceExtractor implements NovelSource {
       final rawTitle = item['title']?.toString() ?? '';
       if (rawTitle.isEmpty) continue;
 
-      // Ignore MediaWiki internal and system namespaces
+      // Ignore MediaWiki internal and system namespaces, including author directory pages
       if (rawTitle.startsWith('ଶ୍ରେଣୀ:') ||
           rawTitle.startsWith('ବ୍ୟବହାରକାରୀ:') ||
           rawTitle.startsWith('ଉଇକିପାଠାଗାର:') ||
@@ -128,23 +128,23 @@ class OdiaWikisourceExtractor implements NovelSource {
           rawTitle.startsWith('ସୂଚୀ:') ||
           rawTitle.startsWith('ଫାଇଲ:') ||
           rawTitle.startsWith('Special:') ||
-          rawTitle.startsWith('Help:')) {
+          rawTitle.startsWith('Help:') ||
+          rawTitle.startsWith('ଲେଖକ:')) {
         continue;
       }
 
-      var title = rawTitle;
+      var displayTitle = rawTitle;
       var author = 'ଓଡ଼ିଆ କ୍ଲାସିକ (Odia Classic)';
 
-      if (rawTitle.startsWith('ଲେଖକ:')) {
-        title = rawTitle.replaceFirst('ଲେଖକ:', '').trim();
-        author = title;
-      } else if (rawTitle.contains('/')) {
-        final parts = rawTitle.split('/');
-        title = parts[0].trim();
+      if (rawTitle.contains('/')) {
+        final parts = rawTitle.split('/').map((s) => s.trim()).toList();
+        final parent = parts.first;
+        final subwork = parts.last;
+        displayTitle = '$subwork ($parent)';
       }
 
-      final rootTitle = title.trim();
-      if (!seenRootTitles.add(rootTitle)) {
+      final key = displayTitle.trim();
+      if (!seenRootTitles.add(key)) {
         continue;
       }
 
@@ -153,15 +153,15 @@ class OdiaWikisourceExtractor implements NovelSource {
 
       final pageId = item['pageid']?.toString() ?? '';
       final novelUrl = rawTitle.contains('/')
-          ? '$baseUrl/wiki/${Uri.encodeComponent(rootTitle.replaceAll(' ', '_'))}'
+          ? '$baseUrl/wiki/${Uri.encodeComponent(rawTitle.replaceAll(' ', '_'))}'
           : (pageId.isNotEmpty
               ? '$baseUrl/?curid=$pageId'
-              : '$baseUrl/wiki/${Uri.encodeComponent(rootTitle.replaceAll(' ', '_'))}');
+              : '$baseUrl/wiki/${Uri.encodeComponent(rawTitle.replaceAll(' ', '_'))}');
 
       novels.add(Novel(
-        id: '${id}_${rootTitle.hashCode.abs()}',
+        id: '${id}_${rawTitle.hashCode.abs()}',
         sourceId: id,
-        title: rootTitle,
+        title: displayTitle,
         author: author,
         description: snippet.isNotEmpty ? snippet : 'ଓଡ଼ିଆ ଉଇକିପାଠାଗାର ସାହିତ୍ୟ କୃତି।',
         coverUrl: 'https://or.wikisource.org/static/images/project-logos/orwikisource.png',

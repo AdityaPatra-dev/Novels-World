@@ -150,7 +150,7 @@ class EPustakalayExtractor implements NovelSource {
           var src = imgElem.attributes['src'] ?? imgElem.attributes['data-src'] ?? '';
           if (src.isNotEmpty) {
             if (!src.startsWith('http')) src = '$baseUrl$src';
-            coverUrl = src.replaceAll(RegExp(r'-\d+x\d+(\.[a-zA-Z]+)$'), r'$1');
+            coverUrl = src.replaceAllMapped(RegExp(r'-\d+x\d+(\.[a-zA-Z]+)$'), (m) => m.group(1)!);
           }
         }
 
@@ -187,14 +187,36 @@ class EPustakalayExtractor implements NovelSource {
       final rawHeading = doc.querySelector('h1')?.text.trim() ?? 'Hindi Book';
       final cleanTitle = rawHeading.contains('|') ? rawHeading.split('|')[0].trim() : rawHeading;
 
-      var author = 'Unknown Author';
-      final byMatch = RegExp(r'-by-([a-z0-9-]+)/?$', caseSensitive: false).firstMatch(novelUrl);
-      if (byMatch != null) {
-        author = byMatch.group(1)!
-            .split('-')
-            .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
-            .join(' ');
+      // Extract authentic Hindi author name from .wrtrnme if available
+      var author = '';
+      final wrtrElem = doc.querySelector('.wrtrnme, .tablediv .wrtrnme');
+      if (wrtrElem != null) {
+        final authorLinks = wrtrElem.querySelectorAll('a');
+        if (authorLinks.isNotEmpty) {
+          final authorNames = authorLinks.map((a) {
+            final t = a.text.trim();
+            return t.contains('-') ? t.split('-')[0].trim() : t;
+          }).where((t) => t.isNotEmpty).toList();
+          if (authorNames.isNotEmpty) {
+            author = authorNames.join(', ');
+          }
+        }
+        if (author.isEmpty) {
+          final rawWrtr = wrtrElem.text.trim();
+          author = rawWrtr.contains('-') ? rawWrtr.split('-')[0].trim() : rawWrtr;
+        }
       }
+
+      if (author.isEmpty) {
+        final byMatch = RegExp(r'-by-([a-z0-9-]+)/?$', caseSensitive: false).firstMatch(novelUrl);
+        if (byMatch != null) {
+          author = byMatch.group(1)!
+              .split('-')
+              .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+              .join(' ');
+        }
+      }
+      if (author.isEmpty) author = 'हिंदी लेखक';
 
       // Extract high-resolution book cover
       var coverUrl = '';
@@ -203,24 +225,30 @@ class EPustakalayExtractor implements NovelSource {
         var src = coverImg.attributes['src'] ?? coverImg.attributes['data-src'] ?? '';
         if (src.isNotEmpty) {
           if (!src.startsWith('http')) src = '$baseUrl$src';
-          coverUrl = src.replaceAll(RegExp(r'-\d+x\d+(\.[a-zA-Z]+)$'), r'$1');
+          coverUrl = src.replaceAllMapped(RegExp(r'-\d+x\d+(\.[a-zA-Z]+)$'), (m) => m.group(1)!);
         }
       }
 
       // Look for PDF download URL
       String? pdfUrl;
-      final pdfAnchors = doc.querySelectorAll('a[href*=".pdf"], a[href*="archive.org/download/"]');
+      final pdfAnchors = doc.querySelectorAll('a[href*=".pdf"], a[href*="archive.org/download/"], a.ddlikn');
       for (final a in pdfAnchors) {
         final href = a.attributes['href'] ?? '';
-        if (href.isNotEmpty) {
+        if (href.isNotEmpty && (href.contains('.pdf') || href.contains('archive.org/download/'))) {
           pdfUrl = href;
           break;
         }
       }
 
-      // Extract synopsis
-      final descElem = doc.querySelector('.entry-content, .book-description, #description');
-      final desc = descElem?.querySelector('p')?.text.trim() ?? 'Hindi Book from ePustakalay collection.';
+      // Extract rich synopsis and metadata
+      var desc = '';
+      final metaDesc = doc.querySelector('meta[name="description"]')?.attributes['content']?.trim();
+      if (metaDesc != null && metaDesc.isNotEmpty) {
+        desc = metaDesc;
+      } else {
+        final descElem = doc.querySelector('.entry-content, .book-description, #description');
+        desc = descElem?.querySelector('p')?.text.trim() ?? 'ई-पुस्तकालय हिंदी डिजिटल पुस्तक संग्रह।';
+      }
 
       return Novel(
         id: '${id}_${novelUrl.hashCode.abs()}',
@@ -241,7 +269,7 @@ class EPustakalayExtractor implements NovelSource {
         id: '${id}_${novelUrl.hashCode.abs()}',
         sourceId: id,
         title: 'Hindi Book',
-        author: 'Unknown Author',
+        author: 'हिंदी लेखक',
         sourceUrl: novelUrl,
         isFullBook: true,
         bookFormat: 'pdf',
@@ -271,18 +299,21 @@ class EPustakalayExtractor implements NovelSource {
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
     final novel = await getNovelDetails(chapterUrl);
-    final text = '${novel.title}\n\nलेखक: ${novel.author}\n\nविवरण: ${novel.description}\n\nडाउनलोड लिंक: ${novel.bookDownloadUrl ?? "Direct Archive Reader"}';
+    final paragraphs = [
+      novel.title,
+      'लेखक: ${novel.author}',
+      'पुस्तक विवरण एवं विनिर्देश: ${novel.description}',
+      'ई-पुस्तकालय (ePustakalay) डिजिटल अभिलेखागार द्वारा यह ऐतिहासिक एवं दुर्लभ कृति संपूर्ण मूल पीडीएफ (PDF) संस्करण में संरक्षित है।',
+      'इस ग्रंथ के समस्त पृष्ठ, पांडुलिपि चित्र एवं मूल मुद्रित पाठ को उच्च गुणवत्ता में सुरक्षित किया गया है।',
+      'पुस्तक को सीधे इन-ऐप ब्राउज़र में ऑनलाइन पढ़ने और पृष्ठ पलटने हेतु "Preview Online" का चयन करें अथवा इसे ऑफ़लाइन सुरक्षित करने के लिए "Download Entire Book" बटन का उपयोग करें।',
+      'डिजिटल स्ट्रीम लिंक: ${novel.bookDownloadUrl ?? novel.sourceUrl}',
+    ];
     return ChapterContent(
       chapterId: '${id}_${chapterUrl.hashCode.abs()}',
       novelId: '${id}_${chapterUrl.hashCode.abs()}',
       title: novel.title,
-      rawText: text,
-      paragraphs: [
-        novel.title,
-        'लेखक: ${novel.author}',
-        novel.description,
-        'यह पुस्तक संपूर्ण पीडीएफ (PDF) प्रारूप में उपलब्ध है।',
-      ],
+      rawText: paragraphs.join('\n\n'),
+      paragraphs: paragraphs,
     );
   }
 }

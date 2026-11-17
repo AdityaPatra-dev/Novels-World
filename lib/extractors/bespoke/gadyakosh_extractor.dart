@@ -141,11 +141,20 @@ class GadyaKoshExtractor implements NovelSource {
   }
 
   Uri _parseSafeUri(String url) {
+    var clean = url.trim();
     try {
-      final decoded = Uri.decodeFull(url);
-      return Uri.parse(Uri.encodeFull(decoded));
+      return Uri.parse(clean);
     } catch (_) {
-      return Uri.parse(url);
+      try {
+        final schemeMatch = RegExp(r'^(https?://[^/]+)(.*)$').firstMatch(clean);
+        if (schemeMatch != null) {
+          final prefix = schemeMatch.group(1)!;
+          final pathAndQuery = schemeMatch.group(2)!;
+          final encodedPath = Uri.encodeFull(pathAndQuery);
+          return Uri.parse('$prefix$encodedPath');
+        }
+      } catch (_) {}
+      return Uri.parse(Uri.encodeFull(clean));
     }
   }
 
@@ -219,6 +228,16 @@ class GadyaKoshExtractor implements NovelSource {
       final heading = doc.querySelector('#firstHeading')?.text.trim() ?? 'Novel';
       final novelId = '${id}_${heading.hashCode.abs()}';
 
+      var novelTitle = heading;
+      var authorName = 'Unknown Author';
+      if (heading.contains('/')) {
+        final parts = heading.split('/').map((s) => s.trim()).toList();
+        novelTitle = parts[0];
+        if (parts.length >= 2) {
+          authorName = parts[1];
+        }
+      }
+
       // Find sub-story / sub-chapter links inside mw-content-text
       final anchors = contentElem.querySelectorAll('a[href*="/gk/"], a[href*="title="]');
       final ignoredPrefixes = [
@@ -265,6 +284,7 @@ class GadyaKoshExtractor implements NovelSource {
         final text = a.text.trim();
         final href = a.attributes['href'] ?? '';
         if (text.isEmpty || href.isEmpty) continue;
+        if (href.contains('&oldid=') || href.contains('printable=yes')) continue;
 
         String normalizedHref = href;
         try {
@@ -275,10 +295,23 @@ class GadyaKoshExtractor implements NovelSource {
           continue;
         }
 
-        // Link should contain story/chapter or author structure
-        if (text == heading || text.length < 2) continue;
+        // Exclude author bio links, the heading itself, or trivial links
+        if (text == heading ||
+            text == novelTitle ||
+            text == authorName ||
+            (authorName.isNotEmpty && (text.contains(authorName) || authorName.contains(text))) ||
+            text.length < 2) {
+          continue;
+        }
 
-        final chapterUrl = href.startsWith('http') ? href : '$baseUrl$href';
+        var cleanHref = href;
+        if (cleanHref.startsWith('/gk/') && !cleanHref.contains('index.php')) {
+          cleanHref = '/gk/index.php?title=${cleanHref.substring(4)}';
+        } else if (cleanHref.startsWith('http') && cleanHref.contains('/gk/') && !cleanHref.contains('index.php')) {
+          cleanHref = cleanHref.replaceFirst('/gk/', '/gk/index.php?title=');
+        }
+
+        final chapterUrl = cleanHref.startsWith('http') ? cleanHref : '$baseUrl$cleanHref';
         final cleanTitle = text.contains('/') ? text.split('/')[0].trim() : text;
 
         chapters.add(Chapter(
@@ -295,7 +328,7 @@ class GadyaKoshExtractor implements NovelSource {
         chapters.add(Chapter(
           id: '${id}_${novelUrl.hashCode.abs()}',
           novelId: novelId,
-          title: heading.contains('/') ? heading.split('/')[0].trim() : heading,
+          title: novelTitle.isNotEmpty ? novelTitle : heading,
           url: novelUrl,
           chapterNumber: 1.0,
         ));
@@ -310,9 +343,14 @@ class GadyaKoshExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    final response = await _client.get(_parseSafeUri(chapterUrl), headers: _headers);
+    var effectiveUrl = chapterUrl;
+    if (effectiveUrl.contains('/gk/') && !effectiveUrl.contains('index.php')) {
+      effectiveUrl = effectiveUrl.replaceFirst('/gk/', '/gk/index.php?title=');
+    }
+
+    final response = await _client.get(_parseSafeUri(effectiveUrl), headers: _headers);
     if (response.statusCode != 200) {
-      throw Exception('Failed to load chapter content from $chapterUrl');
+      throw Exception('Failed to load chapter content from $effectiveUrl');
     }
 
     final doc = html_parser.parse(response.body);

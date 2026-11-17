@@ -141,11 +141,20 @@ class KavitaKoshExtractor implements NovelSource {
   }
 
   Uri _parseSafeUri(String url) {
+    var clean = url.trim();
     try {
-      final decoded = Uri.decodeFull(url);
-      return Uri.parse(Uri.encodeFull(decoded));
+      return Uri.parse(clean);
     } catch (_) {
-      return Uri.parse(url);
+      try {
+        final schemeMatch = RegExp(r'^(https?://[^/]+)(.*)$').firstMatch(clean);
+        if (schemeMatch != null) {
+          final prefix = schemeMatch.group(1)!;
+          final pathAndQuery = schemeMatch.group(2)!;
+          final encodedPath = Uri.encodeFull(pathAndQuery);
+          return Uri.parse('$prefix$encodedPath');
+        }
+      } catch (_) {}
+      return Uri.parse(Uri.encodeFull(clean));
     }
   }
 
@@ -219,6 +228,16 @@ class KavitaKoshExtractor implements NovelSource {
       final heading = doc.querySelector('#firstHeading')?.text.trim() ?? 'Kavita';
       final novelId = '${id}_${heading.hashCode.abs()}';
 
+      var novelTitle = heading;
+      var authorName = 'Unknown Author';
+      if (heading.contains('/')) {
+        final parts = heading.split('/').map((s) => s.trim()).toList();
+        novelTitle = parts[0];
+        if (parts.length >= 2) {
+          authorName = parts[1];
+        }
+      }
+
       final anchors = contentElem.querySelectorAll('a[href*="/kk/"], a[href*="title="]');
       final ignoredPrefixes = [
         'रचनाकारों की सूची',
@@ -264,6 +283,7 @@ class KavitaKoshExtractor implements NovelSource {
         final text = a.text.trim();
         final href = a.attributes['href'] ?? '';
         if (text.isEmpty || href.isEmpty) continue;
+        if (href.contains('&oldid=') || href.contains('printable=yes')) continue;
 
         String normalizedHref = href;
         try {
@@ -274,9 +294,28 @@ class KavitaKoshExtractor implements NovelSource {
           continue;
         }
 
-        if (text == heading || text.length < 2) continue;
+        // Exclude author bio links: author names on Kavita Kosh do not have '/'
+        if (!text.contains('/') && !normalizedHref.contains('/')) {
+          continue;
+        }
 
-        final chapterUrl = href.startsWith('http') ? href : '$baseUrl$href';
+        if (text == heading ||
+            text == novelTitle ||
+            text == authorName ||
+            (authorName.isNotEmpty && (text.contains(authorName) || authorName.contains(text))) ||
+            text.contains('"') ||
+            text.length < 2) {
+          continue;
+        }
+
+        var cleanHref = href;
+        if (cleanHref.startsWith('/kk/') && !cleanHref.contains('index.php')) {
+          cleanHref = '/kk/index.php?title=${cleanHref.substring(4)}';
+        } else if (cleanHref.startsWith('http') && cleanHref.contains('/kk/') && !cleanHref.contains('index.php')) {
+          cleanHref = cleanHref.replaceFirst('/kk/', '/kk/index.php?title=');
+        }
+
+        final chapterUrl = cleanHref.startsWith('http') ? cleanHref : '$baseUrl$cleanHref';
         final cleanTitle = text.contains('/') ? text.split('/')[0].trim() : text;
 
         chapters.add(Chapter(
@@ -288,11 +327,12 @@ class KavitaKoshExtractor implements NovelSource {
         ));
       }
 
+      // If no subchapters were found, this page itself is a standalone poem / work!
       if (chapters.isEmpty) {
         chapters.add(Chapter(
           id: '${id}_${novelUrl.hashCode.abs()}',
           novelId: novelId,
-          title: heading.contains('/') ? heading.split('/')[0].trim() : heading,
+          title: novelTitle.isNotEmpty ? novelTitle : heading,
           url: novelUrl,
           chapterNumber: 1.0,
         ));
@@ -307,9 +347,14 @@ class KavitaKoshExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    final response = await _client.get(_parseSafeUri(chapterUrl), headers: _headers);
+    var effectiveUrl = chapterUrl;
+    if (effectiveUrl.contains('/kk/') && !effectiveUrl.contains('index.php')) {
+      effectiveUrl = effectiveUrl.replaceFirst('/kk/', '/kk/index.php?title=');
+    }
+
+    final response = await _client.get(_parseSafeUri(effectiveUrl), headers: _headers);
     if (response.statusCode != 200) {
-      throw Exception('Failed to load chapter content from $chapterUrl');
+      throw Exception('Failed to load chapter content from $effectiveUrl');
     }
 
     final doc = html_parser.parse(response.body);

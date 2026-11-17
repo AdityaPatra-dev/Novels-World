@@ -42,7 +42,7 @@ class HindiSamayExtractor implements NovelSource {
   };
 
   String _normalizeContentUrl(String url) {
-    if (url.contains('content.aspx')) return url;
+    if (url.contains('content.aspx') || url.contains('.cspx')) return url;
     final idMatch = RegExp(r'(?:content/|contentDetail\.aspx\?id=)(\d+)').firstMatch(url);
     if (idMatch != null) {
       final workId = idMatch.group(1)!;
@@ -51,6 +51,27 @@ class HindiSamayExtractor implements NovelSource {
       return '$baseUrl/contentDetail.aspx?id=$workId&pageno=$pageno&lang=hi';
     }
     return url;
+  }
+
+  Uri _parseSafeUri(String url) {
+    var clean = url.trim();
+    if (clean.startsWith('http://')) {
+      clean = 'https://${clean.substring(7)}';
+    }
+    try {
+      return Uri.parse(clean);
+    } catch (_) {
+      try {
+        final schemeMatch = RegExp(r'^(https?://[^/]+)(.*)$').firstMatch(clean);
+        if (schemeMatch != null) {
+          final prefix = schemeMatch.group(1)!;
+          final pathAndQuery = schemeMatch.group(2)!;
+          final encodedPath = Uri.encodeFull(pathAndQuery);
+          return Uri.parse('$prefix$encodedPath');
+        }
+      } catch (_) {}
+      return Uri.parse(Uri.encodeFull(clean));
+    }
   }
 
   @override
@@ -170,6 +191,8 @@ class HindiSamayExtractor implements NovelSource {
         final text = a.text.trim();
         if (text.isEmpty || href.isEmpty || text.length < 2) continue;
         if (href.contains('content.aspx')) continue;
+        // Strictly exclude writer/author biography listings from being extracted as empty novels
+        if (href.contains('/writer/') || href.contains('writer_details') || href.contains('writer/')) continue;
         if (text.contains('क्लिक करें') || text.contains('मुखपृष्ठ') || text.contains('आगे')) continue;
 
         final cleanText = text.replaceAll(RegExp(r'[\(\)\[\]]'), '').trim();
@@ -243,7 +266,7 @@ class HindiSamayExtractor implements NovelSource {
   Future<Novel> getNovelDetails(String novelUrl) async {
     final cleanUrl = _normalizeContentUrl(novelUrl);
     try {
-      final response = await _client.get(Uri.parse(cleanUrl), headers: _headers);
+      final response = await _client.get(_parseSafeUri(cleanUrl), headers: _headers);
       if (response.statusCode != 200) {
         throw Exception('Failed to load novel details (HTTP ${response.statusCode})');
       }
@@ -261,12 +284,19 @@ class HindiSamayExtractor implements NovelSource {
 
       if (title.isEmpty) {
         final rawDocTitle = doc.querySelector('title')?.text.trim() ?? '';
-        if (rawDocTitle.contains('-')) {
-          final parts = rawDocTitle.split('-').map((s) => s.trim()).toList();
+        final cleanDocTitle = rawDocTitle.replaceAll(RegExp(r'\s+'), ' ').trim();
+        if (cleanDocTitle.contains('-')) {
+          final parts = cleanDocTitle.split('-').map((s) => s.trim()).toList();
           author = parts[0];
           title = parts.sublist(1).join(' - ');
-        } else if (rawDocTitle.isNotEmpty && !rawDocTitle.contains('Hindi Samay')) {
-          title = rawDocTitle;
+        } else if (cleanDocTitle.isNotEmpty && !cleanDocTitle.contains('Hindi Samay')) {
+          final parts = cleanDocTitle.split(' ');
+          if (parts.length >= 2) {
+            author = parts[0];
+            title = parts.sublist(1).join(' ');
+          } else {
+            title = cleanDocTitle;
+          }
         }
       }
 
@@ -322,7 +352,7 @@ class HindiSamayExtractor implements NovelSource {
   }) async {
     final cleanUrl = _normalizeContentUrl(novelUrl);
     try {
-      final response = await _client.get(Uri.parse(cleanUrl), headers: _headers);
+      final response = await _client.get(_parseSafeUri(cleanUrl), headers: _headers);
       if (response.statusCode != 200) return [];
 
       final doc = html_parser.parse(response.body);
@@ -383,7 +413,7 @@ class HindiSamayExtractor implements NovelSource {
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
     final cleanUrl = _normalizeContentUrl(chapterUrl);
-    final response = await _client.get(Uri.parse(cleanUrl), headers: _headers);
+    final response = await _client.get(_parseSafeUri(cleanUrl), headers: _headers);
     if (response.statusCode != 200) {
       throw Exception('Failed to load chapter content from $cleanUrl (HTTP ${response.statusCode})');
     }

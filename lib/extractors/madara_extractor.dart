@@ -444,7 +444,7 @@ class MadaraExtractor implements NovelSource {
       if (ajaxResp.statusCode == 200 && ajaxResp.body.isNotEmpty) {
         final ajaxDoc = html_parser.parse(ajaxResp.body);
         final ajaxChapters = _parseChaptersFromDoc(ajaxDoc, novelId);
-        if (ajaxChapters.length > chapters.length) {
+        if (ajaxChapters.isNotEmpty && (ajaxChapters.length >= chapters.length || chapters.every((c) => c.url.endsWith('#')))) {
           chapters = ajaxChapters;
           onBatchLoaded?.call(List.from(chapters));
         }
@@ -496,11 +496,15 @@ class MadaraExtractor implements NovelSource {
       final a = el.querySelector('a');
       if (a == null) continue;
 
-      final href = a.attributes['href'] ?? '';
+      final href = (a.attributes['href'] ?? a.attributes['data-redirect'] ?? a.attributes['data-href'] ?? '').trim();
+      if (href.isEmpty || href == '#' || href.startsWith('#') || href.startsWith('javascript:')) {
+        continue;
+      }
+
       final url = _cleanUrl(href);
       final title = a.text.trim();
       if (url.isEmpty ||
-          url == '#' ||
+          url.endsWith('#') ||
           url.startsWith('javascript:') ||
           url.contains('?t=') ||
           url.contains('page=') ||
@@ -516,7 +520,10 @@ class MadaraExtractor implements NovelSource {
       seenUrls.add(url);
 
       var cleanChapterUrl = url;
-      cleanChapterUrl = cleanChapterUrl.replaceAll(RegExp(r'chapter-\d+(chapter-\d+)', caseSensitive: false), r'$1');
+      cleanChapterUrl = cleanChapterUrl.replaceAllMapped(
+        RegExp(r'chapter-\d+(chapter-\d+)', caseSensitive: false),
+        (m) => m.group(1)!,
+      );
 
       final date = el.querySelector('.chapter-release-date')?.text.trim();
       final pathSegs = Uri.parse(cleanChapterUrl).pathSegments.where((s) => s.isNotEmpty).toList();
@@ -593,22 +600,36 @@ class MadaraExtractor implements NovelSource {
     if (contentContainer != null) {
       final pTags = contentContainer.querySelectorAll('p');
       if (pTags.isNotEmpty) {
-        rawParagraphs = pTags.map((p) => p.text).toList();
-      } else {
-        // Fallback for sites that wrap lines in <div> or <span> (like Anslid)
+        final extracted = pTags
+            .map((p) => p.text.replaceAll(' ', ' ').trim())
+            .where((t) => t.isNotEmpty && t != '&nbsp;')
+            .toList();
+        if (extracted.isNotEmpty) {
+          rawParagraphs = pTags.map((p) => p.text).toList();
+        }
+      }
+
+      if (rawParagraphs.isEmpty) {
+        // Fallback for sites that wrap lines in <div> or <span> (like Anslid) or plain newlines
         final childDivs = contentContainer.querySelectorAll('div, span');
         final textLines = childDivs
-            .map((d) => d.text.trim())
-            .where((t) => t.isNotEmpty && t.length > 2)
+            .map((d) => d.text.replaceAll(' ', ' ').trim())
+            .where((t) => t.isNotEmpty && t.length > 2 && t != '&nbsp;')
             .toSet()
             .toList();
         if (textLines.length >= 5) {
           rawParagraphs = textLines;
         } else {
           final innerHtml = contentContainer.innerHtml;
-          rawParagraphs = innerHtml.split(RegExp(r'<br\s*/?>', caseSensitive: false));
-          if (rawParagraphs.length <= 1) {
-            rawParagraphs = contentContainer.text.split('\n');
+          final brSplits = innerHtml.split(RegExp(r'<br\s*/?>', caseSensitive: false));
+          if (brSplits.length > 5) {
+            rawParagraphs = brSplits;
+          } else {
+            rawParagraphs = contentContainer.text
+                .split('\n')
+                .map((s) => s.replaceAll(' ', ' ').trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
           }
         }
       }

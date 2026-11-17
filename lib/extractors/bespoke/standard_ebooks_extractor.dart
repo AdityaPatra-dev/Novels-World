@@ -120,7 +120,7 @@ class StandardEbooksExtractor implements NovelSource {
       if (segments.length >= 3 && segments[0] == 'ebooks') {
         final authorSlug = segments[1];
         final titleSlug = segments[2];
-        downloadUrl = '$baseUrl/ebooks/$authorSlug/$titleSlug/downloads/${authorSlug}_$titleSlug.epub';
+        downloadUrl = '$baseUrl/ebooks/$authorSlug/$titleSlug/downloads/${authorSlug}_$titleSlug.epub?source=download';
       }
 
       results.add(Novel(
@@ -154,8 +154,20 @@ class StandardEbooksExtractor implements NovelSource {
     final titleEl = doc.querySelector('h1, [itemprop="name"]');
     final title = titleEl?.text.trim() ?? 'Novel';
 
-    final authorEl = doc.querySelector('[itemprop="author"] a, [itemprop="author"]');
-    final author = authorEl?.text.trim() ?? 'Unknown Author';
+    final authorEl = doc.querySelector(
+      '[property="schema:author"] [property="schema:name"], [property="schema:author"], [itemprop="author"] a, [itemprop="author"], .author',
+    );
+    var author = authorEl?.text.trim() ?? '';
+    if (author.isEmpty || author.toLowerCase() == 'unknown author') {
+      final segs = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).toList();
+      if (segs.length >= 2 && segs[0] == 'ebooks') {
+        author = segs[1]
+            .split('-')
+            .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+            .join(' ');
+      }
+    }
+    if (author.isEmpty) author = 'Unknown Author';
 
     final descEl = doc.querySelector('#description, .description, [itemprop="description"]');
     final description = descEl?.text.trim() ?? '';
@@ -174,6 +186,9 @@ class StandardEbooksExtractor implements NovelSource {
     downloadUrl ??= downloadAnchors.firstOrNull?.attributes['href'];
     if (downloadUrl != null && !downloadUrl.startsWith('http')) {
       downloadUrl = '$baseUrl$downloadUrl';
+    }
+    if (downloadUrl != null && !downloadUrl.contains('source=download')) {
+      downloadUrl = downloadUrl.contains('?') ? '$downloadUrl&source=download' : '$downloadUrl?source=download';
     }
 
     final imgEl = doc.querySelector('img[itemprop="image"], .hero-image img, header img');
@@ -208,6 +223,48 @@ class StandardEbooksExtractor implements NovelSource {
     if (novelUrl.startsWith('file:') || novelUrl.startsWith('/')) {
       return LocalEpubExtractor().getChapterList(novelUrl, onBatchLoaded: onBatchLoaded);
     }
+
+    final tocUrl = novelUrl.endsWith('/text') ? novelUrl : '$novelUrl/text';
+    try {
+      final response = await _client.get(Uri.parse(tocUrl), headers: _headers).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final doc = html_parser.parse(response.body);
+        final tocNav = doc.querySelector('nav#toc, nav[epub\\:type="toc"], nav.toc');
+        if (tocNav != null) {
+          final links = tocNav.querySelectorAll('a[href]');
+          final chapters = <Chapter>[];
+          final seenUrls = <String>{};
+          int chIdx = 0;
+
+          for (final a in links) {
+            final href = a.attributes['href'] ?? '';
+            final title = a.text.trim();
+            if (href.isEmpty || title.isEmpty || href.contains('honeypot') || href.contains('uncopyright')) continue;
+
+            final cleanNovelBase = novelUrl.endsWith('/text') ? novelUrl.substring(0, novelUrl.length - 5) : novelUrl;
+            final resolvedUrl = href.startsWith('http')
+                ? href
+                : (href.startsWith('/') ? '$baseUrl$href' : '$cleanNovelBase/$href');
+            if (!seenUrls.add(resolvedUrl)) continue;
+
+            chIdx++;
+            chapters.add(Chapter(
+              id: '${id}_${resolvedUrl.hashCode.abs()}',
+              novelId: novelUrl,
+              title: title,
+              url: resolvedUrl,
+              chapterNumber: chIdx.toDouble(),
+            ));
+          }
+
+          if (chapters.isNotEmpty) {
+            onBatchLoaded?.call(chapters);
+            return chapters;
+          }
+        }
+      }
+    } catch (_) {}
+
     final slug = novelUrl.split('/').where((s) => s.isNotEmpty).lastOrNull ?? 'standard_ebook';
     final single = [
       Chapter(
@@ -227,6 +284,42 @@ class StandardEbooksExtractor implements NovelSource {
     if (chapterUrl.startsWith('file:') || chapterUrl.startsWith('/')) {
       return EpubService().loadChapterContent(chapterUrl);
     }
+
+    // If this is a specific chapter text page (e.g. /text/chapter-1 or /text/act-1)
+    if (chapterUrl.contains('/text/')) {
+      try {
+        final response = await _client.get(Uri.parse(chapterUrl), headers: _headers).timeout(const Duration(seconds: 12));
+        if (response.statusCode == 200) {
+          final doc = html_parser.parse(response.body);
+          final headingEl = doc.querySelector('h1, h2, [epub\\:type="title"], .chapter-title');
+          final title = headingEl?.text.trim() ?? 'Chapter';
+
+          final mainEl = doc.querySelector('main, article, [epub\\:type="bodymatter"], body');
+          final paragraphs = <String>[];
+          if (mainEl != null) {
+            final elements = mainEl.querySelectorAll('p, blockquote, tr');
+            for (final el in elements) {
+              el.querySelectorAll('.footnote, [epub\\:type="noteref"], [hidden], [hidden="hidden"]').forEach((e) => e.remove());
+              final text = el.text.trim();
+              if (text.isNotEmpty) {
+                paragraphs.add(text);
+              }
+            }
+          }
+
+          if (paragraphs.isNotEmpty) {
+            return ChapterContent(
+              chapterId: '${id}_${chapterUrl.hashCode.abs()}',
+              novelId: chapterUrl,
+              title: title,
+              rawText: paragraphs.join('\n\n'),
+              paragraphs: paragraphs,
+            );
+          }
+        }
+      } catch (_) {}
+    }
+
     final novel = await getNovelDetails(chapterUrl);
     return ChapterContent(
       chapterId: '${id}_${novel.id}',
@@ -238,6 +331,7 @@ class StandardEbooksExtractor implements NovelSource {
         if (novel.author.isNotEmpty) 'Author: ${novel.author}',
         if (novel.description.isNotEmpty) novel.description,
         'Free, beautifully formatted public-domain ebook edition from Standard Ebooks.',
+        'Download the complete EPUB edition to read offline with full formatting and table of contents.',
       ],
     );
   }

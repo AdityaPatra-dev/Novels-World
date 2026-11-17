@@ -324,17 +324,29 @@ class NovelFullExtractor implements NovelSource {
     }
 
     final imgEl = document.querySelector(
-      '.book img, .col-info-desc img, .pic img, .novel-cover img, .book-thumb img, .thumb img',
+      '.book img, .col-info-desc img, .pic img, .novel-cover img, .book-thumb img, .thumb img, .cover img, .poster img, figure img, img[alt*="cover"], .m-imgtxt img',
     );
     String coverUrl = '';
     if (imgEl != null) {
       coverUrl = imgEl.attributes['data-src'] ??
           imgEl.attributes['data-original'] ??
+          imgEl.attributes['data-lazy-src'] ??
+          imgEl.attributes['data-cfsrc'] ??
+          imgEl.attributes['srcset']?.split(' ').first ??
           imgEl.attributes['src'] ??
           '';
       coverUrl = _cleanUrl(coverUrl);
       if (!TextCleaner.isValidCoverUrl(coverUrl)) {
         coverUrl = '';
+      }
+    }
+    if (coverUrl.isEmpty) {
+      final ogImg = document.querySelector('meta[property="og:image"], meta[name="twitter:image"]')?.attributes['content'];
+      if (ogImg != null && ogImg.isNotEmpty) {
+        final cleanedOg = _cleanUrl(ogImg);
+        if (TextCleaner.isValidCoverUrl(cleanedOg)) {
+          coverUrl = cleanedOg;
+        }
       }
     }
 

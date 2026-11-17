@@ -553,16 +553,29 @@ class LightNovelWpExtractor implements NovelSource {
     final rawTitle = document.querySelector('h1.entry-title, .entry-title, .infox h1')?.text.trim() ?? 'Unknown Novel';
     final title = TextCleaner.cleanNovelTitle(rawTitle);
 
-    final imgEl = document.querySelector('.thumbook .thumb img, .thumb img, .entry-details img');
+    final imgEl = document.querySelector(
+      '.thumbook .thumb img, .thumb img, .entry-details img, .sertothumb img, img[class*="attachment"], img[class*="wp-post-image"], .kol-series-hero img, figure img',
+    );
     String coverUrl = '';
     if (imgEl != null) {
       coverUrl = imgEl.attributes['src'] ??
           imgEl.attributes['data-src'] ??
           imgEl.attributes['data-lazy-src'] ??
+          imgEl.attributes['data-cfsrc'] ??
+          imgEl.attributes['srcset']?.split(' ').first ??
           '';
       coverUrl = _cleanUrl(coverUrl);
       if (!TextCleaner.isValidCoverUrl(coverUrl)) {
         coverUrl = '';
+      }
+    }
+    if (coverUrl.isEmpty) {
+      final ogImg = document.querySelector('meta[property="og:image"], meta[name="twitter:image"]')?.attributes['content'];
+      if (ogImg != null && ogImg.isNotEmpty) {
+        final cleanedOg = _cleanUrl(ogImg);
+        if (TextCleaner.isValidCoverUrl(cleanedOg)) {
+          coverUrl = cleanedOg;
+        }
       }
     }
 
@@ -680,11 +693,13 @@ class LightNovelWpExtractor implements NovelSource {
         }
 
         int curPage = 2;
-        while (curPage <= maxChapterPage && curPage <= 100) {
+        // Limit initial sequential page walk to prevent hanging on massive 150-page webnovels
+        final targetMax = maxChapterPage > 5 ? 5 : maxChapterPage;
+        while (curPage <= targetMax) {
           final sep = novelUrl.contains('?') ? '&' : '?';
           final pUrl = '$novelUrl${sep}chapter_volume=__kol_all__&chapter_search&chapter_order=newest&chapter_page=$curPage#chapters';
           try {
-            final pResp = await _client.get(Uri.parse(pUrl), headers: _headers);
+            final pResp = await _client.get(Uri.parse(pUrl), headers: _headers).timeout(const Duration(seconds: 4));
             if (pResp.statusCode == 200 && pResp.body.isNotEmpty) {
               final pageChs = parseChapterList(novelUrl, pResp.body);
               if (pageChs.isEmpty) break;
@@ -698,16 +713,6 @@ class LightNovelWpExtractor implements NovelSource {
               }
               if (added) {
                 onBatchLoaded?.call(List.from(chapters));
-              }
-              // Check if this page reveals higher page numbers
-              final nextDoc = html_parser.parse(pResp.body);
-              for (final a in nextDoc.querySelectorAll('a[href*="chapter_page="]')) {
-                final href = a.attributes['href'] ?? '';
-                final m = RegExp(r'chapter_page=(\d+)').firstMatch(href);
-                if (m != null) {
-                  final p = int.tryParse(m.group(1)!);
-                  if (p != null && p > maxChapterPage) maxChapterPage = p;
-                }
               }
             } else {
               break;

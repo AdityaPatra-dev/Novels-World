@@ -48,6 +48,21 @@ class GutenbergExtractor implements NovelSource {
     'Referer': '$baseUrl/',
   };
 
+  Future<String> _fetchHtml(String url) async {
+    try {
+      final response = await _client.get(Uri.parse(url), headers: _headers);
+      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
+        return response.body;
+      }
+    } catch (_) {}
+
+    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
+    if (wvHtml != null && wvHtml.isNotEmpty) {
+      return wvHtml;
+    }
+    throw HttpException('Failed to load HTML from $url');
+  }
+
   static const String _gutenbergBase = 'https://www.gutenberg.org';
 
   static final List<Novel> _topGutenbergClassics = [
@@ -514,21 +529,28 @@ class GutenbergExtractor implements NovelSource {
     final bookNum = Uri.parse(novelUrl).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? '';
     if (bookNum.isEmpty) return [];
 
-    final htmlUrl = '$baseUrl/cache/epub/$bookNum/pg$bookNum-images.html';
-    final response = await _client.get(Uri.parse(htmlUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      // Fallback without -images
-      final fallbackUrl = '$baseUrl/cache/epub/$bookNum/pg$bookNum.html';
-      final fbResp = await _client.get(Uri.parse(fallbackUrl), headers: _headers);
-      if (fbResp.statusCode != 200) return [];
-      final chs = _extractChaptersFromHtml(fbResp.body, fallbackUrl, bookNum);
-      if (chs.isNotEmpty) onBatchLoaded?.call(chs);
-      return chs;
-    }
+    try {
+      final htmlUrl = '$baseUrl/cache/epub/$bookNum/pg$bookNum-images.html';
+      final html = await _fetchHtml(htmlUrl);
+      final chs = _extractChaptersFromHtml(html, htmlUrl, bookNum);
+      if (chs.isNotEmpty) {
+        onBatchLoaded?.call(chs);
+        return chs;
+      }
+    } catch (_) {}
 
-    final chs = _extractChaptersFromHtml(response.body, htmlUrl, bookNum);
-    if (chs.isNotEmpty) onBatchLoaded?.call(chs);
-    return chs;
+    // Fallback: provide a full book download/reading chapter
+    final fallbackChapter = [
+      Chapter(
+        id: 'gutenberg_${bookNum}_ch_1',
+        novelId: 'gutenberg_$bookNum',
+        title: 'Complete Book / EPUB Edition',
+        url: '$baseUrl/ebooks/$bookNum.epub3.images',
+        chapterNumber: 1.0,
+      ),
+    ];
+    onBatchLoaded?.call(fallbackChapter);
+    return fallbackChapter;
   }
 
   List<Chapter> _extractChaptersFromHtml(String html, String bookHtmlUrl, String bookNum) {
@@ -605,12 +627,8 @@ class GutenbergExtractor implements NovelSource {
     final anchor = uri.fragment;
     final htmlUrl = uri.replace(fragment: '').toString();
 
-    final response = await _client.get(Uri.parse(htmlUrl), headers: _headers);
-    if (response.statusCode != 200) {
-      throw HttpException('Failed to load chapter content from $chapterUrl');
-    }
-
-    final doc = html_parser.parse(response.body);
+    final html = await _fetchHtml(htmlUrl);
+    final doc = html_parser.parse(html);
     doc.querySelectorAll('.pg-boilerplate, header#pg-header, section#pg-footer').forEach((el) => el.remove());
 
     final rawParas = <String>[];

@@ -326,8 +326,10 @@ class WoopReadExtractor implements NovelSource {
     var chapterTitle = h1?.text.trim() ?? 'Chapter';
 
     // Content container
-    final container = document.querySelector('div.text-text') ??
+    final container = document.querySelector('div[class*="space-y-4"]') ??
+        document.querySelector('div.text-text') ??
         document.querySelector('div.reading-content') ??
+        document.querySelector('.prose') ??
         document.querySelector('article') ??
         document.body;
 

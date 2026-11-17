@@ -27,6 +27,8 @@ class LibGenExtractor implements NovelSource {
 
   static const List<String> mirrors = [
     'https://libgen.li',
+    'https://libgen.vg',
+    'https://libgen.bz',
   ];
 
   String _activeMirror = mirrors.first;
@@ -202,7 +204,8 @@ class LibGenExtractor implements NovelSource {
 
       // Real book page with direct download key and cover
       final bookPageUrl = '$currentBase/ads.php?md5=$md5Hash';
-      final downloadUrl = '$currentBase/get.php?md5=$md5Hash';
+      // Do not hardcode unkeyed get.php; key must be resolved from book page
+      const String? downloadUrl = null;
 
       final item = Novel(
         id: '${id}_$md5Hash',
@@ -248,7 +251,6 @@ class LibGenExtractor implements NovelSource {
     final currentBase = '${uri.scheme}://${uri.host}';
 
     http.Response? response;
-    // Try current base first, then fallback to mirrors
     final tryBases = [currentBase, ...mirrors.where((m) => m != currentBase)];
 
     for (final base in tryBases) {
@@ -256,50 +258,89 @@ class LibGenExtractor implements NovelSource {
           ? novelUrl.replaceFirst(RegExp(r'^https?://[^/]+'), base)
           : '$base/$novelUrl';
 
-      try {
-        final res = await _client
-            .get(Uri.parse(targetUrl), headers: _getHeaders(base))
-            .timeout(const Duration(seconds: 12));
-        if (res.statusCode == 200 && (res.body.contains('table') || res.body.contains('get.php') || res.body.contains('ads.php'))) {
-          response = res;
-          _activeMirror = base;
-          break;
-        }
-      } catch (_) {}
+      for (int attempt = 0; attempt < 3; attempt++) {
+        try {
+          if (attempt > 0) {
+            await Future.delayed(Duration(milliseconds: 300 * attempt));
+          }
+          final res = await _client
+              .get(Uri.parse(targetUrl), headers: _getHeaders(base))
+              .timeout(const Duration(seconds: 12));
+          if (res.statusCode == 200 &&
+              !res.body.contains('Welcome to nginx') &&
+              (res.body.contains('table') || res.body.contains('get.php') || res.body.contains('ads.php'))) {
+            response = res;
+            _activeMirror = base;
+            break;
+          }
+        } catch (_) {}
+      }
+      if (response != null) break;
     }
 
-    if (response == null || response.statusCode != 200) {
-      throw Exception('Failed to load LibGen novel details from $novelUrl');
+    if (response == null || response.statusCode != 200 || response.body.contains('Welcome to nginx')) {
+      final md5Match = RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(novelUrl);
+      final md5 = md5Match?.group(1) ?? novelUrl.hashCode.abs().toString();
+      return Novel(
+        id: '${id}_$md5',
+        sourceId: id,
+        sourceUrl: novelUrl,
+        title: 'Library Genesis Book',
+        author: 'Unknown Author',
+        description: 'Complete digital edition from Library Genesis.',
+        coverUrl: '',
+        status: 'COMPLETED',
+        isFullBook: true,
+        bookDownloadUrl: '$_activeMirror/get.php?md5=$md5',
+        bookFormat: 'epub',
+      );
     }
 
     final doc = html_parser.parse(response.body);
 
     // Look for direct get.php download button with active session key
-    final downloadAnchor = doc.querySelector('a[href*="get.php?md5="]');
+    final dlMatch = RegExp(r'href="([^"]*get\.php\?md5=[^"]*key=[^"]*)"').firstMatch(response.body) ??
+        RegExp(r"href='([^']*get\.php\?md5=[^']*key=[^']*)'").firstMatch(response.body);
     var downloadUrl = novelUrl;
-    if (downloadAnchor != null) {
-      final relHref = downloadAnchor.attributes['href'] ?? '';
-      downloadUrl = relHref.startsWith('http') ? relHref : '$_activeMirror/$relHref';
+    if (dlMatch != null) {
+      final raw = dlMatch.group(1)!;
+      downloadUrl = raw.startsWith('http')
+          ? raw
+          : (raw.startsWith('/') ? '$_activeMirror$raw' : '$_activeMirror/$raw');
     } else {
-      // If landed on edition.php or file.php, resolve underlying ads.php page to extract keyed get.php link
+      final downloadAnchor = doc.querySelector('a[href*="get.php?md5="]');
+      if (downloadAnchor != null) {
+        final relHref = downloadAnchor.attributes['href'] ?? '';
+        downloadUrl = relHref.startsWith('http')
+            ? relHref
+            : (relHref.startsWith('/') ? '$_activeMirror$relHref' : '$_activeMirror/$relHref');
+      }
+    }
+
+    // If downloadUrl does not have active session key, resolve underlying ads.php on mirror
+    if (!downloadUrl.contains('key=')) {
       final md5Match = RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(novelUrl) ??
           RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(response.body);
       if (md5Match != null) {
         final md5 = md5Match.group(1)!;
-        final adsUrl = '$_activeMirror/ads.php?md5=$md5';
-        try {
-          final adsRes = await _client
-              .get(Uri.parse(adsUrl), headers: _getHeaders(_activeMirror))
-              .timeout(const Duration(seconds: 8));
-          if (adsRes.statusCode == 200) {
-            final adsDoc = html_parser.parse(adsRes.body);
-            final dlInAds = adsDoc.querySelector('a[href*="get.php?md5="]');
-            if (dlInAds != null) {
-              final relHref = dlInAds.attributes['href'] ?? '';
-              downloadUrl = relHref.startsWith('http') ? relHref : '$_activeMirror/$relHref';
+        for (final m in [_activeMirror, ...mirrors.where((x) => x != _activeMirror)]) {
+          final adsUrl = '$m/ads.php?md5=$md5';
+          try {
+            final adsRes = await _client
+                .get(Uri.parse(adsUrl), headers: _getHeaders(m))
+                .timeout(const Duration(seconds: 8));
+            if (adsRes.statusCode == 200) {
+              final keyedMatch = RegExp(r'href="([^"]*get\.php\?md5=[^"]*key=[^"]*)"').firstMatch(adsRes.body) ??
+                  RegExp(r"href='([^']*get\.php\?md5=[^']*key=[^']*)'").firstMatch(adsRes.body);
+              if (keyedMatch != null) {
+                final raw = keyedMatch.group(1)!;
+                downloadUrl = raw.startsWith('http') ? raw : (raw.startsWith('/') ? '$m$raw' : '$m/$raw');
+                _activeMirror = m;
+                break;
+              }
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
       }
     }
 

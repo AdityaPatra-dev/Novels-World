@@ -138,7 +138,26 @@ class InternetArchiveExtractor implements NovelSource {
 
     final title = metadata['title']?.toString() ?? identifier;
     final author = metadata['creator']?.toString() ?? 'Unknown Author';
-    final description = metadata['description']?.toString() ?? '';
+    var description = metadata['description']?.toString() ?? '';
+    if (description.isEmpty) {
+      final descList = <String>[];
+      final date = metadata['date']?.toString();
+      if (date != null && date.isNotEmpty) descList.add('Published: $date');
+      final publisher = metadata['publisher']?.toString();
+      if (publisher != null && publisher.isNotEmpty) descList.add('Publisher: $publisher');
+      final lang = metadata['language']?.toString();
+      if (lang != null && lang.isNotEmpty) descList.add('Language: $lang');
+      final subject = metadata['subject'];
+      if (subject is List && subject.isNotEmpty) {
+        descList.add('Subjects: ${subject.take(5).join(", ")}');
+      } else if (subject is String && subject.isNotEmpty) {
+        descList.add('Subjects: $subject');
+      }
+
+      description = descList.isNotEmpty
+          ? 'Preserved in the Internet Archive digital collection.\n\n${descList.join(" • ")}'
+          : 'Complete public domain digital book edition preserved on the Internet Archive.';
+    }
     final coverUrl = '$baseUrl/services/img/$identifier';
 
     // Find actual unencrypted EPUB filename

@@ -252,21 +252,84 @@ class OpenLibraryExtractor implements NovelSource {
 
     final key = data['key']?.toString() ?? novelUrl;
 
-    // Resolve unencrypted EPUB download URL from editions, ocaid, or work search
+    var author = 'Unknown Author';
     String? resolvedDownloadUrl;
+
+    // Resolve unencrypted EPUB download URL from ocaid if directly present
     final ocaid = data['ocaid']?.toString();
     if (ocaid != null && ocaid.isNotEmpty && !ocaid.startsWith('isbn_') && !ocaid.contains('0000')) {
       resolvedDownloadUrl = await resolveArchiveOrgEpub(ocaid, client: _client);
     }
 
-    // Try finding IA id from search API by work key
-    if (resolvedDownloadUrl == null) {
-      final workKey = data['key']?.toString() ?? key;
-      final iaId = await resolveIaIdForWork(workKey, client: _client);
-      if (iaId != null) {
-        final dl = await resolveArchiveOrgEpub(iaId, client: _client);
-        resolvedDownloadUrl = dl ?? 'https://archive.org/download/$iaId/$iaId.epub';
+    // Query Open Library search API to get author, synopsis, and IA identifiers in one efficient request
+    final workKey = data['key']?.toString() ?? key;
+    try {
+      final cleanKey = workKey.startsWith('/') ? workKey : '/$workKey';
+      final searchUrl = 'https://openlibrary.org/search.json?q=key:%22$cleanKey%22&fields=key,ia,public_scan_b,author_name,description,first_publish_year';
+      final sRes = await _client.get(Uri.parse(searchUrl), headers: _headers).timeout(const Duration(seconds: 8));
+      if (sRes.statusCode == 200) {
+        final sData = jsonDecode(sRes.body) as Map<String, dynamic>;
+        final sDocs = sData['docs'] as List<dynamic>? ?? [];
+        if (sDocs.isNotEmpty) {
+          final doc = sDocs.first as Map<String, dynamic>;
+          final aNames = doc['author_name'];
+          if (aNames is List && aNames.isNotEmpty) {
+            author = aNames.first.toString().trim();
+          } else if (aNames is String && aNames.trim().isNotEmpty) {
+            author = aNames.trim();
+          }
+
+          if (description.isEmpty) {
+            final sDesc = doc['description'];
+            if (sDesc is String && sDesc.trim().isNotEmpty) {
+              description = sDesc.trim();
+            } else if (sDesc is Map && sDesc['value'] != null) {
+              description = sDesc['value'].toString().trim();
+            }
+          }
+
+          if (resolvedDownloadUrl == null) {
+            final iaList = doc['ia'] as List<dynamic>? ?? [];
+            for (final candidate in iaList) {
+              final idStr = candidate.toString();
+              if (idStr.isNotEmpty &&
+                  !idStr.startsWith('isbn_') &&
+                  !idStr.contains('_lcp') &&
+                  !idStr.contains('0000') &&
+                  !idStr.startsWith('bwb_')) {
+                final dl = await resolveArchiveOrgEpub(idStr, client: _client);
+                resolvedDownloadUrl = dl ?? 'https://archive.org/download/$idStr/$idStr.epub';
+                break;
+              }
+            }
+          }
+        }
       }
+    } catch (_) {}
+
+    // Fallback author resolution if still unknown
+    if (author == 'Unknown Author') {
+      final authorsList = data['authors'] as List<dynamic>?;
+      if (authorsList != null && authorsList.isNotEmpty) {
+        final firstAuthor = authorsList.first;
+        if (firstAuthor is Map && firstAuthor['author']?['key'] != null) {
+          try {
+            final aKey = firstAuthor['author']['key'].toString();
+            final aRes = await _client.get(Uri.parse('https://openlibrary.org$aKey.json'), headers: _headers).timeout(const Duration(seconds: 5));
+            if (aRes.statusCode == 200) {
+              final aData = jsonDecode(aRes.body) as Map<String, dynamic>;
+              final aName = aData['name']?.toString() ?? aData['personal_name']?.toString();
+              if (aName != null && aName.isNotEmpty) {
+                author = aName.trim();
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
+    if (description.isEmpty) {
+      description = 'Complete digital book edition from Open Library. Author: $author.';
     }
 
     if (resolvedDownloadUrl == null && cleanUrl.contains('/works/')) {
@@ -299,6 +362,7 @@ class OpenLibraryExtractor implements NovelSource {
       id: '${id}_${key.replaceAll('/', '_')}',
       sourceId: id,
       title: title,
+      author: author,
       description: description,
       coverUrl: coverUrl,
       sourceUrl: novelUrl,

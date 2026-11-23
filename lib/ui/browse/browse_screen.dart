@@ -26,7 +26,8 @@ class BrowseScreen extends StatefulWidget {
 class _BrowseScreenState extends State<BrowseScreen> {
   final TextEditingController _searchController = TextEditingController();
   late NovelSource _currentSource;
-  bool _isGlobalSearch = true;
+  bool _isGlobalSearch = false;
+  String _feedMode = 'popular'; // 'popular' or 'latest'
 
   List<Novel> _novels = [];
   bool _isLoading = true;
@@ -44,8 +45,10 @@ class _BrowseScreenState extends State<BrowseScreen> {
   void initState() {
     super.initState();
     _currentSource = SourceRegistry.getDefaultSource();
-    if (!_isGlobalSearch) {
-      _loadPopular();
+    _loadPopular();
+    if (!_prewarmingStarted && !Platform.environment.containsKey('FLUTTER_TEST')) {
+      _prewarmingStarted = true;
+      _prewarmPopularSources();
     }
   }
 
@@ -53,7 +56,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
     _prewarmTimer?.cancel();
     _prewarmTimer = Timer(const Duration(milliseconds: 1500), () async {
       if (!mounted) return;
-      final topSourceIds = ['readnovelfull', 'novelfull', 'lightnovelpub', 'royalroad', 'freewebnovel'];
+      final topSourceIds = ['readnovelfull', 'novelfull', 'openlibrary', 'odiabibhaba', 'royalroad'];
       for (final sId in topSourceIds) {
         if (!mounted) break;
         if (_sourceNovelsCache.containsKey(sId)) continue;
@@ -80,12 +83,20 @@ class _BrowseScreenState extends State<BrowseScreen> {
     super.dispose();
   }
 
+  Future<void> _loadFeed({bool forceRefresh = false}) async {
+    if (_feedMode == 'latest') {
+      await _loadLatest(forceRefresh: forceRefresh);
+    } else {
+      await _loadPopular(forceRefresh: forceRefresh);
+    }
+  }
+
   Future<void> _loadPopular({bool forceRefresh = false}) async {
-    final cached = _sourceNovelsCache[_currentSource.id];
-    final cacheTime = _sourceCacheTime[_currentSource.id];
+    final cacheKey = _currentSource.id;
+    final cached = _sourceNovelsCache[cacheKey];
+    final cacheTime = _sourceCacheTime[cacheKey];
     final isCacheValid = cached != null && cacheTime != null && DateTime.now().difference(cacheTime) < _cacheTtl;
 
-    // Instant Cache Hit: Display cached novels immediately with 0 delay
     if (!forceRefresh && cached != null && cached.isNotEmpty) {
       setState(() {
         _novels = cached;
@@ -94,7 +105,6 @@ class _BrowseScreenState extends State<BrowseScreen> {
         _isSearching = false;
       });
 
-      // Background revalidation if cache is expired
       if (!isCacheValid) {
         _revalidateInBackground(_currentSource);
       }
@@ -110,8 +120,8 @@ class _BrowseScreenState extends State<BrowseScreen> {
     try {
       final list = await _currentSource.getPopular(page: 1);
       if (list.isNotEmpty) {
-        _sourceNovelsCache[_currentSource.id] = list;
-        _sourceCacheTime[_currentSource.id] = DateTime.now();
+        _sourceNovelsCache[cacheKey] = list;
+        _sourceCacheTime[cacheKey] = DateTime.now();
       }
       if (mounted) {
         setState(() {
@@ -129,13 +139,55 @@ class _BrowseScreenState extends State<BrowseScreen> {
     }
   }
 
+  Future<void> _loadLatest({bool forceRefresh = false}) async {
+    final cacheKey = '${_currentSource.id}_latest';
+    final cached = _sourceNovelsCache[cacheKey];
+
+    if (!forceRefresh && cached != null && cached.isNotEmpty) {
+      setState(() {
+        _novels = cached;
+        _isLoading = false;
+        _errorMessage = null;
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _isSearching = false;
+    });
+
+    try {
+      final list = await _currentSource.getLatest(page: 1);
+      if (list.isNotEmpty) {
+        _sourceNovelsCache[cacheKey] = list;
+        _sourceCacheTime[cacheKey] = DateTime.now();
+      }
+      if (mounted) {
+        setState(() {
+          _novels = list;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load latest novels from ${_currentSource.name}: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _revalidateInBackground(NovelSource source) async {
     try {
       final list = await source.getPopular(page: 1);
       if (list.isNotEmpty) {
         _sourceNovelsCache[source.id] = list;
         _sourceCacheTime[source.id] = DateTime.now();
-        if (mounted && _currentSource.id == source.id && !_isSearching) {
+        if (mounted && _currentSource.id == source.id && !_isSearching && _feedMode == 'popular') {
           setState(() {
             _novels = list;
           });
@@ -147,7 +199,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
   Future<void> _performSearch(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
-      _loadPopular();
+      _loadFeed();
       return;
     }
 
@@ -187,7 +239,15 @@ class _BrowseScreenState extends State<BrowseScreen> {
       _currentSource = source;
     });
     _searchController.clear();
-    _loadPopular();
+    _loadFeed();
+  }
+
+  void _openSourceModal() {
+    SourceSelectionModal.show(
+      context: context,
+      currentSource: _currentSource,
+      onSourceSelected: _onSourceChanged,
+    );
   }
 
   Future<void> _openSourceWebView() async {
@@ -204,7 +264,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
       if (_isSearching) {
         _performSearch(_searchController.text);
       } else {
-        _loadPopular();
+        _loadFeed();
       }
     }
   }
@@ -240,7 +300,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
               backgroundColor: const Color(0xFF10B981),
             ),
           );
-          _loadPopular();
+          _loadFeed();
         }
       }
     } catch (e) {
@@ -284,7 +344,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
         ),
       );
       if (mounted) {
-        _loadPopular();
+        _loadFeed();
       }
     } catch (e) {
       scaffold.hideCurrentSnackBar();
@@ -304,25 +364,51 @@ class _BrowseScreenState extends State<BrowseScreen> {
             _isGlobalSearch = false;
           });
           if (_novels.isEmpty) {
-            _loadPopular();
-          }
-          final isTest = Platform.environment.containsKey('FLUTTER_TEST');
-          if (!_prewarmingStarted && !isTest) {
-            _prewarmingStarted = true;
-            _prewarmPopularSources();
+            _loadFeed();
           }
         },
       );
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFF0F0F16),
       appBar: AppBar(
-        title: const Text('Browse Novels', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF14141E),
+        elevation: 0,
+        titleSpacing: 16,
+        title: const Row(
+          children: [
+            Icon(Icons.explore_rounded, color: Color(0xFFA78BFA), size: 24),
+            SizedBox(width: 10),
+            Text(
+              'Browse',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
         actions: [
+          IconButton(
+            icon: Icon(
+              _feedMode == 'popular' ? Icons.local_fire_department_rounded : Icons.flash_on_rounded,
+              color: const Color(0xFFA78BFA),
+              size: 22,
+            ),
+            tooltip: _feedMode == 'popular' ? 'Feed: Popular (tap for Latest)' : 'Feed: Latest (tap for Popular)',
+            onPressed: () {
+              setState(() {
+                _feedMode = _feedMode == 'popular' ? 'latest' : 'popular';
+              });
+              _loadFeed();
+            },
+          ),
           if (!kIsWeb && _currentSource.id == 'local_epub') ...[
             IconButton(
               icon: const Icon(Icons.file_upload_outlined, color: Color(0xFFA78BFA)),
-              tooltip: 'Import EPUB File',
+              tooltip: 'Import EPUB / PDF File',
               onPressed: _importEpubFile,
             ),
             IconButton(
@@ -331,101 +417,162 @@ class _BrowseScreenState extends State<BrowseScreen> {
               onPressed: _scanDeviceEpubs,
             ),
           ],
-          IconButton(
-            icon: const Icon(Icons.travel_explore_rounded, size: 24, color: Color(0xFFA78BFA)),
-            tooltip: 'Global Search (All Sources)',
-            onPressed: () => setState(() => _isGlobalSearch = true),
-          ),
           if (!kIsWeb)
             IconButton(
-              icon: const Icon(Icons.system_update_rounded, size: 22, color: Color(0xFFA78BFA)),
-              tooltip: 'Check for Updates',
-              onPressed: () => showAppUpdateDialog(context),
-            ),
-          if (!kIsWeb)
-            IconButton(
-              icon: const Icon(Icons.public, size: 22),
+              icon: const Icon(Icons.public, size: 21, color: Colors.white70),
               tooltip: 'Open in WebView / Bypass Cloudflare',
               onPressed: _openSourceWebView,
             ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.system_update_rounded, size: 21, color: Color(0xFFA78BFA)),
+              tooltip: 'Check for Updates',
+              onPressed: () => showAppUpdateDialog(context),
+            ),
+          const SizedBox(width: 4),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(115),
+          preferredSize: const Size.fromHeight(104),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Source Selector Bar
+              // Top Partition: Explore Sources (Active) vs Global Search
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.source_rounded, size: 18, color: Color(0xFF8B5CF6)),
-                    const SizedBox(width: 8),
-                    const Text('Source:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () {
-                          SourceSelectionModal.show(
-                            context: context,
-                            currentSource: _isGlobalSearch ? null : _currentSource,
-                            onSourceSelected: _onSourceChanged,
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Container(
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A26),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E1E28),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white12),
+                            color: const Color(0xFF8B5CF6),
+                            borderRadius: BorderRadius.circular(9),
                           ),
-                          child: Row(
+                          alignment: Alignment.center,
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              if (_isGlobalSearch) ...[
-                                const Icon(Icons.travel_explore_rounded, size: 18, color: Color(0xFFA78BFA)),
-                                const SizedBox(width: 8),
-                                const Expanded(
-                                  child: Text(
-                                    'All Sources (Global Search)',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFFA78BFA),
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                              Icon(Icons.source_rounded, size: 16, color: Colors.white),
+                              SizedBox(width: 6),
+                              Text(
+                                'Explore Sources',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Colors.white,
                                 ),
-                              ] else ...[
-                                if (_currentSource.iconUrl.isNotEmpty) ...[
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Image.network(
-                                      _currentSource.iconUrl,
-                                      width: 18,
-                                      height: 18,
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, _, _) => const Icon(
-                                        Icons.auto_stories_rounded,
-                                        size: 16,
-                                        color: Color(0xFFA78BFA),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ] else ...[
-                                  const Icon(Icons.auto_stories_rounded, size: 16, color: Color(0xFFA78BFA)),
-                                  const SizedBox(width: 8),
-                                ],
-                                Expanded(
-                                  child: Text(
-                                    '${_currentSource.name} (${_currentSource.lang.toUpperCase()})',
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                                    overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => setState(() => _isGlobalSearch = true),
+                          borderRadius: BorderRadius.circular(9),
+                          child: Container(
+                            alignment: Alignment.center,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.travel_explore_rounded, size: 16, color: Colors.white.withValues(alpha: 0.7)),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Global Search',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                    color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                 ),
                               ],
-                              const SizedBox(width: 6),
-                              const Icon(Icons.unfold_more_rounded, size: 18, color: Colors.white54),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Clean Search Bar + Filter/Source Button in a single horizontal row
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: TextField(
+                          controller: _searchController,
+                          style: const TextStyle(fontSize: 14, color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Search in ${_currentSource.name}...',
+                            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
+                            prefixIcon: const Icon(Icons.search, size: 20, color: Color(0xFFA78BFA)),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18, color: Colors.white70),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      _loadFeed();
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: const Color(0xFF1E1E28),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Colors.white12),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Colors.white12),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 1.5),
+                            ),
+                          ),
+                          onSubmitted: _performSearch,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Standard Source Filter Button that opens the vertical source selector
+                    Material(
+                      color: const Color(0xFF1E1E28),
+                      borderRadius: BorderRadius.circular(10),
+                      child: InkWell(
+                        onTap: _openSourceModal,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          height: 44,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.45)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.tune_rounded, color: Color(0xFFA78BFA), size: 19),
+                              SizedBox(width: 6),
+                              Text(
+                                'Sources',
+                                style: TextStyle(
+                                  color: Color(0xFFA78BFA),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -434,62 +581,25 @@ class _BrowseScreenState extends State<BrowseScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
-
-              // Search Bar with In-Line Global Search Trigger
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search title or author...',
-                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_searchController.text.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              _loadPopular();
-                            },
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.travel_explore_rounded, size: 20, color: Color(0xFF8B5CF6)),
-                          tooltip: 'Global Search across all sources',
-                          onPressed: () => setState(() => _isGlobalSearch = true),
-                        ),
-                      ],
-                    ),
-                    filled: true,
-                    fillColor: const Color(0xFF1E1E28),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  onSubmitted: _performSearch,
-                ),
-              ),
             ],
           ),
         ),
       ),
       body: RefreshIndicator(
+        color: const Color(0xFF8B5CF6),
+        backgroundColor: const Color(0xFF1E1E28),
         onRefresh: () async {
           if (_isSearching) {
             await _performSearch(_searchController.text);
           } else {
-            await _loadPopular(forceRefresh: true);
+            await _loadFeed(forceRefresh: true);
           }
         },
         child: _buildBody(),
       ),
     );
   }
+
 
   Widget _buildBody() {
     if (_isLoading) {
@@ -523,9 +633,9 @@ class _BrowseScreenState extends State<BrowseScreen> {
                   children: [
                     Expanded(
                       child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF262636),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF262636),
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
                         ),
                       ),
                     ),
@@ -604,32 +714,15 @@ class _BrowseScreenState extends State<BrowseScreen> {
                       ),
                     ),
                   OutlinedButton.icon(
-                    onPressed: _loadPopular,
+                    onPressed: () => _loadFeed(forceRefresh: true),
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('Retry'),
                   ),
-                  if (_currentSource.id != 'readnovelfull')
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        final rnf = SourceRegistry.getSource('readnovelfull');
-                        if (rnf != null) {
-                          _onSourceChanged(rnf);
-                        }
-                      },
-                      icon: const Icon(Icons.swap_horiz, size: 16),
-                      label: const Text('Switch to ReadNovelFull'),
-                    )
-                  else
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        final novgo = SourceRegistry.getSource('novgo');
-                        if (novgo != null) {
-                          _onSourceChanged(novgo);
-                        }
-                      },
-                      icon: const Icon(Icons.swap_horiz, size: 16),
-                      label: const Text('Switch to NOVGO'),
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: _openSourceModal,
+                    icon: const Icon(Icons.swap_horiz, size: 16),
+                    label: const Text('Switch Source'),
+                  ),
                 ],
               ),
             ],
@@ -656,12 +749,12 @@ class _BrowseScreenState extends State<BrowseScreen> {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'No Local EPUBs Imported Yet',
+                  'No Local EPUBs or PDFs Imported Yet',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Import EPUB books directly from your phone (e.g. Harry Potter, Dune, Lord of the Rings) to read completely offline with Text-to-Speech support.',
+                  'Import EPUB or PDF books directly from your device storage to read completely offline with Text-to-Speech support.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, height: 1.4),
                 ),
@@ -670,7 +763,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                   ElevatedButton.icon(
                     onPressed: _importEpubFile,
                     icon: const Icon(Icons.file_upload_outlined, size: 18),
-                    label: const Text('Import EPUB File', style: TextStyle(fontWeight: FontWeight.bold)),
+                    label: const Text('Import EPUB / PDF File', style: TextStyle(fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF8B5CF6),
                       foregroundColor: Colors.white,
@@ -714,7 +807,6 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Responsive grid columns: 2 on phone, 3 on tablet, 4+ on laptop
         int crossAxisCount = 2;
         if (constraints.maxWidth > 900) {
           crossAxisCount = 5;

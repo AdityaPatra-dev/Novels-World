@@ -696,7 +696,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     }
 
     final readerProvider = context.read<ReaderProvider>();
-    await readerProvider.initializeNovelReader(
+    final initFuture = readerProvider.initializeNovelReader(
       novel: _novel,
       chapters: _chapters,
       initialChapter: chapter,
@@ -707,6 +707,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
         context,
         MaterialPageRoute(builder: (context) => const ReaderScreen()),
       );
+      await initFuture;
       if (mounted) {
         _loadReadingProgress();
       }

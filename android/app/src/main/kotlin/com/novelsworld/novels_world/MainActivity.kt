@@ -2,6 +2,7 @@ package com.novelsworld.novels_world
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.Handler
@@ -13,6 +14,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
+import com.googlecode.tesseract.android.TessBaseAPI
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -158,6 +160,7 @@ class MainActivity : AudioServiceActivity() {
                     val script = call.argument<String>("script") ?: "latin"
                     val dpi = call.argument<Int>("dpi") ?: 150
                     val maxPages = call.argument<Int>("maxPages") ?: 1000
+                    val tessDataDir = call.argument<String>("tessDataDir") ?: ""
 
                     if (filePath == null || outputDir == null) {
                         result.error("INVALID_ARGUMENT", "filePath and outputDir must not be null", null)
@@ -168,6 +171,8 @@ class MainActivity : AudioServiceActivity() {
                     Thread {
                         var pfd: ParcelFileDescriptor? = null
                         var renderer: PdfRenderer? = null
+                        var tess: TessBaseAPI? = null
+                        var recognizer: com.google.mlkit.vision.text.TextRecognizer? = null
                         try {
                             val file = File(filePath)
                             if (!file.exists()) {
@@ -179,10 +184,22 @@ class MainActivity : AudioServiceActivity() {
                                 outDir.mkdirs()
                             }
 
-                            val recognizer = if (script == "devanagari") {
-                                TextRecognition.getClient(DevanagariTextRecognizerOptions.Builder().build())
-                            } else {
-                                TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                            val isTesseract = script.startsWith("ori") || (script.startsWith("hin") && tessDataDir.isNotEmpty() && File(tessDataDir, "tessdata/hin.traineddata").exists())
+
+                            if (isTesseract && tessDataDir.isNotEmpty()) {
+                                tess = TessBaseAPI()
+                                val initialized = tess.init(tessDataDir, script)
+                                if (!initialized) {
+                                    tess.recycle()
+                                    tess = null
+                                }
+                            }
+                            if (tess == null) {
+                                recognizer = if (script == "devanagari") {
+                                    TextRecognition.getClient(DevanagariTextRecognizerOptions.Builder().build())
+                                } else {
+                                    TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                                }
                             }
 
                             pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -203,9 +220,27 @@ class MainActivity : AudioServiceActivity() {
 
                                 var extractedText = ""
                                 try {
-                                    val inputImage = InputImage.fromBitmap(bitmap, 0)
-                                    val visionText = Tasks.await(recognizer.process(inputImage))
-                                    extractedText = visionText.text ?: ""
+                                    val maxDim = maxOf(width, height)
+                                    val ocrBitmap = if (maxDim > 1024) {
+                                        val ocrScale = 1024.0f / maxDim.toFloat()
+                                        Bitmap.createScaledBitmap(bitmap, (width * ocrScale).toInt(), (height * ocrScale).toInt(), true)
+                                    } else {
+                                        bitmap
+                                    }
+
+                                    if (tess != null) {
+                                        tess.setImage(ocrBitmap)
+                                        extractedText = tess.utF8Text
+                                        tess.clear()
+                                    } else if (recognizer != null) {
+                                        val inputImage = InputImage.fromBitmap(ocrBitmap, 0)
+                                        val visionText = Tasks.await(recognizer.process(inputImage))
+                                        extractedText = visionText.text ?: ""
+                                    }
+
+                                    if (ocrBitmap != bitmap) {
+                                        ocrBitmap.recycle()
+                                    }
                                 } catch (_: Exception) {}
 
                                 var savedImagePath = ""
@@ -228,7 +263,8 @@ class MainActivity : AudioServiceActivity() {
                                 pagesResult.add(pageMap)
                             }
 
-                            recognizer.close()
+                            tess?.recycle()
+                            recognizer?.close()
                             renderer.close()
                             renderer = null
                             pfd.close()
@@ -237,8 +273,88 @@ class MainActivity : AudioServiceActivity() {
                             mainHandler.post { result.success(pagesResult) }
                         } catch (e: Exception) {
                             try {
+                                tess?.recycle()
+                                recognizer?.close()
                                 renderer?.close()
                                 pfd?.close()
+                            } catch (_: Exception) {}
+                            mainHandler.post { result.error("OCR_ERROR", e.message, null) }
+                        }
+                    }.start()
+                }
+                "extractTextFromImages" -> {
+                    val imagePaths = call.argument<List<String>>("imagePaths") ?: emptyList()
+                    val script = call.argument<String>("script") ?: "latin"
+                    val tessDataDir = call.argument<String>("tessDataDir") ?: ""
+
+                    val mainHandler = Handler(Looper.getMainLooper())
+                    Thread {
+                        var tess: TessBaseAPI? = null
+                        var recognizer: com.google.mlkit.vision.text.TextRecognizer? = null
+                        try {
+                            val isTesseract = script.startsWith("ori") || (script.startsWith("hin") && tessDataDir.isNotEmpty() && File(tessDataDir, "tessdata/hin.traineddata").exists())
+                            if (isTesseract && tessDataDir.isNotEmpty()) {
+                                tess = TessBaseAPI()
+                                val initialized = tess.init(tessDataDir, script)
+                                if (!initialized) {
+                                    tess.recycle()
+                                    tess = null
+                                }
+                            }
+                            if (tess == null) {
+                                recognizer = if (script == "devanagari") {
+                                    TextRecognition.getClient(DevanagariTextRecognizerOptions.Builder().build())
+                                } else {
+                                    TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                                }
+                            }
+
+                            val results = ArrayList<Map<String, Any>>()
+                            for (path in imagePaths) {
+                                val imgFile = File(path)
+                                var text = ""
+                                if (imgFile.exists()) {
+                                    val bitmap = BitmapFactory.decodeFile(imgFile.absolutePath)
+                                    if (bitmap != null) {
+                                        val maxDim = maxOf(bitmap.width, bitmap.height)
+                                        val ocrBitmap = if (maxDim > 1024) {
+                                            val ocrScale = 1024.0f / maxDim.toFloat()
+                                            Bitmap.createScaledBitmap(bitmap, (bitmap.width * ocrScale).toInt(), (bitmap.height * ocrScale).toInt(), true)
+                                        } else {
+                                            bitmap
+                                        }
+
+                                        try {
+                                            if (tess != null) {
+                                                tess.setImage(ocrBitmap)
+                                                text = tess.utF8Text
+                                                tess.clear()
+                                            } else if (recognizer != null) {
+                                                val inputImage = InputImage.fromBitmap(ocrBitmap, 0)
+                                                val visionText = Tasks.await(recognizer.process(inputImage))
+                                                text = visionText.text ?: ""
+                                            }
+                                        } catch (_: Exception) {}
+
+                                        if (ocrBitmap != bitmap) {
+                                            ocrBitmap.recycle()
+                                        }
+                                        bitmap.recycle()
+                                    }
+                                }
+                                val item = HashMap<String, Any>()
+                                item["imagePath"] = path
+                                item["text"] = text
+                                results.add(item)
+                            }
+
+                            tess?.recycle()
+                            recognizer?.close()
+                            mainHandler.post { result.success(results) }
+                        } catch (e: Exception) {
+                            try {
+                                tess?.recycle()
+                                recognizer?.close()
                             } catch (_: Exception) {}
                             mainHandler.post { result.error("OCR_ERROR", e.message, null) }
                         }

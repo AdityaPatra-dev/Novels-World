@@ -229,9 +229,9 @@ class ReaderProvider extends ChangeNotifier {
       ChapterContent? loadedContent = await _storage.getCachedChapterContent(chapter.id);
       if (loadedContent != null &&
           (loadedContent.paragraphs.isEmpty ||
+              loadedContent.paragraphs.every((p) => p.startsWith('[IMAGE:')) ||
               (loadedContent.paragraphs.length == 1 &&
-                  (loadedContent.paragraphs.first.contains('contains no text content') ||
-                      loadedContent.paragraphs.first.startsWith('[IMAGE:'))))) {
+                  loadedContent.paragraphs.first.contains('contains no text content')))) {
         loadedContent = null;
       }
 

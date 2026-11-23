@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 /// Represents a single page with extracted OCR text and optional image asset.
 class PdfOcrPage {
@@ -104,8 +106,91 @@ class PdfPageRenderer {
     return [];
   }
 
+  /// Ensures Tesseract traineddata for [lang] is present on device.
+  /// Downloads from official GitHub fast tessdata if not already present.
+  /// Returns the base directory whose child is 'tessdata'.
+  static Future<String?> ensureTessData(String lang) async {
+    if (kIsWeb) return null;
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+      final baseDir = Directory('${docDir.path}/tesseract');
+      final tessdataDir = Directory('${baseDir.path}/tessdata');
+      if (!await tessdataDir.exists()) {
+        await tessdataDir.create(recursive: true);
+      }
+      final targetFile = File('${tessdataDir.path}/$lang.traineddata');
+      if (!await targetFile.exists() || await targetFile.length() < 1000) {
+        debugPrint('[PdfPageRenderer] Downloading tessdata for $lang...');
+        final url = 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$lang.traineddata';
+        final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 45));
+        if (resp.statusCode == 200 && resp.bodyBytes.isNotEmpty) {
+          await targetFile.writeAsBytes(resp.bodyBytes);
+          debugPrint('[PdfPageRenderer] Downloaded tessdata for $lang: ${resp.bodyBytes.length} bytes');
+        } else {
+          debugPrint('[PdfPageRenderer] Failed to download tessdata for $lang: status ${resp.statusCode}');
+          return null;
+        }
+      }
+      return baseDir.path;
+    } catch (e) {
+      debugPrint('[PdfPageRenderer] ensureTessData error: $e');
+      return null;
+    }
+  }
+
+  /// Extracts text from a list of image paths using on-device OCR (ML Kit or Tesseract).
+  static Future<List<Map<String, String>>> extractTextFromImages(
+    List<String> imagePaths, {
+    String script = 'latin',
+    String? tessDataDir,
+  }) async {
+    if (kIsWeb || imagePaths.isEmpty) return [];
+
+    if (Platform.isAndroid) {
+      try {
+        final raw = await _channel.invokeListMethod<Map>('extractTextFromImages', {
+          'imagePaths': imagePaths,
+          'script': script,
+          'tessDataDir': ?tessDataDir,
+        });
+        if (raw != null) {
+          return raw.map((m) => {
+            'imagePath': (m['imagePath'] as String?) ?? '',
+            'text': (m['text'] as String?) ?? '',
+          }).toList();
+        }
+      } catch (e) {
+        debugPrint('[PdfPageRenderer] extractTextFromImages error on Android: $e');
+      }
+    } else if (Platform.isLinux || Platform.isMacOS) {
+      final results = <Map<String, String>>[];
+      for (final imgPath in imagePaths) {
+        var text = '';
+        try {
+          final outTxtBase = '${imgPath}_ocr';
+          final lang = script.startsWith('ori') ? 'ori' : (script.startsWith('hin') ? 'hin' : 'eng');
+          final ocrRes = await Process.run('tesseract', [imgPath, outTxtBase, '-l', lang]);
+          if (ocrRes.exitCode == 0) {
+            final txtFile = File('$outTxtBase.txt');
+            if (await txtFile.exists()) {
+              text = await txtFile.readAsString();
+              try {
+                await txtFile.delete();
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+        results.add({'imagePath': imgPath, 'text': text});
+      }
+      return results;
+    }
+
+    return [];
+  }
+
   /// Extracts text and page illustrations from a PDF file using on-device OCR.
-  /// On Android, uses Google ML Kit Text Recognition running directly on in-memory bitmaps.
+  /// On Android, uses Google ML Kit Text Recognition running directly on in-memory bitmaps,
+  /// or Tesseract OCR for Indic scripts (such as Odia 'ori' and Hindi 'hin').
   /// Returns structured [PdfOcrPage] items containing cleaned text paragraphs.
   static Future<List<PdfOcrPage>> extractPagesWithOcr(
     String filePath,
@@ -113,6 +198,7 @@ class PdfPageRenderer {
     String script = 'latin',
     int dpi = 150,
     int maxPages = 1000,
+    String? tessDataDir,
   }) async {
     if (kIsWeb) return [];
 
@@ -129,6 +215,7 @@ class PdfPageRenderer {
           'script': script,
           'dpi': dpi,
           'maxPages': maxPages,
+          'tessDataDir': ?tessDataDir,
         });
 
         if (rawList != null) {
@@ -151,7 +238,8 @@ class PdfPageRenderer {
           final imgPath = imgPaths[i];
           final outTxtBase = '${outDir.path}/page_${i + 1}_ocr';
           var text = '';
-          final ocrRes = await Process.run('tesseract', [imgPath, outTxtBase, '-l', 'eng']);
+          final lang = script.startsWith('ori') ? 'ori' : (script.startsWith('hin') ? 'hin' : 'eng');
+          final ocrRes = await Process.run('tesseract', [imgPath, outTxtBase, '-l', lang]);
           if (ocrRes.exitCode == 0) {
             final txtFile = File('$outTxtBase.txt');
             if (await txtFile.exists()) {

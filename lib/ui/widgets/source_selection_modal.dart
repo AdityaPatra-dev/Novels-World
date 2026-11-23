@@ -75,6 +75,10 @@ class _SourceSelectionModalState extends State<SourceSelectionModal> {
     langs.sort((a, b) {
       if (a == 'en') return -1;
       if (b == 'en') return 1;
+      if (a == 'or') return -1;
+      if (b == 'or') return 1;
+      if (a == 'hi') return -1;
+      if (b == 'hi') return 1;
       return a.compareTo(b);
     });
     _availableLanguages = langs;
@@ -108,9 +112,9 @@ class _SourceSelectionModalState extends State<SourceSelectionModal> {
       case 'th':
         return '🇹🇭 Thai';
       case 'hi':
-        return '🇮🇳 Hindi';
+        return '🇮🇳 Hindi (हिन्दी)';
       case 'or':
-        return '🇮🇳 Odia';
+        return '🇮🇳 Odia (ଓଡ଼ିଆ)';
       case 'zh':
         return '🇨🇳 Chinese';
       case 'ko':

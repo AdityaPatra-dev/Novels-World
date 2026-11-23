@@ -552,9 +552,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
       // Render embedded local images (illustrations, cover art)
       if (text.startsWith('[IMAGE:file://') || text.startsWith('[IMAGE:')) {
-        final rawPath = text.startsWith('[IMAGE:file://')
-            ? text.substring(14, text.endsWith(']') ? text.length - 1 : text.length)
-            : text.substring(7, text.endsWith(']') ? text.length - 1 : text.length);
+        String rawPath;
+        if (text.startsWith('[IMAGE:file://')) {
+          final uriStr = text.substring(7, text.endsWith(']') ? text.length - 1 : text.length);
+          try {
+            rawPath = Uri.parse(uriStr).toFilePath();
+          } catch (_) {
+            rawPath = uriStr.replaceFirst('file://', '');
+          }
+        } else {
+          rawPath = text.substring(7, text.endsWith(']') ? text.length - 1 : text.length);
+        }
         final file = File(rawPath);
         if (file.existsSync()) {
           widgets.add(

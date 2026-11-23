@@ -55,4 +55,5 @@ flutter {
 dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.8.0")
 }

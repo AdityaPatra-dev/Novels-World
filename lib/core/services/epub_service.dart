@@ -429,24 +429,30 @@ class EpubService {
         );
       }
     } else {
-      // Scanned document or image-based PDF: extract text via on-device OCR
+      // Scanned document or image-based PDF: extract text via on-device OCR or high-speed renderer
       final pagesDir = Directory('${bookDir.path}/pages');
+      final isOdia = (originalNovel?.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or') == true) ||
+          (originalNovel?.id.startsWith('or_') == true || originalNovel?.id.startsWith('odiabibhaba') == true) ||
+          (originalNovel?.title.runes.any((r) => r >= 0x0B00 && r <= 0x0B7F) == true);
       final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
           (originalNovel?.id.startsWith('hindisamay') == true ||
               originalNovel?.id.startsWith('gadyakosh') == true ||
               originalNovel?.id.startsWith('kavitakosh') == true ||
               originalNovel?.id.startsWith('epustakalay') == true);
-      final ocrScript = isHindi ? 'devanagari' : 'latin';
 
       List<PdfOcrPage> ocrPages = [];
-      try {
-        ocrPages = await PdfPageRenderer.extractPagesWithOcr(
-          docCopy.path,
-          pagesDir.path,
-          script: ocrScript,
-        );
-      } catch (e) {
-        debugPrint('[EpubService] Native OCR extraction failed: $e');
+      // ML Kit Text Recognition supports Latin (English) and Devanagari (Hindi). It does not have an Odia model.
+      if (!isOdia) {
+        final ocrScript = isHindi ? 'devanagari' : 'latin';
+        try {
+          ocrPages = await PdfPageRenderer.extractPagesWithOcr(
+            docCopy.path,
+            pagesDir.path,
+            script: ocrScript,
+          );
+        } catch (e) {
+          debugPrint('[EpubService] Native OCR extraction failed: $e');
+        }
       }
 
       if (ocrPages.isNotEmpty) {
@@ -510,14 +516,19 @@ class EpubService {
           }
         }
       } else {
-        // Fallback: extract JPEG byte streams via PdfBookParser
-        final imagePages = PdfBookParser.extractAllImages(pdfBytes);
-        if (imagePages.isNotEmpty) {
+        // High-speed native page rendering (for Odia or visual archives)
+        try {
+          renderedImagePaths = await PdfPageRenderer.renderPages(docCopy.path, pagesDir.path);
+        } catch (e) {
+          debugPrint('[EpubService] Native PdfPageRenderer failed: $e');
+        }
+
+        if (renderedImagePaths.isNotEmpty) {
           const pagesPerChapter = 5;
-          final totalChapters = (imagePages.length / pagesPerChapter).ceil();
+          final totalChapters = (renderedImagePaths.length / pagesPerChapter).ceil();
           for (int c = 0; c < totalChapters; c++) {
             final startIdx = c * pagesPerChapter;
-            final endIdx = (startIdx + pagesPerChapter > imagePages.length) ? imagePages.length : startIdx + pagesPerChapter;
+            final endIdx = (startIdx + pagesPerChapter > renderedImagePaths.length) ? renderedImagePaths.length : startIdx + pagesPerChapter;
             final chapterIndex = c + 1;
             final chapterTitle = 'Chapter $chapterIndex (Pages ${startIdx + 1}-$endIdx)';
             final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
@@ -531,11 +542,8 @@ class EpubService {
             sb.writeln('<h2>$chapterTitle</h2>');
 
             for (int imgIdx = startIdx; imgIdx < endIdx; imgIdx++) {
-              final imgFile = File('${bookDir.path}/page_${imgIdx + 1}.jpg');
-              if (!await imgFile.exists()) {
-                await imgFile.writeAsBytes(imagePages[imgIdx]);
-              }
-              sb.writeln('<p>[IMAGE:file://${imgFile.path}]</p>');
+              final imgPath = renderedImagePaths[imgIdx];
+              sb.writeln('<p>[IMAGE:file://$imgPath]</p>');
             }
 
             sb.writeln('</body></html>');
@@ -551,42 +559,104 @@ class EpubService {
               ),
             );
           }
-        } else {
-          // Fallback with authentic localized metadata
-          final isOdia = (originalNovel?.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or') == true) ||
-              (originalNovel?.id.startsWith('or_') == true || originalNovel?.id.startsWith('odiabibhaba') == true);
-          final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
-              (originalNovel?.id.startsWith('hindisamay') == true ||
-                  originalNovel?.id.startsWith('gadyakosh') == true ||
-                  originalNovel?.id.startsWith('kavitakosh') == true ||
-                  originalNovel?.id.startsWith('epustakalay') == true);
 
-          final title = isOdia ? 'ସମ୍ପୂର୍ଣ୍ଣ ଗ୍ରନ୍ଥ ବିବରଣୀ' : (isHindi ? 'सम्पूर्ण ग्रन्थ विवरण' : 'Document Overview');
-          final chapterFile = File('${chaptersDir.path}/chapter_1.xhtml');
-          final sb = StringBuffer();
-          sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
-          sb.writeln('<!DOCTYPE html>');
-          sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
-          sb.writeln('<head><title>$title</title></head>');
-          sb.writeln('<body>');
-          sb.writeln('<h2>$title</h2>');
-          if (originalNovel?.title != null) sb.writeln('<p>${_escapeHtml(originalNovel!.title)}</p>');
-          if (originalNovel?.author != null) {
-            sb.writeln('<p>${isOdia ? "ରଚୟିତା: " : (isHindi ? "लेखक: " : "Author: ")}${_escapeHtml(originalNovel!.author)}</p>');
-          }
-          if (originalNovel?.description != null) sb.writeln('<p>${_escapeHtml(originalNovel!.description)}</p>');
-          sb.writeln('</body></html>');
-          await chapterFile.writeAsString(sb.toString());
-
-          chapters.add(
-            Chapter(
-              id: '${novelId}_ch_1',
-              novelId: novelId,
-              title: title,
-              url: chapterFile.uri.toString(),
-              chapterNumber: 1.0,
-            ),
+          // Trigger progressive background text extraction for all chapters
+          extractBookTextInBackground(
+            bookDir,
+            script: isOdia ? 'ori' : (isHindi ? 'devanagari' : 'latin'),
           );
+
+          if (coverUrl.isEmpty && renderedImagePaths.isNotEmpty) {
+            final firstImg = File(renderedImagePaths.first);
+            if (await firstImg.exists()) {
+              final coverFile = File('${bookDir.path}/cover.jpg');
+              try {
+                await firstImg.copy(coverFile.path);
+                coverUrl = coverFile.uri.toString();
+              } catch (_) {
+                coverUrl = firstImg.uri.toString();
+              }
+            }
+          }
+        } else {
+          // Fallback: extract JPEG byte streams via PdfBookParser
+          final imagePages = PdfBookParser.extractAllImages(pdfBytes);
+          if (imagePages.isNotEmpty) {
+            const pagesPerChapter = 5;
+            final totalChapters = (imagePages.length / pagesPerChapter).ceil();
+            for (int c = 0; c < totalChapters; c++) {
+              final startIdx = c * pagesPerChapter;
+              final endIdx = (startIdx + pagesPerChapter > imagePages.length) ? imagePages.length : startIdx + pagesPerChapter;
+              final chapterIndex = c + 1;
+              final chapterTitle = 'Chapter $chapterIndex (Pages ${startIdx + 1}-$endIdx)';
+              final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
+
+              final sb = StringBuffer();
+              sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+              sb.writeln('<!DOCTYPE html>');
+              sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+              sb.writeln('<head><title>$chapterTitle</title></head>');
+              sb.writeln('<body>');
+              sb.writeln('<h2>$chapterTitle</h2>');
+
+              for (int imgIdx = startIdx; imgIdx < endIdx; imgIdx++) {
+                final imgFile = File('${bookDir.path}/page_${imgIdx + 1}.jpg');
+                if (!await imgFile.exists()) {
+                  await imgFile.writeAsBytes(imagePages[imgIdx]);
+                }
+                sb.writeln('<p>[IMAGE:file://${imgFile.path}]</p>');
+              }
+
+              sb.writeln('</body></html>');
+              await chapterFile.writeAsString(sb.toString());
+
+              chapters.add(
+                Chapter(
+                  id: '${novelId}_ch_$chapterIndex',
+                  novelId: novelId,
+                  title: chapterTitle,
+                  url: chapterFile.uri.toString(),
+                  chapterNumber: chapterIndex.toDouble(),
+                ),
+              );
+            }
+          } else {
+            // Fallback with authentic localized metadata
+            final isOdia = (originalNovel?.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or') == true) ||
+                (originalNovel?.id.startsWith('or_') == true || originalNovel?.id.startsWith('odiabibhaba') == true);
+            final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
+                (originalNovel?.id.startsWith('hindisamay') == true ||
+                    originalNovel?.id.startsWith('gadyakosh') == true ||
+                    originalNovel?.id.startsWith('kavitakosh') == true ||
+                    originalNovel?.id.startsWith('epustakalay') == true);
+
+            final title = isOdia ? 'ସମ୍ପୂର୍ଣ୍ଣ ଗ୍ରନ୍ଥ ବିବରଣୀ' : (isHindi ? 'सम्पूर्ण ग्रन्थ विवरण' : 'Document Overview');
+            final chapterFile = File('${chaptersDir.path}/chapter_1.xhtml');
+            final sb = StringBuffer();
+            sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+            sb.writeln('<!DOCTYPE html>');
+            sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+            sb.writeln('<head><title>$title</title></head>');
+            sb.writeln('<body>');
+            sb.writeln('<h2>$title</h2>');
+            if (originalNovel?.title != null) sb.writeln('<p>${_escapeHtml(originalNovel!.title)}</p>');
+            if (originalNovel?.author != null) {
+              sb.writeln('<p>${isOdia ? "ରଚୟିତା: " : (isHindi ? "लेखକ: " : "Author: ")}${_escapeHtml(originalNovel!.author)}</p>');
+            }
+            if (originalNovel?.description != null) sb.writeln('<p>${_escapeHtml(originalNovel!.description)}</p>');
+            sb.writeln('</body></html>');
+            await chapterFile.writeAsString(sb.toString());
+
+            chapters.add(
+              Chapter(
+                id: '${novelId}_ch_1',
+                novelId: novelId,
+                title: title,
+                url: chapterFile.uri.toString(),
+                chapterNumber: 1.0,
+              ),
+            );
+          }
         }
       }
     }
@@ -675,6 +745,163 @@ class EpubService {
     return validLines.join('\n');
   }
 
+  static List<String> _groupOcrLinesToParagraphs(String text) {
+    final lines = text.split('\n').map((l) => l.trim()).toList();
+    final paragraphs = <String>[];
+    final currentPara = StringBuffer();
+
+    for (final line in lines) {
+      if (line.isEmpty) {
+        if (currentPara.isNotEmpty) {
+          paragraphs.add(currentPara.toString().trim());
+          currentPara.clear();
+        }
+        continue;
+      }
+
+      if (line.startsWith('Digitized by') || line.length < 2) {
+        continue;
+      }
+
+      if (currentPara.isNotEmpty) {
+        currentPara.write(' ');
+      }
+      currentPara.write(line);
+
+      if (line.endsWith('।') || line.endsWith('.') || line.endsWith('?') || line.endsWith('!')) {
+        if (currentPara.length > 80) {
+          paragraphs.add(currentPara.toString().trim());
+          currentPara.clear();
+        }
+      }
+    }
+
+    if (currentPara.isNotEmpty) {
+      paragraphs.add(currentPara.toString().trim());
+    }
+
+    return paragraphs.where((p) => p.length >= 3).toList();
+  }
+
+  /// Converts an image-based chapter XHTML to real text using on-device OCR (Tesseract / ML Kit).
+  static Future<bool> ocrChapterFile(File chapterFile, {String? defaultScript}) async {
+    try {
+      if (!await chapterFile.exists()) return false;
+      final rawHtml = await chapterFile.readAsString();
+      final doc = html_parser.parse(rawHtml);
+      final pElements = doc.querySelectorAll('p');
+
+      final imagePaths = <String>[];
+      for (final p in pElements) {
+        final text = p.text.trim();
+        if (text.startsWith('[IMAGE:file://') || text.startsWith('[IMAGE:')) {
+          final uriStr = text.startsWith('[IMAGE:file://')
+              ? text.substring(7, text.endsWith(']') ? text.length - 1 : text.length)
+              : text.substring(7, text.endsWith(']') ? text.length - 1 : text.length);
+          try {
+            final path = Uri.parse(uriStr).toFilePath();
+            if (File(path).existsSync()) {
+              imagePaths.add(path);
+            }
+          } catch (_) {
+            final path = uriStr.replaceFirst('file://', '');
+            if (File(path).existsSync()) {
+              imagePaths.add(path);
+            }
+          }
+        }
+      }
+
+      if (imagePaths.isEmpty) return false;
+
+      String script = defaultScript ?? 'latin';
+      if (defaultScript == null) {
+        final lowerPath = chapterFile.path.toLowerCase();
+        if (lowerPath.contains('odiabibhaba') || lowerPath.contains('odia') || lowerPath.contains('or_')) {
+          script = 'ori';
+        } else if (lowerPath.contains('hindi') || lowerPath.contains('epustakalay') || lowerPath.contains('hindisamay')) {
+          script = 'devanagari';
+        }
+      }
+
+      String? tessDataDir;
+      if (script.startsWith('ori')) {
+        tessDataDir = await PdfPageRenderer.ensureTessData('ori');
+        await PdfPageRenderer.ensureTessData('eng');
+        script = 'ori+eng';
+      }
+
+      final ocrResults = await PdfPageRenderer.extractTextFromImages(
+        imagePaths,
+        script: script,
+        tessDataDir: tessDataDir,
+      );
+
+      final hasValidText = ocrResults.any((r) => (r['text'] ?? '').trim().length > 40);
+      if (!hasValidText) return false;
+
+      final title = doc.querySelector('title')?.text ?? doc.querySelector('h2')?.text ?? 'Chapter';
+      final sb = StringBuffer();
+      sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
+      sb.writeln('<!DOCTYPE html>');
+      sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
+      sb.writeln('<head><title>$title</title></head>');
+      sb.writeln('<body>');
+      sb.writeln('<h2>$title</h2>');
+
+      for (int i = 0; i < ocrResults.length; i++) {
+        final res = ocrResults[i];
+        final rawText = res['text'] ?? '';
+        final imgPath = res['imagePath'] ?? '';
+        final cleanText = _filterWatermarks(rawText);
+
+        final paragraphs = _groupOcrLinesToParagraphs(cleanText);
+        if (paragraphs.isNotEmpty) {
+          for (final p in paragraphs) {
+            sb.writeln('<p>${_escapeHtml(p)}</p>');
+          }
+        } else if (imgPath.isNotEmpty && File(imgPath).existsSync()) {
+          sb.writeln('<p>[IMAGE:file://$imgPath]</p>');
+        }
+        sb.writeln('<hr/>');
+      }
+
+      sb.writeln('</body></html>');
+      await chapterFile.writeAsString(sb.toString());
+      return true;
+    } catch (e) {
+      debugPrint('[EpubService] ocrChapterFile error: $e');
+      return false;
+    }
+  }
+
+  /// Progressively extracts text for all chapters of a book in the background.
+  static void extractBookTextInBackground(Directory bookDir, {String script = 'ori'}) {
+    Future.microtask(() async {
+      try {
+        final chaptersDir = Directory('${bookDir.path}/chapters');
+        if (!await chaptersDir.exists()) return;
+        final files = chaptersDir
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.xhtml'))
+            .toList();
+
+        files.sort((a, b) => a.path.compareTo(b.path));
+
+        for (final chapterFile in files) {
+          final content = await chapterFile.readAsString();
+          if (content.contains('[IMAGE:file://')) {
+            await ocrChapterFile(chapterFile, defaultScript: script);
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+        }
+      } catch (e) {
+        debugPrint('[EpubService] extractBookTextInBackground error: $e');
+      }
+    });
+  }
+
   /// Reads and parses an XHTML chapter file into cleaned paragraphs.
   Future<ChapterContent> loadChapterContent(String fileUriStr) async {
     final String filePath;
@@ -686,7 +913,17 @@ class EpubService {
     final file = File(filePath);
 
     if (!await file.exists()) {
-      throw Exception('Chapter file not found at $filePath');
+      // Auto-heal missing chapter: unpack document.pdf if present
+      final bookDir = file.parent.parent;
+      final docPdf = File('${bookDir.path}/document.pdf');
+      if (await docPdf.exists()) {
+        try {
+          await importPdf(docPdf, targetDir: bookDir.parent);
+        } catch (_) {}
+      }
+      if (!await file.exists()) {
+        throw Exception('Chapter file not found at $filePath');
+      }
     }
 
     final rawHtml = await file.readAsString();
@@ -734,6 +971,27 @@ class EpubService {
         }
         if (rawParas.isEmpty && bodyEl.text.trim().isNotEmpty) {
           rawParas.add(bodyEl.text.trim());
+        }
+      }
+    }
+
+    // Auto-extract text on the fly if this chapter currently only holds page image placeholders
+    final onlyHasImages = rawParas.isNotEmpty &&
+        rawParas.every((p) => p.startsWith('[IMAGE:'));
+    if (onlyHasImages) {
+      final converted = await ocrChapterFile(file);
+      if (converted) {
+        final updatedHtml = await file.readAsString();
+        final updatedDoc = html_parser.parse(updatedHtml);
+        final updatedPElements = updatedDoc.querySelectorAll('p');
+        if (updatedPElements.isNotEmpty) {
+          rawParas.clear();
+          for (final p in updatedPElements) {
+            final text = p.text.trim();
+            if (text.isNotEmpty) {
+              rawParas.add(text);
+            }
+          }
         }
       }
     }

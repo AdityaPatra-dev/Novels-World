@@ -426,46 +426,21 @@ class EpubService {
         );
       }
     } else {
-      // Scanned document or image-based PDF: extract text via on-device OCR or high-speed renderer
+      // Scanned document or image-based PDF: render high-resolution authentic original pages
       final pagesDir = Directory('${bookDir.path}/pages');
-      final isOdia = (originalNovel?.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or') == true) ||
-          (originalNovel?.id.startsWith('or_') == true || originalNovel?.id.startsWith('odiabibhaba') == true) ||
-          (originalNovel?.title.runes.any((r) => r >= 0x0B00 && r <= 0x0B7F) == true);
-      final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
-          (originalNovel?.id.startsWith('hindisamay') == true ||
-              originalNovel?.id.startsWith('gadyakosh') == true ||
-              originalNovel?.id.startsWith('kavitakosh') == true ||
-              originalNovel?.id.startsWith('epustakalay') == true);
-
-      List<PdfOcrPage> ocrPages = [];
-      String ocrScript = 'latin';
-      String? tessDir;
-      if (isOdia) {
-        ocrScript = 'ori';
-        try {
-          tessDir = await PdfPageRenderer.ensureTessData('ori');
-        } catch (_) {}
-      } else if (isHindi) {
-        ocrScript = 'devanagari';
-      }
 
       try {
-        ocrPages = await PdfPageRenderer.extractPagesWithOcr(
-          docCopy.path,
-          pagesDir.path,
-          script: ocrScript,
-          tessDataDir: tessDir,
-        );
+        renderedImagePaths = await PdfPageRenderer.renderPages(docCopy.path, pagesDir.path);
       } catch (e) {
-        debugPrint('[EpubService] Native OCR extraction failed: $e');
+        debugPrint('[EpubService] Native PdfPageRenderer failed: $e');
       }
 
-      if (ocrPages.isNotEmpty) {
+      if (renderedImagePaths.isNotEmpty) {
         const pagesPerChapter = 5;
-        final totalChapters = (ocrPages.length / pagesPerChapter).ceil();
+        final totalChapters = (renderedImagePaths.length / pagesPerChapter).ceil();
         for (int c = 0; c < totalChapters; c++) {
           final startIdx = c * pagesPerChapter;
-          final endIdx = (startIdx + pagesPerChapter > ocrPages.length) ? ocrPages.length : startIdx + pagesPerChapter;
+          final endIdx = (startIdx + pagesPerChapter > renderedImagePaths.length) ? renderedImagePaths.length : startIdx + pagesPerChapter;
           final chapterIndex = c + 1;
           final chapterTitle = 'Chapter $chapterIndex (Pages ${startIdx + 1}-$endIdx)';
           final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
@@ -478,20 +453,9 @@ class EpubService {
           sb.writeln('<body>');
           sb.writeln('<h2>$chapterTitle</h2>');
 
-          for (int pageIdx = startIdx; pageIdx < endIdx; pageIdx++) {
-            final page = ocrPages[pageIdx];
-            final cleanText = _filterWatermarks(page.text);
-            final paras = formatPdfTextToParagraphs(cleanText, bookTitle: originalNovel?.title);
-
-            if (page.imagePath != null && File(page.imagePath!).existsSync()) {
-              sb.writeln('<p>[IMAGE:file://${page.imagePath}]</p>');
-            }
-            if (paras.isNotEmpty) {
-              for (final para in paras) {
-                sb.writeln('<p>${_escapeHtml(para)}</p>');
-              }
-            }
-            sb.writeln('<hr/>');
+          for (int imgIdx = startIdx; imgIdx < endIdx; imgIdx++) {
+            final imgPath = renderedImagePaths[imgIdx];
+            sb.writeln('<p>[IMAGE:file://$imgPath]</p>');
           }
 
           sb.writeln('</body></html>');
@@ -508,9 +472,8 @@ class EpubService {
           );
         }
 
-        // Cover from first OCR page image if available
-        if (coverUrl.isEmpty && ocrPages.first.imagePath != null) {
-          final firstImg = File(ocrPages.first.imagePath!);
+        if (coverUrl.isEmpty && renderedImagePaths.isNotEmpty) {
+          final firstImg = File(renderedImagePaths.first);
           if (await firstImg.exists()) {
             final coverFile = File('${bookDir.path}/cover.jpg');
             try {
@@ -522,70 +485,7 @@ class EpubService {
           }
         }
       } else {
-        // High-speed native page rendering (for Odia or visual archives)
-        try {
-          renderedImagePaths = await PdfPageRenderer.renderPages(docCopy.path, pagesDir.path);
-        } catch (e) {
-          debugPrint('[EpubService] Native PdfPageRenderer failed: $e');
-        }
-
-        if (renderedImagePaths.isNotEmpty) {
-          const pagesPerChapter = 5;
-          final totalChapters = (renderedImagePaths.length / pagesPerChapter).ceil();
-          for (int c = 0; c < totalChapters; c++) {
-            final startIdx = c * pagesPerChapter;
-            final endIdx = (startIdx + pagesPerChapter > renderedImagePaths.length) ? renderedImagePaths.length : startIdx + pagesPerChapter;
-            final chapterIndex = c + 1;
-            final chapterTitle = 'Chapter $chapterIndex (Pages ${startIdx + 1}-$endIdx)';
-            final chapterFile = File('${chaptersDir.path}/chapter_$chapterIndex.xhtml');
-
-            final sb = StringBuffer();
-            sb.writeln('<?xml version="1.0" encoding="utf-8"?>');
-            sb.writeln('<!DOCTYPE html>');
-            sb.writeln('<html xmlns="http://www.w3.org/1999/xhtml">');
-            sb.writeln('<head><title>$chapterTitle</title></head>');
-            sb.writeln('<body>');
-            sb.writeln('<h2>$chapterTitle</h2>');
-
-            for (int imgIdx = startIdx; imgIdx < endIdx; imgIdx++) {
-              final imgPath = renderedImagePaths[imgIdx];
-              sb.writeln('<p>[IMAGE:file://$imgPath]</p>');
-            }
-
-            sb.writeln('</body></html>');
-            await chapterFile.writeAsString(sb.toString());
-
-            chapters.add(
-              Chapter(
-                id: '${novelId}_ch_$chapterIndex',
-                novelId: novelId,
-                title: chapterTitle,
-                url: chapterFile.uri.toString(),
-                chapterNumber: chapterIndex.toDouble(),
-              ),
-            );
-          }
-
-          // Trigger progressive background text extraction for all chapters
-          extractBookTextInBackground(
-            bookDir,
-            script: isOdia ? 'ori' : (isHindi ? 'devanagari' : 'latin'),
-          );
-
-          if (coverUrl.isEmpty && renderedImagePaths.isNotEmpty) {
-            final firstImg = File(renderedImagePaths.first);
-            if (await firstImg.exists()) {
-              final coverFile = File('${bookDir.path}/cover.jpg');
-              try {
-                await firstImg.copy(coverFile.path);
-                coverUrl = coverFile.uri.toString();
-              } catch (_) {
-                coverUrl = firstImg.uri.toString();
-              }
-            }
-          }
-        } else {
-          // Fallback: extract JPEG byte streams via PdfBookParser
+        // Fallback: extract JPEG byte streams via PdfBookParser
           final imagePages = PdfBookParser.extractAllImages(pdfBytes);
           if (imagePages.isNotEmpty) {
             const pagesPerChapter = 5;
@@ -665,7 +565,6 @@ class EpubService {
           }
         }
       }
-    }
 
     // Cover image extraction fallback
     if (coverUrl.isEmpty) {
@@ -977,27 +876,6 @@ class EpubService {
         }
         if (rawParas.isEmpty && bodyEl.text.trim().isNotEmpty) {
           rawParas.add(bodyEl.text.trim());
-        }
-      }
-    }
-
-    // Auto-extract text on the fly if this chapter currently only holds page image placeholders
-    final onlyHasImages = rawParas.isNotEmpty &&
-        rawParas.every((p) => p.startsWith('[IMAGE:'));
-    if (onlyHasImages) {
-      final converted = await ocrChapterFile(file);
-      if (converted) {
-        final updatedHtml = await file.readAsString();
-        final updatedDoc = html_parser.parse(updatedHtml);
-        final updatedPElements = updatedDoc.querySelectorAll('p');
-        if (updatedPElements.isNotEmpty) {
-          rawParas.clear();
-          for (final p in updatedPElements) {
-            final text = p.text.trim();
-            if (text.isNotEmpty) {
-              rawParas.add(text);
-            }
-          }
         }
       }
     }

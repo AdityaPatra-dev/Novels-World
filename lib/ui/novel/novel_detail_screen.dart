@@ -13,6 +13,8 @@ import '../../data/download_service.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/reader_provider.dart';
 import '../reader/reader_screen.dart';
+import '../reader/original_book_reader_screen.dart';
+import 'package:path_provider/path_provider.dart';
 import '../widgets/source_webview_screen.dart';
 import '../widgets/novel_storage_modal.dart';
 import '../widgets/download_range_dialog.dart';
@@ -721,6 +723,31 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
       await _downloadFullBook();
       if (!mounted) return;
     }
+
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final bookDir = Directory('${appDocDir.path}/imported_novels/${_novel.id}');
+      final docPdf = File('${bookDir.path}/document.pdf');
+      final pagesDir = Directory('${bookDir.path}/pages');
+
+      if (await bookDir.exists() && (await docPdf.exists() || await pagesDir.exists())) {
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OriginalBookReaderScreen(
+              novel: _novel,
+              bookDirectory: bookDir,
+            ),
+          ),
+        );
+        if (mounted) {
+          _loadReadingProgress();
+        }
+        return;
+      }
+    } catch (_) {}
+
     if (_chapters.isNotEmpty) {
       _openReader(_lastReadChapter ?? EpubService.getFirstNarrativeChapter(_chapters));
     }
@@ -1177,20 +1204,11 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             : ElevatedButton.icon(
                                 onPressed: _chapters.isNotEmpty
                                     ? () {
-                                        if (isFullBook &&
-                                            _novel.bookFormat == 'pdf' &&
-                                            !isBookDownloaded &&
-                                            _novel.sourceUrl.isNotEmpty &&
-                                            !kIsWeb) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => SourceWebViewScreen(
-                                                initialUrl: _novel.sourceUrl,
-                                                sourceName: _novel.title,
-                                              ),
-                                            ),
-                                          );
+                                        if (isFullBook ||
+                                            _novel.bookFormat == 'pdf' ||
+                                            _novel.sourceId == 'odiabibhaba' ||
+                                            _novel.sourceId == 'epustakalay') {
+                                          _readOriginalBook();
                                         } else {
                                           _openReader(_lastReadChapter ?? EpubService.getFirstNarrativeChapter(_chapters));
                                         }

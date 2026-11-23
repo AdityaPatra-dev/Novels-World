@@ -546,34 +546,25 @@ class _BrowseScreenState extends State<BrowseScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Standard Source Filter Button that opens the vertical source selector
-                    Material(
-                      color: const Color(0xFF1E1E28),
-                      borderRadius: BorderRadius.circular(10),
-                      child: InkWell(
-                        onTap: _openSourceModal,
+                    // Single clean Source / Filter Icon Button that opens the vertical source selector
+                    Tooltip(
+                      message: 'Select Source',
+                      child: Material(
+                        color: const Color(0xFF1E1E28),
                         borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          height: 44,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.45)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.tune_rounded, color: Color(0xFFA78BFA), size: 19),
-                              SizedBox(width: 6),
-                              Text(
-                                'Sources',
-                                style: TextStyle(
-                                  color: Color(0xFFA78BFA),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
+                        child: InkWell(
+                          onTap: _openSourceModal,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.45)),
+                            ),
+                            child: const Center(
+                              child: Icon(Icons.tune_rounded, color: Color(0xFFA78BFA), size: 21),
+                            ),
                           ),
                         ),
                       ),

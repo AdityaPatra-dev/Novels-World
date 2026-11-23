@@ -406,12 +406,9 @@ class EpubService {
         sb.writeln('<body>');
         sb.writeln('<h2>$chapterTitle</h2>');
         for (final pText in chapterPages) {
-          final lines = pText.split('\n');
-          for (final line in lines) {
-            final trimmed = line.trim();
-            if (trimmed.isNotEmpty) {
-              sb.writeln('<p>${_escapeHtml(trimmed)}</p>');
-            }
+          final paras = formatPdfTextToParagraphs(pText, bookTitle: originalNovel?.title);
+          for (final para in paras) {
+            sb.writeln('<p>${_escapeHtml(para)}</p>');
           }
           sb.writeln('<hr/>');
         }
@@ -441,18 +438,26 @@ class EpubService {
               originalNovel?.id.startsWith('epustakalay') == true);
 
       List<PdfOcrPage> ocrPages = [];
-      // ML Kit Text Recognition supports Latin (English) and Devanagari (Hindi). It does not have an Odia model.
-      if (!isOdia) {
-        final ocrScript = isHindi ? 'devanagari' : 'latin';
+      String ocrScript = 'latin';
+      String? tessDir;
+      if (isOdia) {
+        ocrScript = 'ori';
         try {
-          ocrPages = await PdfPageRenderer.extractPagesWithOcr(
-            docCopy.path,
-            pagesDir.path,
-            script: ocrScript,
-          );
-        } catch (e) {
-          debugPrint('[EpubService] Native OCR extraction failed: $e');
-        }
+          tessDir = await PdfPageRenderer.ensureTessData('ori');
+        } catch (_) {}
+      } else if (isHindi) {
+        ocrScript = 'devanagari';
+      }
+
+      try {
+        ocrPages = await PdfPageRenderer.extractPagesWithOcr(
+          docCopy.path,
+          pagesDir.path,
+          script: ocrScript,
+          tessDataDir: tessDir,
+        );
+      } catch (e) {
+        debugPrint('[EpubService] Native OCR extraction failed: $e');
       }
 
       if (ocrPages.isNotEmpty) {
@@ -476,14 +481,15 @@ class EpubService {
           for (int pageIdx = startIdx; pageIdx < endIdx; pageIdx++) {
             final page = ocrPages[pageIdx];
             final cleanText = _filterWatermarks(page.text);
-            final lines = cleanText.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+            final paras = formatPdfTextToParagraphs(cleanText, bookTitle: originalNovel?.title);
 
-            if (lines.isNotEmpty) {
-              for (final line in lines) {
-                sb.writeln('<p>${_escapeHtml(line)}</p>');
-              }
-            } else if (page.imagePath != null && File(page.imagePath!).existsSync()) {
+            if (page.imagePath != null && File(page.imagePath!).existsSync()) {
               sb.writeln('<p>[IMAGE:file://${page.imagePath}]</p>');
+            }
+            if (paras.isNotEmpty) {
+              for (final para in paras) {
+                sb.writeln('<p>${_escapeHtml(para)}</p>');
+              }
             }
             sb.writeln('<hr/>');
           }
@@ -1331,6 +1337,136 @@ class EpubService {
     return epubs;
   }
 
+  static bool _isHeading(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty || trimmed.length > 80) return false;
+    final lower = trimmed.toLowerCase();
+
+    // Explicit heading words in English, Odia, Hindi
+    if (RegExp(
+      r'^(?:chapter|part|act|scene|section|book|canto|volume|prologue|epilogue|ଅଧ୍ୟାୟ|ପ୍ରକରଣ|ପ୍ରସ୍ତର|ଭାଗ|ପର୍ବ|କାଣ୍ଡ|ଅଧ୍ଯାୟ|ସୂଚୀପତ୍ର|ସୂଚନା|ଭୂମିକା|ମୁଖବନ୍ଧ|ପ୍ରଥମ|ଦ୍ୱିତୀୟ|ତୃତୀୟ|ଚତୁର୍ଥ|ପଞ୍ଚମ|ଷଷ୍ଠ|ସପ୍ତମ|ଅଷ୍ଟମ|ନବମ|ଦଶମ|अध्याय|भाग|खण्ड|सर्ग)\b',
+      caseSensitive: false,
+    ).hasMatch(lower)) {
+      return true;
+    }
+
+    // Roman or numeric chapters: "Chapter 1", "IV.", "II - Title"
+    if (RegExp(r'^(?:[IVXLCDMivxlcdm]+|\d+)[\.\:\-\s]+[A-Za-z\u0B00-\u0B7F\u0900-\u097F]').hasMatch(trimmed) && trimmed.length < 50) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Formats raw extracted PDF text into clean, reflowable, readable paragraphs.
+  /// Removes running headers, page numbers (in English and Odia digits), and digitizer watermarks.
+  /// Recombines hyphenated word breaks across lines and joins wrapped lines into cohesive paragraphs.
+  static List<String> formatPdfTextToParagraphs(String rawText, {String? bookTitle}) {
+    if (rawText.trim().isEmpty) return [];
+
+    final rawLines = rawText.split(RegExp(r'\r?\n'));
+    final filteredLines = <({String text, bool isIndented})>[];
+
+    final titleLower = bookTitle?.trim().toLowerCase();
+
+    for (final rawLine in rawLines) {
+      var line = rawLine.trim();
+      if (line.isEmpty) {
+        filteredLines.add((text: '', isIndented: false));
+        continue;
+      }
+
+      final lower = line.toLowerCase();
+
+      // 1. Filter digitizer watermarks & scanner artifacts
+      if (lower.contains('odiabibhaba.in') ||
+          lower.contains('odia bibhaba') ||
+          lower.contains('digitized by') ||
+          lower.contains('scanned by') ||
+          lower.contains('archive.org') ||
+          lower.contains('dli.ernet.in') ||
+          lower.contains('epustakalay.com') ||
+          lower.contains('universal digital library')) {
+        continue;
+      }
+
+      // 2. Filter standalone page numbers (English digits and Odia digits ୦-୯)
+      if (RegExp(r'^(?:page\s*)?[-–—\[\(]?\s*\d+\s*[-–—\]\)]?$', caseSensitive: false).hasMatch(lower) ||
+          RegExp(r'^(?:ପୃଷ୍ଠା\s*[:\-]?)?\s*[-–—\[\(]?\s*[୦-୯\d]+\s*[-–—\]\)]?$', caseSensitive: false).hasMatch(line)) {
+        continue;
+      }
+
+      // 3. Filter repeated book title header
+      if (titleLower != null && titleLower.isNotEmpty && lower == titleLower) {
+        continue;
+      }
+
+      line = line.replaceAll(RegExp(r'[ \t]+'), ' ');
+      final isIndented = rawLine.startsWith('   ') || rawLine.startsWith('\t');
+      filteredLines.add((text: line, isIndented: isIndented));
+    }
+
+    final paragraphs = <String>[];
+    final currentPara = StringBuffer();
+
+    for (int i = 0; i < filteredLines.length; i++) {
+      final item = filteredLines[i];
+      final line = item.text;
+
+      if (line.isEmpty) {
+        if (currentPara.isNotEmpty) {
+          paragraphs.add(currentPara.toString().trim());
+          currentPara.clear();
+        }
+        continue;
+      }
+
+      if (currentPara.isEmpty) {
+        currentPara.write(line);
+      } else {
+        final currentStr = currentPara.toString().trim();
+        final currentIsHeading = _isHeading(currentStr);
+        final lineIsHeading = _isHeading(line);
+        final isBullet = RegExp(r'^(?:[•\-\*]|\d+[\.\)])\s+').hasMatch(line);
+
+        final lastChar = currentStr.isNotEmpty ? currentStr.substring(currentStr.length - 1) : '';
+        final isSentenceEnd = lastChar == '.' ||
+            lastChar == '!' ||
+            lastChar == '?' ||
+            lastChar == '।' || // Odia/Hindi Purna Viram
+            lastChar == '॥' ||
+            lastChar == '"' ||
+            lastChar == '”' ||
+            lastChar == "'";
+
+        // Break into new paragraph if previous was heading, current is heading/bullet, or current is indented after sentence end
+        if (currentIsHeading || lineIsHeading || isBullet || (isSentenceEnd && item.isIndented)) {
+          paragraphs.add(currentStr);
+          currentPara.clear();
+          currentPara.write(line);
+          continue;
+        }
+
+        // Hyphenation: join broken words across lines (e.g. extraor-\ndinary -> extraordinary)
+        if (currentStr.endsWith('-') || currentStr.endsWith('—') || currentStr.endsWith('\u00AD')) {
+          final stripped = currentStr.substring(0, currentStr.length - 1);
+          currentPara.clear();
+          currentPara.write(stripped);
+          currentPara.write(line);
+        } else {
+          currentPara.write(' ');
+          currentPara.write(line);
+        }
+      }
+    }
+
+    if (currentPara.isNotEmpty) {
+      paragraphs.add(currentPara.toString().trim());
+    }
+
+    return paragraphs.where((p) => p.trim().isNotEmpty).toList();
+  }
+
   Future<Directory> _getImportDirectory() async {
     final appDocDir = await getApplicationDocumentsDirectory();
     final dir = Directory('${appDocDir.path}/imported_novels');
@@ -1493,33 +1629,94 @@ class PdfBookParser {
     final streamStr = latin1.decode(decompressed);
     final sb = StringBuffer();
 
-    // Tj: (text) Tj
-    final tjRegex = RegExp(r'\(([\s\S]*?)\)\s*Tj');
-    for (final m in tjRegex.allMatches(streamStr)) {
+    // 1. Tj operators: (text) Tj and <hex> Tj
+    final tjStrRegex = RegExp(r'\(([\s\S]*?)\)\s*Tj');
+    for (final m in tjStrRegex.allMatches(streamStr)) {
       sb.writeln(_decodePdfString(m.group(1) ?? ''));
     }
+    final hexTjRegex = RegExp(r'<([0-9a-fA-F\s]+)>\s*Tj');
+    for (final m in hexTjRegex.allMatches(streamStr)) {
+      sb.writeln(_decodeHexPdfString(m.group(1) ?? ''));
+    }
 
-    // TJ: [(text) -100 (more)] TJ
+    // 2. Next-line operators ' and ": (text) ' or <hex> '
+    final nextLineStrRegex = RegExp(r'\(([\s\S]*?)\)\s*[\x27\x22]');
+    for (final m in nextLineStrRegex.allMatches(streamStr)) {
+      sb.writeln(_decodePdfString(m.group(1) ?? ''));
+    }
+    final nextLineHexRegex = RegExp(r'<([0-9a-fA-F\s]+)>\s*[\x27\x22]');
+    for (final m in nextLineHexRegex.allMatches(streamStr)) {
+      sb.writeln(_decodeHexPdfString(m.group(1) ?? ''));
+    }
+
+    // 3. TJ array: [(text) -100 <hex> 50] TJ
     final tjArrayRegex = RegExp(r'\[([\s\S]*?)\]\s*TJ');
     for (final m in tjArrayRegex.allMatches(streamStr)) {
       final inner = m.group(1) ?? '';
-      final strMatches = RegExp(r'\(([\s\S]*?)\)').allMatches(inner);
+      final tokenRegex = RegExp(r'\(([\s\S]*?)\)|<([0-9a-fA-F\s]+)>');
       final lineBuf = StringBuffer();
-      for (final sm in strMatches) {
-        lineBuf.write(_decodePdfString(sm.group(1) ?? ''));
+      for (final tm in tokenRegex.allMatches(inner)) {
+        if (tm.group(1) != null) {
+          lineBuf.write(_decodePdfString(tm.group(1)!));
+        } else if (tm.group(2) != null) {
+          lineBuf.write(_decodeHexPdfString(tm.group(2)!));
+        }
       }
       if (lineBuf.isNotEmpty) {
         sb.writeln(lineBuf.toString());
       }
     }
 
-    // Hex strings: <48656C6C6F> Tj
-    final hexTjRegex = RegExp(r'<([0-9a-fA-F\s]+)>\s*Tj');
-    for (final m in hexTjRegex.allMatches(streamStr)) {
-      sb.writeln(_decodeHexPdfString(m.group(1) ?? ''));
+    return sb.toString();
+  }
+
+  static String _decodeBytesToText(List<int> bytes) {
+    if (bytes.isEmpty) return '';
+
+    // 1. Check for UTF-16BE BOM: FE FF
+    if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+      final codeUnits = <int>[];
+      for (int i = 2; i + 1 < bytes.length; i += 2) {
+        codeUnits.add((bytes[i] << 8) | bytes[i + 1]);
+      }
+      return String.fromCharCodes(codeUnits);
     }
 
-    return sb.toString();
+    // 2. Check for UTF-16LE BOM: FF FE
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+      final codeUnits = <int>[];
+      for (int i = 2; i + 1 < bytes.length; i += 2) {
+        codeUnits.add(bytes[i] | (bytes[i + 1] << 8));
+      }
+      return String.fromCharCodes(codeUnits);
+    }
+
+    // 3. Check for raw UTF-16BE without BOM (common in PDF strings where high byte is 0x00 for ASCII or 0x0B for Odia or 0x09 for Devanagari)
+    if (bytes.length >= 4 && bytes.length % 2 == 0) {
+      int highCount = 0;
+      final pairCount = bytes.length ~/ 2;
+      for (int i = 0; i < bytes.length; i += 2) {
+        final high = bytes[i];
+        if (high == 0x00 || high == 0x0B || high == 0x09 || high == 0x20) {
+          highCount++;
+        }
+      }
+      if (highCount >= (pairCount * 0.75).round()) {
+        final codeUnits = <int>[];
+        for (int i = 0; i + 1 < bytes.length; i += 2) {
+          codeUnits.add((bytes[i] << 8) | bytes[i + 1]);
+        }
+        return String.fromCharCodes(codeUnits);
+      }
+    }
+
+    // 4. Try UTF-8 decode
+    try {
+      return utf8.decode(bytes);
+    } catch (_) {}
+
+    // 5. Fallback to Latin-1
+    return latin1.decode(bytes);
   }
 
   static String _decodePdfString(String raw) {
@@ -1537,6 +1734,16 @@ class PdfBookParser {
       final code = int.parse(octalStr, radix: 8);
       return String.fromCharCode(code);
     });
+
+    // Check if literal string starts with UTF-16BE BOM (\u00FE\u00FF)
+    if (s.length >= 2 && s.codeUnitAt(0) == 0xFE && s.codeUnitAt(1) == 0xFF) {
+      final codeUnits = <int>[];
+      for (int i = 2; i + 1 < s.length; i += 2) {
+        codeUnits.add((s.codeUnitAt(i) << 8) | s.codeUnitAt(i + 1));
+      }
+      return String.fromCharCodes(codeUnits);
+    }
+
     return s;
   }
 
@@ -1548,7 +1755,7 @@ class PdfBookParser {
         bytes.add(int.parse(clean.substring(i, i + 2), radix: 16));
       }
     }
-    return utf8.decode(bytes, allowMalformed: true);
+    return _decodeBytesToText(bytes);
   }
 
   static int _indexOf(List<int> source, List<int> pattern, int start) {

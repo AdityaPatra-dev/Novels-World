@@ -714,6 +714,18 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     }
   }
 
+  Future<void> _readOriginalBook() async {
+    final downloadService = context.read<DownloadService>();
+    final isDownloaded = !kIsWeb && downloadService.isBookDownloaded(_novel.id);
+    if (!isDownloaded && _chapters.length <= 1) {
+      await _downloadFullBook();
+      if (!mounted) return;
+    }
+    if (_chapters.isNotEmpty) {
+      _openReader(_lastReadChapter ?? EpubService.getFirstNarrativeChapter(_chapters));
+    }
+  }
+
   void _showDownloadModal() {
     DownloadRangeDialog.show(
       context,
@@ -1499,6 +1511,24 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                   if (sel) setState(() => _showAudioOnly = false);
                                 },
                               ),
+                              if (isFullBook || _novel.bookFormat == 'pdf' || _novel.sourceId == 'odiabibhaba' || _novel.sourceId == 'epustakalay') ...[
+                                const SizedBox(width: 8),
+                                ActionChip(
+                                  avatar: const Icon(Icons.auto_stories_rounded, size: 14, color: Color(0xFFA78BFA)),
+                                  label: const Text('Read Original Book'),
+                                  backgroundColor: const Color(0xFF1E1E2C),
+                                  labelStyle: const TextStyle(
+                                    color: Color(0xFFA78BFA),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: const BorderSide(color: Color(0xFF8B5CF6), width: 1),
+                                  ),
+                                  onPressed: _readOriginalBook,
+                                ),
+                              ],
                               const SizedBox(width: 8),
                               ChoiceChip(
                                 avatar: Icon(

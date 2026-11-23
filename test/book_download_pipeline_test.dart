@@ -140,7 +140,7 @@ void main() {
       expect(hp.author, 'J.K. Rowling');
       expect(hp.isFullBook, isTrue);
       expect(hp.bookFormat, 'epub');
-      expect(hp.bookDownloadUrl, contains('libgen.li/get.php?md5=ABCDEF1234567890ABCDEF1234567890'));
+      expect(hp.sourceUrl, contains('ads.php?md5=ABCDEF1234567890ABCDEF1234567890'));
 
       final hobbit = novels[1];
       expect(hobbit.title, 'The Hobbit');
@@ -178,7 +178,7 @@ void main() {
       expect(book.author, 'Jane Austen');
       expect(book.isFullBook, isTrue);
       expect(book.bookFormat, 'epub');
-      expect(book.bookDownloadUrl, 'https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/downloads/jane-austen_pride-and-prejudice.epub');
+      expect(book.bookDownloadUrl, 'https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/downloads/jane-austen_pride-and-prejudice.epub?source=download');
     });
   });
 

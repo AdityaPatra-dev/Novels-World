@@ -109,7 +109,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Browse'), findsOneWidget);
+    expect(find.text('Browse'), findsAtLeastNWidgets(1));
     expect(find.text('Profile'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });

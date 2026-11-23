@@ -1178,7 +1178,7 @@ class EpubService {
             }
             if (refreshTarget != url) {
               await tempTmpFile.delete();
-              return importEpubFromUrl(
+              return await importEpubFromUrl(
                 refreshTarget,
                 headers: headers,
                 originalNovel: originalNovel,

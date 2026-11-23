@@ -278,7 +278,7 @@ class GutenbergExtractor implements NovelSource {
           .get(Uri.parse(url), headers: _headers)
           .timeout(const Duration(seconds: 4));
       if (response.statusCode != 200) {
-        return _fetchFromGutendex(url);
+        return await _fetchFromGutendex(url);
       }
 
       final doc = html_parser.parse(response.body);
@@ -323,9 +323,9 @@ class GutenbergExtractor implements NovelSource {
       if (novelList.isNotEmpty) {
         return novelList;
       }
-      return _fetchFromGutendex(url);
+      return await _fetchFromGutendex(url);
     } catch (_) {
-      return _fetchFromGutendex(url);
+      return await _fetchFromGutendex(url);
     }
   }
 

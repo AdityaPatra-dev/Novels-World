@@ -43,8 +43,8 @@ void main() {
     expect(find.textContaining('Books & PDF'), findsOneWidget);
     expect(find.textContaining('All Languages'), findsOneWidget);
 
-    // Verify "All Sources (Global Search)" card exists
-    expect(find.text('All Sources (Global Search)'), findsOneWidget);
+    // Verify "All Sources (Global Search)" card is NOT present in source selection modal
+    expect(find.text('All Sources (Global Search)'), findsNothing);
 
     // Filter by search query "ocean"
     await tester.enterText(find.byType(TextField), 'ocean');
@@ -62,10 +62,10 @@ void main() {
     expect(selectedSource.id, 'oceanofpdf');
   });
 
-  testWidgets('SourceSelectionModal selects Global Search', (tester) async {
+  testWidgets('SourceSelectionModal selects a source from list', (tester) async {
     final currentSource = SourceRegistry.getDefaultSource();
     bool callbackFired = false;
-    dynamic selectedSource = currentSource;
+    dynamic selectedSource;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -92,12 +92,18 @@ void main() {
     await tester.tap(find.text('Open Sources'));
     await tester.pumpAndSettle();
 
-    // Tap on Global Search card
-    await tester.tap(find.text('All Sources (Global Search)'));
-    await tester.pumpAndSettle();
+    // Verify modal title has no subtitle text
+    expect(find.text('Select Source'), findsOneWidget);
+    expect(find.text('Browse webnovels, light novels, and digital books'), findsNothing);
 
-    expect(callbackFired, isTrue);
-    expect(selectedSource, isNull);
+    // Tap on a source card (e.g. LibRead or Royal Road)
+    final sourceCard = find.text('Royal Road');
+    if (sourceCard.evaluate().isNotEmpty) {
+      await tester.tap(sourceCard);
+      await tester.pumpAndSettle();
+      expect(callbackFired, isTrue);
+      expect(selectedSource?.id, 'royalroad');
+    }
   });
 
   testWidgets('SourceSelectionModal filters by language', (tester) async {

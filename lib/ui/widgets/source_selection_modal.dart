@@ -162,11 +162,6 @@ class _SourceSelectionModalState extends State<SourceSelectionModal> {
   @override
   Widget build(BuildContext context) {
     final filteredSources = _getFilteredSources();
-    final query = _searchController.text.trim().toLowerCase();
-    final showGlobalSearch = (_selectedType == SourceTypeFilter.all && _selectedLanguage == 'all') ||
-        query.contains('global') ||
-        query.contains('all');
-
     final novelCount = _allSources.where((s) => !_isBookSource(s)).length;
     final bookCount = _allSources.where((s) => _isBookSource(s)).length;
 
@@ -207,19 +202,9 @@ class _SourceSelectionModalState extends State<SourceSelectionModal> {
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Select Source',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Browse webnovels, light novels, and digital books',
-                          style: TextStyle(fontSize: 12, color: Colors.white60),
-                        ),
-                      ],
+                    child: Text(
+                      'Select Source',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                   ),
                   IconButton(
@@ -328,16 +313,13 @@ class _SourceSelectionModalState extends State<SourceSelectionModal> {
 
               // Source List
               Expanded(
-                child: filteredSources.isEmpty && !showGlobalSearch
+                child: filteredSources.isEmpty
                     ? _buildEmptyState()
                     : ListView.builder(
                         controller: scrollController,
-                        itemCount: filteredSources.length + (showGlobalSearch ? 1 : 0),
+                        itemCount: filteredSources.length,
                         itemBuilder: (context, index) {
-                          if (showGlobalSearch && index == 0) {
-                            return _buildGlobalSearchCard();
-                          }
-                          final source = filteredSources[index - (showGlobalSearch ? 1 : 0)];
+                          final source = filteredSources[index];
                           return _buildSourceCard(source);
                         },
                       ),
@@ -405,60 +387,6 @@ class _SourceSelectionModalState extends State<SourceSelectionModal> {
           _selectedLanguage = langCode;
         });
       },
-    );
-  }
-
-  Widget _buildGlobalSearchCard() {
-    final isSelected = widget.currentSource == null;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: isSelected
-            ? const Color(0xFF8B5CF6).withValues(alpha: 0.18)
-            : const Color(0xFF1E1E28),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(
-            color: isSelected ? const Color(0xFFA78BFA) : Colors.white10,
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: ListTile(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          onTap: () {
-            widget.onSourceSelected(null);
-            Navigator.pop(context);
-          },
-          leading: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.travel_explore_rounded, color: Colors.white, size: 22),
-          ),
-          title: const Text(
-            'All Sources (Global Search)',
-            style: TextStyle(
-              fontSize: 14.5,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFFA78BFA),
-            ),
-          ),
-          subtitle: const Text(
-            'Search across all web novel & digital book sources simultaneously',
-            style: TextStyle(fontSize: 11.5, color: Colors.white54),
-          ),
-          trailing: isSelected
-              ? const Icon(Icons.check_circle_rounded, color: Color(0xFFA78BFA), size: 22)
-              : null,
-        ),
-      ),
     );
   }
 

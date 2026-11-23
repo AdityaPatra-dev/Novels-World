@@ -546,7 +546,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Single clean Source / Filter Icon Button that opens the vertical source selector
+                    // Source selector button with 'Source' text then icon
                     Tooltip(
                       message: 'Select Source',
                       child: Material(
@@ -556,14 +556,26 @@ class _BrowseScreenState extends State<BrowseScreen> {
                           onTap: _openSourceModal,
                           borderRadius: BorderRadius.circular(10),
                           child: Container(
-                            width: 44,
                             height: 44,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.45)),
                             ),
-                            child: const Center(
-                              child: Icon(Icons.tune_rounded, color: Color(0xFFA78BFA), size: 21),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Source',
+                                  style: TextStyle(
+                                    color: Color(0xFFA78BFA),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Icon(Icons.tune_rounded, color: Color(0xFFA78BFA), size: 19),
+                              ],
                             ),
                           ),
                         ),

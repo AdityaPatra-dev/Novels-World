@@ -17,16 +17,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 1; // Default to Browse tab
+  int _currentIndex = 0; // Default to Browse as the first tab of the application
 
   @override
   Widget build(BuildContext context) {
     final downloadService = context.watch<DownloadService>();
 
     final List<Widget> pages = [
-      LibraryScreen(onBrowseTap: () => setState(() => _currentIndex = 1)),
       const BrowseScreen(),
-      if (!kIsWeb) DownloadsScreen(onBrowseTap: () => setState(() => _currentIndex = 1)),
+      LibraryScreen(onBrowseTap: () => setState(() => _currentIndex = 0)),
+      if (!kIsWeb) DownloadsScreen(onBrowseTap: () => setState(() => _currentIndex = 0)),
       const ProfileScreen(),
       const SettingsScreen(),
     ];
@@ -47,14 +47,14 @@ class _HomeScreenState extends State<HomeScreen> {
             onDestinationSelected: (index) => setState(() => _currentIndex = index),
             destinations: [
               const NavigationDestination(
-                icon: Icon(Icons.bookmark_outline),
-                selectedIcon: Icon(Icons.bookmark),
-                label: 'Library',
-              ),
-              const NavigationDestination(
                 icon: Icon(Icons.explore_outlined),
                 selectedIcon: Icon(Icons.explore),
                 label: 'Browse',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.bookmark_outline),
+                selectedIcon: Icon(Icons.bookmark),
+                label: 'Library',
               ),
               if (!kIsWeb)
                 NavigationDestination(

@@ -245,7 +245,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             : null,
         titleSpacing: canPop ? 0 : 16,
         title: Padding(
-          padding: EdgeInsets.only(right: widget.onSwitchToSources != null ? 0 : 16),
+          padding: EdgeInsets.only(right: canPop ? 16 : 0),
           child: Container(
             height: 44,
             decoration: BoxDecoration(
@@ -297,16 +297,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             ),
           ),
         ),
-        actions: [
-          if (widget.onSwitchToSources != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                icon: const Icon(Icons.source_outlined, color: Color(0xFFA78BFA), size: 22),
-                tooltip: 'Browse Single Source',
-                onPressed: widget.onSwitchToSources,
-              ),
-            ),
+        actions: const [
+          SizedBox(width: 16),
         ],
         bottom: widget.isEmbeddedInTab
             ? PreferredSize(
@@ -835,56 +827,39 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
         children: [
           // Smart Local EPUB Import Card
           if (!kIsWeb) ...[
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1A2C),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.file_upload_outlined, color: Color(0xFFA78BFA), size: 22),
+            Material(
+              color: const Color(0xFF1E1A2C),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: _importLocalEpub,
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.35)),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Have an EPUB book on your device?',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.file_upload_outlined, color: Color(0xFFA78BFA), size: 20),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Import EPUB/PDF',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          'Import Harry Potter, Dune, or any .epub file to read with continuous AI audio.',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 11.5),
-                        ),
-                      ],
-                    ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: Colors.white54, size: 20),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _importLocalEpub,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B5CF6),
-                      foregroundColor: Colors.white,
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text('Import', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                ],
+                ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
           ],
 
           if (_recentSearches.isNotEmpty) ...[

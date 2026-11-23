@@ -71,22 +71,26 @@ class NovelFullExtractor implements NovelSource {
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
     final cleanQuery = Uri.encodeComponent(query);
-    final targetUrl = page == 1
-        ? '$baseUrl/search?keyword=$cleanQuery'
-        : '$baseUrl/search?keyword=$cleanQuery&page=$page';
+    final searchCandidates = [
+      page == 1 ? '$baseUrl/search?keyword=$cleanQuery' : '$baseUrl/search?keyword=$cleanQuery&page=$page',
+      page == 1 ? '$baseUrl/novel-list/search?keyword=$cleanQuery' : '$baseUrl/novel-list/search?keyword=$cleanQuery&page=$page',
+      page == 1 ? '$baseUrl/?s=$cleanQuery' : '$baseUrl/?s=$cleanQuery&page=$page',
+    ];
 
-    try {
-      final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
-      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
-        final list = parseNovelList(response.body);
+    for (final targetUrl in searchCandidates) {
+      try {
+        final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
+        if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
+          final list = parseNovelList(response.body);
+          if (list.isNotEmpty) return list;
+        }
+      } catch (_) {}
+
+      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrl);
+      if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
+        final list = parseNovelList(wvHtml);
         if (list.isNotEmpty) return list;
       }
-    } catch (_) {}
-
-    final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrl);
-    if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
-      final list = parseNovelList(wvHtml);
-      if (list.isNotEmpty) return list;
     }
 
     return [];

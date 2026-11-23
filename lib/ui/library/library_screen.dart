@@ -50,9 +50,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'My Library (${allNovels.length})',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: const Text(
+          'My Library',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
           if (!kIsWeb)

@@ -158,9 +158,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'Downloads (${_downloadedNovels.length})',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: const Text(
+          'Downloads',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(

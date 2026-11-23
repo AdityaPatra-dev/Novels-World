@@ -68,6 +68,20 @@ class NovelFullExtractor implements NovelSource {
     return url;
   }
 
+  Future<String?> _fetchWithFallback(String url, {Map<String, String>? headers}) async {
+    try {
+      final reqHeaders = headers ?? _headers;
+      final resp = await _client.get(Uri.parse(url), headers: reqHeaders);
+      if (resp.statusCode == 200 &&
+          !resp.body.contains('Just a moment...') &&
+          !resp.body.contains('Enable JavaScript and cookies to continue')) {
+        return resp.body;
+      }
+    } catch (_) {}
+
+    return await WebViewSessionManager.instance.fetchHtmlViaWebView(url);
+  }
+
   @override
   Future<List<Novel>> search(String query, {int page = 1}) async {
     final cleanQuery = Uri.encodeComponent(query);
@@ -272,22 +286,8 @@ class NovelFullExtractor implements NovelSource {
       throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
     }
 
-    String body = '';
-    try {
-      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
-        body = response.body;
-      }
-    } catch (_) {}
-
-    if (body.isEmpty) {
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
-      if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
-        body = wvHtml;
-      }
-    }
-
-    if (body.isEmpty) {
+    final body = await _fetchWithFallback(novelUrl);
+    if (body == null || body.isEmpty) {
       throw Exception('Failed to load novel details for $novelUrl');
     }
 
@@ -441,20 +441,8 @@ class NovelFullExtractor implements NovelSource {
       throw HttpException('Invalid novel URL: $novelUrl is a genre or category link.');
     }
 
-    String body = '';
-    try {
-      final response = await _client.get(Uri.parse(novelUrl), headers: _headers);
-      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
-        body = response.body;
-      }
-    } catch (_) {}
-
-    if (body.isEmpty) {
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(novelUrl);
-      if (wvHtml != null) body = wvHtml;
-    }
-
-    if (body.isEmpty) {
+    final body = await _fetchWithFallback(novelUrl);
+    if (body == null || body.isEmpty) {
       throw Exception('Failed to load chapter list: $novelUrl');
     }
 
@@ -462,6 +450,13 @@ class NovelFullExtractor implements NovelSource {
 
     final ratingEl = document.querySelector('#rating, div[data-novel-id], [data-novel-id], input#novelId, #novel_id, input[name="novel_id"]');
     var ajaxNovelId = ratingEl?.attributes['data-novel-id'] ?? ratingEl?.attributes['value'];
+    if (ajaxNovelId == null || ajaxNovelId.isEmpty) {
+      final m = RegExp(r'data-novel-id="(\d+)"').firstMatch(body) ??
+          RegExp(r'novelId\s*[:=]\s*["\x27]?(\d+)').firstMatch(body);
+      if (m != null) {
+        ajaxNovelId = m.group(1);
+      }
+    }
     if (ajaxNovelId == null || ajaxNovelId.isEmpty) {
       final segs = Uri.tryParse(novelUrl)?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
       if (segs.isNotEmpty) {
@@ -475,32 +470,115 @@ class NovelFullExtractor implements NovelSource {
       onBatchLoaded?.call(List.from(chapters));
     }
 
-    // 1. If ajaxNovelId is present, ALWAYS query /ajax/chapter-archive?novelId=$ajaxNovelId
-    // Because static page only has 50 chapters, while ajax contains ALL chapters!
+    // 1. NovelFull ajax-chapter-option endpoint (Instant: returns ALL chapters in 1 request!)
     if (ajaxNovelId != null && ajaxNovelId.isNotEmpty) {
-      final ajaxUrl = '$baseUrl/ajax/chapter-archive?novelId=$ajaxNovelId';
-      try {
-        final ajaxResp = await _client.get(Uri.parse(ajaxUrl), headers: _headers);
-        if (ajaxResp.statusCode == 200 && ajaxResp.body.isNotEmpty) {
-          final ajaxChapters = parseChapterList(novelUrl, ajaxResp.body);
+      final optUrl = '$baseUrl/ajax-chapter-option?novelId=$ajaxNovelId';
+      final optBody = await _fetchWithFallback(
+        optUrl,
+        headers: Map<String, String>.from(_headers)..['X-Requested-With'] = 'XMLHttpRequest',
+      );
+      if (optBody != null && optBody.contains('<option')) {
+        final optChapters = parseChapterList(novelUrl, optBody);
+        if (optChapters.length > chapters.length) {
+          chapters = optChapters;
+          seenUrls.clear();
+          seenUrls.addAll(chapters.map((c) => c.url));
+          onBatchLoaded?.call(List.from(chapters));
+        }
+      }
+
+      // Fallback: /ajax/chapter-archive (ReadNovelFull and older clones)
+      if (chapters.length <= 60) {
+        final ajaxUrl = '$baseUrl/ajax/chapter-archive?novelId=$ajaxNovelId';
+        final ajaxBody = await _fetchWithFallback(ajaxUrl);
+        if (ajaxBody != null && ajaxBody.isNotEmpty) {
+          final ajaxChapters = parseChapterList(novelUrl, ajaxBody);
           if (ajaxChapters.length > chapters.length) {
             chapters = ajaxChapters;
+            seenUrls.clear();
             seenUrls.addAll(chapters.map((c) => c.url));
             onBatchLoaded?.call(List.from(chapters));
           }
         }
-      } catch (_) {}
+      }
     }
 
-    // 2. Support /book/<slug>/chapters dedicated chapter list page (e.g. NovelFire)
-    // AND multi-page chapter pagination across NovelFire (?page=2, ?page=3, etc.)!
-    final chaptersUrl = novelUrl.endsWith('/chapters')
-        ? novelUrl
-        : (novelUrl.endsWith('/') ? '${novelUrl}chapters' : '$novelUrl/chapters');
-    try {
-      final resp = await _client.get(Uri.parse(chaptersUrl), headers: _headers);
-      if (resp.statusCode == 200) {
-        final page1Chs = parseChapterList(novelUrl, resp.body);
+    // 2. FreeWebNovel & LibRead pagination (?ajax=chapters&page=N&pageSize=200)
+    final indexListPage = document.querySelector('#indexListPage, [data-total-chapters]');
+    final totalChaptersStr = indexListPage?.attributes['data-total-chapters'] ?? '';
+    final totalChaptersNum = int.tryParse(totalChaptersStr) ?? 0;
+    final totalPagesNum = int.tryParse(indexListPage?.attributes['data-total-page'] ?? '') ?? 0;
+
+    if (indexListPage != null && (totalChaptersNum > chapters.length || totalPagesNum > 1)) {
+      final int calcTotalPages = totalChaptersNum > 0
+          ? (totalChaptersNum / 200).ceil()
+          : (totalPagesNum > 0 ? (totalPagesNum * 40 / 200).ceil() : 30);
+      final int maxP = calcTotalPages.clamp(1, 100);
+
+      final List<Chapter> pagedChapters = [];
+      final Set<String> pagedSeen = {};
+
+      const int batchSize = 3;
+      for (int i = 1; i <= maxP; i += batchSize) {
+        final end = (i + batchSize - 1) > maxP ? maxP : (i + batchSize - 1);
+        final futures = <Future<String?>>[];
+        for (int p = i; p <= end; p++) {
+          final pUrl = novelUrl.contains('?')
+              ? '$novelUrl&ajax=chapters&page=$p&pageSize=200'
+              : '$novelUrl?ajax=chapters&page=$p&pageSize=200';
+          futures.add(_fetchWithFallback(
+            pUrl,
+            headers: Map<String, String>.from(_headers)..['X-Requested-With'] = 'XMLHttpRequest',
+          ));
+        }
+
+        final bodies = await Future.wait(futures);
+        bool hasNew = false;
+        for (final pBody in bodies) {
+          if (pBody == null || pBody.isEmpty) continue;
+          try {
+            final data = json.decode(pBody);
+            if (data is Map && data['html'] != null) {
+              final pChs = parseChapterList(novelUrl, data['html'].toString());
+              for (final c in pChs) {
+                if (!pagedSeen.contains(c.url)) {
+                  pagedSeen.add(c.url);
+                  pagedChapters.add(c);
+                  hasNew = true;
+                }
+              }
+            }
+          } catch (_) {
+            final pChs = parseChapterList(novelUrl, pBody);
+            for (final c in pChs) {
+              if (!pagedSeen.contains(c.url)) {
+                pagedSeen.add(c.url);
+                pagedChapters.add(c);
+                hasNew = true;
+              }
+            }
+          }
+        }
+        if (hasNew && pagedChapters.isNotEmpty) {
+          onBatchLoaded?.call(List.from(pagedChapters));
+        }
+      }
+
+      if (pagedChapters.isNotEmpty) {
+        chapters = pagedChapters;
+        seenUrls.clear();
+        seenUrls.addAll(pagedSeen);
+      }
+    }
+
+    // 3. Fallback: /book/<slug>/chapters dedicated chapter list page (e.g. NovelFire)
+    if (chapters.length <= 60) {
+      final chaptersUrl = novelUrl.endsWith('/chapters')
+          ? novelUrl
+          : (novelUrl.endsWith('/') ? '${novelUrl}chapters' : '$novelUrl/chapters');
+      final respBody = await _fetchWithFallback(chaptersUrl);
+      if (respBody != null && respBody.isNotEmpty) {
+        final page1Chs = parseChapterList(novelUrl, respBody);
         if (page1Chs.isNotEmpty) {
           for (final c in page1Chs) {
             if (!seenUrls.contains(c.url)) {
@@ -509,8 +587,7 @@ class NovelFullExtractor implements NovelSource {
             }
           }
 
-          // Check pagination on the dedicated chapters page
-          final chaptersDoc = html_parser.parse(resp.body);
+          final chaptersDoc = html_parser.parse(respBody);
           int maxChapterPage = 1;
           final pagLinks = chaptersDoc.querySelectorAll(
             '.pagenav a, .pagination-container a, .pagination a, ul.pagination li a, a[href*="page="]',
@@ -527,176 +604,90 @@ class NovelFullExtractor implements NovelSource {
             if (pText != null && pText > maxChapterPage) maxChapterPage = pText;
           }
 
-          // Fetch subsequent pages up to maxChapterPage (or up to 60 pages / 6,000 chapters)
           for (int p = 2; p <= maxChapterPage && p <= 60; p++) {
             final pageUrl = '$chaptersUrl?page=$p';
-            try {
-              final pResp = await _client.get(Uri.parse(pageUrl), headers: _headers);
-              if (pResp.statusCode == 200) {
-                final pChs = parseChapterList(novelUrl, pResp.body);
-                if (pChs.isEmpty) break;
-                for (final c in pChs) {
-                  if (!seenUrls.contains(c.url)) {
-                    seenUrls.add(c.url);
-                    chapters.add(c);
-                  }
-                }
-                onBatchLoaded?.call(List.from(chapters));
-              } else {
-                break;
+            final pBody = await _fetchWithFallback(pageUrl);
+            if (pBody == null || pBody.isEmpty) break;
+            final pChs = parseChapterList(novelUrl, pBody);
+            if (pChs.isEmpty) break;
+            for (final c in pChs) {
+              if (!seenUrls.contains(c.url)) {
+                seenUrls.add(c.url);
+                chapters.add(c);
               }
-            } catch (_) {
-              break;
             }
-          }
-        }
-      }
-    } catch (_) {}
-
-    // 3. Support FreeWebNovel & NOVGO AJAX chapter pagination (/ajax-chapter-list?novelId={id}&page={p})
-    final listChapterEl = document.querySelector('#list-chapter, [data-list-url]');
-    final ajaxChapterListUrl = listChapterEl?.attributes['data-list-url'];
-    final fwnNovelId = listChapterEl?.attributes['data-novel-id'] ?? ajaxNovelId;
-    final fwnTotalPages = int.tryParse(listChapterEl?.attributes['data-total-page'] ?? '');
-
-    if (ajaxChapterListUrl != null && ajaxChapterListUrl.isNotEmpty && fwnNovelId != null && fwnNovelId.isNotEmpty && fwnTotalPages != null && fwnTotalPages > 1) {
-      final headersWithXHR = Map<String, String>.from(_headers)..['X-Requested-With'] = 'XMLHttpRequest';
-      final int maxP = fwnTotalPages > 40 ? 40 : fwnTotalPages;
-      const int batchSize = 10;
-      for (int i = 2; i <= maxP; i += batchSize) {
-        final end = (i + batchSize - 1) > maxP ? maxP : (i + batchSize - 1);
-        final futures = <Future<http.Response>>[];
-        for (int p = i; p <= end; p++) {
-          final pUrl = '$baseUrl$ajaxChapterListUrl?novelId=$fwnNovelId&page=$p';
-          futures.add(_client.get(Uri.parse(pUrl), headers: headersWithXHR));
-        }
-        try {
-          final responses = await Future.wait(futures);
-          for (final resp in responses) {
-            if (resp.statusCode == 200) {
-              try {
-                final data = json.decode(resp.body);
-                if (data is Map && data['html'] != null) {
-                  final pChs = parseChapterList(novelUrl, data['html'].toString());
-                  for (final c in pChs) {
-                    if (!seenUrls.contains(c.url)) {
-                      seenUrls.add(c.url);
-                      chapters.add(c);
-                    }
-                  }
-                }
-              } catch (_) {}
-            }
-          }
-          onBatchLoaded?.call(List.from(chapters));
-        } catch (_) {}
-      }
-    } else {
-      // LibRead / FreeWebNovel variant (?ajax=chapters&page=N&pageSize=100)
-      final indexListPage = document.querySelector('#indexListPage');
-      final totalPages = int.tryParse(indexListPage?.attributes['data-total-page'] ?? '');
-      if (totalPages != null && totalPages > 1) {
-        for (int p = 2; p <= totalPages && p <= 60; p++) {
-          final ajaxUrl = novelUrl.contains('?')
-              ? '$novelUrl&ajax=chapters&page=$p&pageSize=100'
-              : '$novelUrl?ajax=chapters&page=$p&pageSize=100';
-          try {
-            final ajaxResp = await _client.get(Uri.parse(ajaxUrl), headers: _headers);
-            if (ajaxResp.statusCode == 200) {
-              try {
-                final data = json.decode(ajaxResp.body);
-                if (data is Map && data['html'] != null) {
-                  final pChs = parseChapterList(novelUrl, data['html'].toString());
-                  for (final c in pChs) {
-                    if (!seenUrls.contains(c.url)) {
-                      seenUrls.add(c.url);
-                      chapters.add(c);
-                    }
-                  }
-                }
-              } catch (_) {
-                final pChs = parseChapterList(novelUrl, ajaxResp.body);
-                for (final c in pChs) {
-                  if (!seenUrls.contains(c.url)) {
-                    seenUrls.add(c.url);
-                    chapters.add(c);
-                  }
-                }
-              }
-              onBatchLoaded?.call(List.from(chapters));
-            } else {
-              break;
-            }
-          } catch (_) {
-            break;
+            onBatchLoaded?.call(List.from(chapters));
           }
         }
       }
     }
 
-    // 4. Follow pagination if present on NovelFull / NovelBin clones
-    final paginationLinks = document.querySelectorAll(
-      '.pagination a, ul.pagination li a, #pagination a, .pagenav a, .page-item a',
-    );
-    if (paginationLinks.isNotEmpty) {
-      int maxPage = 1;
-      String? pageUrlPattern;
+    // 4. Fallback for NovelBin / multi-page HTML pagination
+    if (chapters.length <= 60) {
+      final paginationLinks = document.querySelectorAll(
+        '.pagination a, ul.pagination li a, #pagination a, .pagenav a, .page-item a',
+      );
+      if (paginationLinks.isNotEmpty) {
+        int maxPage = 1;
+        String? pageUrlPattern;
 
-      for (final a in paginationLinks) {
-        final text = a.text.trim();
-        final p = int.tryParse(text);
-        if (p != null && p > maxPage) maxPage = p;
-        final href = a.attributes['href'] ?? '';
-        final clean = _cleanUrl(href);
+        for (final a in paginationLinks) {
+          final text = a.text.trim();
+          final p = int.tryParse(text);
+          if (p != null && p > maxPage) maxPage = p;
+          final href = a.attributes['href'] ?? '';
+          final clean = _cleanUrl(href);
 
-        final pageMatch = RegExp(r'page=(\d+)').firstMatch(href) ??
-            RegExp(r'/page/(\d+)').firstMatch(href) ??
-            RegExp(r'page-(\d+)').firstMatch(href);
-        if (pageMatch != null) {
-          final pMatch = int.tryParse(pageMatch.group(1)!);
-          if (pMatch != null && pMatch > maxPage) maxPage = pMatch;
+          final pageMatch = RegExp(r'page=(\d+)').firstMatch(href) ??
+              RegExp(r'/page/(\d+)').firstMatch(href) ??
+              RegExp(r'page-(\d+)').firstMatch(href);
+          if (pageMatch != null) {
+            final pMatch = int.tryParse(pageMatch.group(1)!);
+            if (pMatch != null && pMatch > maxPage) maxPage = pMatch;
+          }
+
+          if (pageUrlPattern == null && href.isNotEmpty) {
+            if (clean.contains('page=')) {
+              pageUrlPattern = clean.replaceAll(RegExp(r'page=\d+'), 'page={page}');
+            } else if (clean.contains('/page/')) {
+              pageUrlPattern = clean.replaceAll(RegExp(r'/page/\d+/?'), '/page/{page}/');
+            } else if (clean.contains('page-')) {
+              pageUrlPattern = clean.replaceAll(RegExp(r'page-\d+'), 'page-{page}');
+            }
+          }
         }
 
-        if (pageUrlPattern == null && href.isNotEmpty) {
-          if (clean.contains('page=')) {
-            pageUrlPattern = clean.replaceAll(RegExp(r'page=\d+'), 'page={page}');
-          } else if (clean.contains('/page/')) {
-            pageUrlPattern = clean.replaceAll(RegExp(r'/page/\d+/?'), '/page/{page}/');
-          } else if (clean.contains('page-')) {
-            pageUrlPattern = clean.replaceAll(RegExp(r'page-\d+'), 'page-{page}');
+        if (maxPage > 1) {
+          for (int p = 2; p <= maxPage && p <= 80; p++) {
+            final pUrl = pageUrlPattern != null
+                ? pageUrlPattern.replaceAll('{page}', p.toString())
+                : '$novelUrl${novelUrl.contains('?') ? '&' : '?'}page=$p';
+            final pBody = await _fetchWithFallback(pUrl);
+            if (pBody == null || pBody.isEmpty) break;
+            final pageChs = parseChapterList(novelUrl, pBody);
+            if (pageChs.isEmpty) break;
+            bool added = false;
+            for (final ch in pageChs) {
+              if (!seenUrls.contains(ch.url)) {
+                seenUrls.add(ch.url);
+                chapters.add(ch);
+                added = true;
+              }
+            }
+            if (added) {
+              onBatchLoaded?.call(List.from(chapters));
+            }
           }
         }
       }
+    }
 
-      if (maxPage > 1) {
-        // Fetch remaining pages (up to 100 pages / 10,000 chapters)
-        for (int p = 2; p <= maxPage && p <= 100; p++) {
-          final pUrl = pageUrlPattern != null
-              ? pageUrlPattern.replaceAll('{page}', p.toString())
-              : '$novelUrl${novelUrl.contains('?') ? '&' : '?'}page=$p';
-          try {
-            final pResp = await _client.get(Uri.parse(pUrl), headers: _headers);
-            if (pResp.statusCode == 200) {
-              final pageChs = parseChapterList(novelUrl, pResp.body);
-              if (pageChs.isEmpty) break;
-              bool added = false;
-              for (final ch in pageChs) {
-                if (!seenUrls.contains(ch.url)) {
-                  seenUrls.add(ch.url);
-                  chapters.add(ch);
-                  added = true;
-                }
-              }
-              if (added) {
-                onBatchLoaded?.call(List.from(chapters));
-              }
-            } else {
-              break;
-            }
-          } catch (_) {
-            break;
-          }
-        }
+    // Ensure chronological ascending order (Chapter 1 ... Chapter N)
+    if (chapters.length > 1) {
+      final firstNum = chapters.first.chapterNumber;
+      final lastNum = chapters.last.chapterNumber;
+      if (firstNum != null && lastNum != null && firstNum > lastNum) {
+        chapters = chapters.reversed.toList();
       }
     }
 
@@ -726,16 +717,19 @@ class NovelFullExtractor implements NovelSource {
       links = document.querySelectorAll('li a.con, ul.ul-list5 li a, .ul-list5 li a, .ul-list3 li a');
     }
     if (links.isEmpty) {
+      links = document.querySelectorAll('select option, option');
+    }
+    if (links.isEmpty) {
       links = document.querySelectorAll('a[href*="/chapter-"], a[href*="/chuong-"], a[href*="/chap-"]');
     }
 
     int orderIndex = 0;
     for (final link in links) {
-      final href = link.attributes['href'] ?? '';
-      if (href.isEmpty) continue;
+      final href = link.attributes['value'] ?? link.attributes['href'] ?? '';
+      if (href.isEmpty || href.contains('javascript:') || href == '0') continue;
 
       final title = link.attributes['title']?.trim() ?? link.text.trim();
-      if (title.isEmpty) continue;
+      if (title.isEmpty || title == 'Select page') continue;
 
       final chapterSlug = Uri.tryParse(href)?.pathSegments.where((s) => s.isNotEmpty).lastOrNull?.replaceAll('.html', '') ??
           '${chapters.length + 1}';
@@ -762,20 +756,8 @@ class NovelFullExtractor implements NovelSource {
 
   @override
   Future<ChapterContent> getChapterContent(String chapterUrl) async {
-    String body = '';
-    try {
-      final response = await _client.get(Uri.parse(chapterUrl), headers: _headers);
-      if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
-        body = response.body;
-      }
-    } catch (_) {}
-
-    if (body.isEmpty) {
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(chapterUrl);
-      if (wvHtml != null) body = wvHtml;
-    }
-
-    if (body.isEmpty) {
+    final body = await _fetchWithFallback(chapterUrl);
+    if (body == null || body.isEmpty) {
       throw Exception('Failed to load chapter content: $chapterUrl');
     }
     return parseChapterContent(chapterUrl, body);

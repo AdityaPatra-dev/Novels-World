@@ -388,6 +388,10 @@ class EpubService {
     List<String> renderedImagePaths = [];
 
     if (hasSufficientText) {
+      // Also render high-resolution original pages in background so "Read Original Book" is immediately ready
+      final pagesDir = Directory('${bookDir.path}/pages');
+      PdfPageRenderer.renderPages(docCopy.path, pagesDir.path).catchError((_) => <String>[]);
+
       const pagesPerChapter = 5;
       final totalChapters = (meaningfulPages.length / pagesPerChapter).ceil();
       for (int c = 0; c < totalChapters; c++) {
@@ -436,6 +440,34 @@ class EpubService {
       }
 
       if (renderedImagePaths.isNotEmpty) {
+        final isOdia = (originalNovel?.genres.any((g) => g.toLowerCase() == 'odia' || g.toLowerCase() == 'or') == true) ||
+            (originalNovel?.id.startsWith('or_') == true || originalNovel?.id.startsWith('odiabibhaba') == true) ||
+            (originalNovel?.title.runes.any((r) => r >= 0x0B00 && r <= 0x0B7F) == true);
+        final isHindi = (originalNovel?.genres.any((g) => g.toLowerCase() == 'hindi' || g.toLowerCase() == 'hi') == true) ||
+            (originalNovel?.id.startsWith('hindisamay') == true ||
+                originalNovel?.id.startsWith('gadyakosh') == true ||
+                originalNovel?.id.startsWith('kavitakosh') == true ||
+                originalNovel?.id.startsWith('epustakalay') == true);
+
+        String ocrScript = isOdia ? 'ori' : (isHindi ? 'devanagari' : 'latin');
+        String? tessDataDir;
+        if (isOdia) {
+          try {
+            tessDataDir = await PdfPageRenderer.ensureTessData('ori');
+            await PdfPageRenderer.ensureTessData('eng');
+            ocrScript = 'ori+eng';
+          } catch (_) {}
+        }
+
+        List<Map<String, String>> ocrResults = [];
+        try {
+          ocrResults = await PdfPageRenderer.extractTextFromImages(
+            renderedImagePaths,
+            script: ocrScript,
+            tessDataDir: tessDataDir,
+          );
+        } catch (_) {}
+
         const pagesPerChapter = 5;
         final totalChapters = (renderedImagePaths.length / pagesPerChapter).ceil();
         for (int c = 0; c < totalChapters; c++) {
@@ -455,7 +487,19 @@ class EpubService {
 
           for (int imgIdx = startIdx; imgIdx < endIdx; imgIdx++) {
             final imgPath = renderedImagePaths[imgIdx];
-            sb.writeln('<p>[IMAGE:file://$imgPath]</p>');
+            final rawText = (imgIdx < ocrResults.length) ? (ocrResults[imgIdx]['text'] ?? '') : '';
+            final cleanText = _filterWatermarks(rawText);
+            final paras = formatPdfTextToParagraphs(cleanText, bookTitle: originalNovel?.title);
+
+            if (paras.isNotEmpty) {
+              for (final para in paras) {
+                sb.writeln('<p>${_escapeHtml(para)}</p>');
+              }
+            } else {
+              // Page without text (cover/illustration)
+              sb.writeln('<p>[IMAGE:file://$imgPath]</p>');
+            }
+            sb.writeln('<hr/>');
           }
 
           sb.writeln('</body></html>');
@@ -650,44 +694,6 @@ class EpubService {
     return validLines.join('\n');
   }
 
-  static List<String> _groupOcrLinesToParagraphs(String text) {
-    final lines = text.split('\n').map((l) => l.trim()).toList();
-    final paragraphs = <String>[];
-    final currentPara = StringBuffer();
-
-    for (final line in lines) {
-      if (line.isEmpty) {
-        if (currentPara.isNotEmpty) {
-          paragraphs.add(currentPara.toString().trim());
-          currentPara.clear();
-        }
-        continue;
-      }
-
-      if (line.startsWith('Digitized by') || line.length < 2) {
-        continue;
-      }
-
-      if (currentPara.isNotEmpty) {
-        currentPara.write(' ');
-      }
-      currentPara.write(line);
-
-      if (line.endsWith('।') || line.endsWith('.') || line.endsWith('?') || line.endsWith('!')) {
-        if (currentPara.length > 80) {
-          paragraphs.add(currentPara.toString().trim());
-          currentPara.clear();
-        }
-      }
-    }
-
-    if (currentPara.isNotEmpty) {
-      paragraphs.add(currentPara.toString().trim());
-    }
-
-    return paragraphs.where((p) => p.length >= 3).toList();
-  }
-
   /// Converts an image-based chapter XHTML to real text using on-device OCR (Tesseract / ML Kit).
   static Future<bool> ocrChapterFile(File chapterFile, {String? defaultScript}) async {
     try {
@@ -760,7 +766,7 @@ class EpubService {
         final imgPath = res['imagePath'] ?? '';
         final cleanText = _filterWatermarks(rawText);
 
-        final paragraphs = _groupOcrLinesToParagraphs(cleanText);
+        final paragraphs = formatPdfTextToParagraphs(cleanText);
         if (paragraphs.isNotEmpty) {
           for (final p in paragraphs) {
             sb.writeln('<p>${_escapeHtml(p)}</p>');
@@ -876,6 +882,28 @@ class EpubService {
         }
         if (rawParas.isEmpty && bodyEl.text.trim().isNotEmpty) {
           rawParas.add(bodyEl.text.trim());
+        }
+      }
+    }
+
+    // Auto-extract text on the fly if this chapter currently only holds image placeholders,
+    // so normal chapter reading and Text-to-Speech (TTS) can be used
+    final onlyHasImages = rawParas.isNotEmpty &&
+        rawParas.every((p) => p.startsWith('[IMAGE:'));
+    if (onlyHasImages) {
+      final converted = await ocrChapterFile(file);
+      if (converted) {
+        final updatedHtml = await file.readAsString();
+        final updatedDoc = html_parser.parse(updatedHtml);
+        final updatedPElements = updatedDoc.querySelectorAll('p');
+        if (updatedPElements.isNotEmpty) {
+          rawParas.clear();
+          for (final p in updatedPElements) {
+            final text = p.text.trim();
+            if (text.isNotEmpty) {
+              rawParas.add(text);
+            }
+          }
         }
       }
     }

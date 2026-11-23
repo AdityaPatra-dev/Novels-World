@@ -716,6 +716,19 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
     }
   }
 
+  bool get _isImageBasedBook {
+    if (_novel.bookFormat?.toLowerCase() == 'pdf') return true;
+    if (_novel.sourceId == 'odiabibhaba' ||
+        _novel.sourceId == 'epustakalay' ||
+        _novel.sourceId == 'vdocpub') {
+      return true;
+    }
+    if (_novel.sourceId == 'local_epub' && _novel.id.startsWith('local_pdf_')) {
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _readOriginalBook() async {
     final downloadService = context.read<DownloadService>();
     final isDownloaded = !kIsWeb && downloadService.isBookDownloaded(_novel.id);
@@ -1204,14 +1217,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             : ElevatedButton.icon(
                                 onPressed: _chapters.isNotEmpty
                                     ? () {
-                                        if (isFullBook ||
-                                            _novel.bookFormat == 'pdf' ||
-                                            _novel.sourceId == 'odiabibhaba' ||
-                                            _novel.sourceId == 'epustakalay') {
-                                          _readOriginalBook();
-                                        } else {
-                                          _openReader(_lastReadChapter ?? EpubService.getFirstNarrativeChapter(_chapters));
-                                        }
+                                        _openReader(_lastReadChapter ?? EpubService.getFirstNarrativeChapter(_chapters));
                                       }
                                     : null,
                                 icon: Icon(_lastReadChapter != null
@@ -1529,7 +1535,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                   if (sel) setState(() => _showAudioOnly = false);
                                 },
                               ),
-                              if (isFullBook || _novel.bookFormat == 'pdf' || _novel.sourceId == 'odiabibhaba' || _novel.sourceId == 'epustakalay') ...[
+                              if (_isImageBasedBook) ...[
                                 const SizedBox(width: 8),
                                 ActionChip(
                                   avatar: const Icon(Icons.auto_stories_rounded, size: 14, color: Color(0xFFA78BFA)),

@@ -104,8 +104,8 @@ class EastOfTheWebExtractor implements NovelSource {
   @override
   Future<List<Novel>> getPopular({int page = 1}) async {
     final targetUrl = page > 1
-        ? '$baseUrl/short-stories/index.php?genre=all&page=$page'
-        : '$baseUrl/short-stories/index.php?genre=all';
+        ? '$baseUrl/fiction?page=${page - 1}'
+        : '$baseUrl/fiction';
     final html = await _fetchHtml(targetUrl);
     return parseNovelList(html);
   }

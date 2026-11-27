@@ -692,18 +692,23 @@ class LightNovelWpExtractor implements NovelSource {
           }
         }
 
-        int curPage = 2;
-        // Limit initial sequential page walk to prevent hanging on massive 150-page webnovels
-        final targetMax = maxChapterPage > 5 ? 5 : maxChapterPage;
-        while (curPage <= targetMax) {
+        final targetMax = maxChapterPage.clamp(1, 150);
+        const int batchSize = 4;
+        for (int i = 2; i <= targetMax; i += batchSize) {
+          final end = (i + batchSize - 1) > targetMax ? targetMax : (i + batchSize - 1);
           final sep = novelUrl.contains('?') ? '&' : '?';
-          final pUrl = '$novelUrl${sep}chapter_volume=__kol_all__&chapter_search&chapter_order=newest&chapter_page=$curPage#chapters';
-          try {
-            final pResp = await _client.get(Uri.parse(pUrl), headers: _headers).timeout(const Duration(seconds: 4));
-            if (pResp.statusCode == 200 && pResp.body.isNotEmpty) {
+          final futures = <Future<http.Response?>>[];
+          for (int p = i; p <= end; p++) {
+            final pUrl = '$novelUrl${sep}chapter_volume=__kol_all__&chapter_search&chapter_order=newest&chapter_page=$p#chapters';
+            futures.add(
+              _client.get(Uri.parse(pUrl), headers: _headers).timeout(const Duration(seconds: 6)).then<http.Response?>((r) => r).catchError((_) => null),
+            );
+          }
+          final responses = await Future.wait(futures);
+          bool added = false;
+          for (final pResp in responses) {
+            if (pResp != null && pResp.statusCode == 200 && pResp.body.isNotEmpty) {
               final pageChs = parseChapterList(novelUrl, pResp.body);
-              if (pageChs.isEmpty) break;
-              bool added = false;
               for (final ch in pageChs) {
                 if (!seenUrls.contains(ch.url)) {
                   seenUrls.add(ch.url);
@@ -711,16 +716,13 @@ class LightNovelWpExtractor implements NovelSource {
                   added = true;
                 }
               }
-              if (added) {
-                onBatchLoaded?.call(List.from(chapters));
-              }
-            } else {
-              break;
             }
-          } catch (_) {
+          }
+          if (added) {
+            onBatchLoaded?.call(List.from(chapters));
+          } else {
             break;
           }
-          curPage++;
         }
       } else {
         // 2. Standard LightNovelWP / Themesia pagination (e.g. KnoxT, .page-numbers, .pagination)
@@ -816,44 +818,48 @@ class LightNovelWpExtractor implements NovelSource {
             final decoded = jsonDecode(catJson);
             if (decoded is List && decoded.isNotEmpty) {
               final catId = decoded.first['id'];
-              final postsApiStr = '$baseUrl/wp-json/wp/v2/posts?categories=$catId&per_page=100';
-              String postsJson = '';
-              try {
-                final postsResp = await _client.get(Uri.parse(postsApiStr), headers: {
-                  'Accept': 'application/json',
-                  ..._headers,
-                });
-                if (postsResp.statusCode == 200) postsJson = postsResp.body;
-              } catch (_) {}
+              final novelSlug = slug;
+              final novelId = '${id}_$novelSlug';
+              final allPosts = <Map>[];
+              for (int page = 1; page <= 50; page++) {
+                final postsApiStr = '$baseUrl/wp-json/wp/v2/posts?categories=$catId&per_page=100&page=$page';
+                String postsJson = '';
+                try {
+                  final postsResp = await _client.get(Uri.parse(postsApiStr), headers: {
+                    'Accept': 'application/json',
+                    ..._headers,
+                  });
+                  if (postsResp.statusCode == 200) postsJson = postsResp.body;
+                } catch (_) {}
 
-              if (postsJson.isEmpty) {
-                final wvPosts = await WebViewSessionManager.instance.fetchHtmlViaWebView(postsApiStr);
-                if (wvPosts != null) postsJson = wvPosts;
+                if (postsJson.isEmpty) {
+                  final wvPosts = await WebViewSessionManager.instance.fetchHtmlViaWebView(postsApiStr);
+                  if (wvPosts != null) postsJson = wvPosts;
+                }
+
+                if (postsJson.isEmpty) break;
+                final postsDecoded = jsonDecode(postsJson);
+                if (postsDecoded is! List || postsDecoded.isEmpty) break;
+                for (final p in postsDecoded) {
+                  if (p is Map) allPosts.add(p);
+                }
+                if (postsDecoded.length < 100) break;
               }
 
-              if (postsJson.isNotEmpty) {
-                final postsDecoded = jsonDecode(postsJson);
-                if (postsDecoded is List) {
-                  final novelSlug = slug;
-                  final novelId = '${id}_$novelSlug';
-                  int orderIndex = 0;
-                  for (final p in postsDecoded.reversed) {
-                    if (p is Map) {
-                      final rawTitle = p['title']?['rendered']?.toString() ?? '';
-                      final chTitle = html_parser.parseFragment(rawTitle).text?.trim() ?? rawTitle.trim();
-                      final chLink = p['link']?.toString() ?? '';
-                      if (chLink.isNotEmpty && chTitle.isNotEmpty) {
-                        chapters.add(Chapter(
-                          id: '${novelId}_ch_$orderIndex',
-                          novelId: novelId,
-                          title: chTitle,
-                          chapterNumber: (++orderIndex).toDouble(),
-                          url: _cleanUrl(chLink),
-                          releaseDate: p['date']?.toString(),
-                        ));
-                      }
-                    }
-                  }
+              int orderIndex = 0;
+              for (final p in allPosts.reversed) {
+                final rawTitle = p['title']?['rendered']?.toString() ?? '';
+                final chTitle = html_parser.parseFragment(rawTitle).text?.trim() ?? rawTitle.trim();
+                final chLink = p['link']?.toString() ?? '';
+                if (chLink.isNotEmpty && chTitle.isNotEmpty) {
+                  chapters.add(Chapter(
+                    id: '${novelId}_ch_$orderIndex',
+                    novelId: novelId,
+                    title: chTitle,
+                    chapterNumber: (++orderIndex).toDouble(),
+                    url: _cleanUrl(chLink),
+                    releaseDate: p['date']?.toString(),
+                  ));
                 }
               }
             }

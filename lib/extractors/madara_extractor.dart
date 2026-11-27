@@ -301,7 +301,14 @@ class MadaraExtractor implements NovelSource {
 
     final document = html_parser.parse(body);
 
-    var rawTitle = document.querySelector('.post-title h1, .post-title h3, .post-title h2, .post-title, .nhv-single-novel__title, h1, h2')?.text.trim() ?? '';
+    var rawTitle = document.querySelector('.post-title h1')?.text.trim() ??
+        document.querySelector('.post-title h3')?.text.trim() ??
+        document.querySelector('.post-title h2')?.text.trim() ??
+        document.querySelector('.nhv-single-novel__title')?.text.trim() ??
+        document.querySelector('h1')?.text.trim() ??
+        document.querySelector('.post-title')?.text.trim() ??
+        document.querySelector('h2')?.text.trim() ??
+        '';
     if (rawTitle.isEmpty || rawTitle.toLowerCase() == 'untitled') {
       final og = document.querySelector('meta[property="og:title"]')?.attributes['content'];
       if (og != null && og.isNotEmpty) {

@@ -245,7 +245,7 @@ class ScribbleHubExtractor implements NovelSource {
       final seenUrls = <String>{};
       final allAjaxChapters = <Chapter>[];
       int pageNum = 1;
-      while (pageNum <= 50) {
+      while (pageNum <= 250) {
         try {
           final ajaxResp = await _client.post(
             Uri.parse('$baseUrl/wp-admin/admin-ajax.php'),
@@ -253,6 +253,8 @@ class ScribbleHubExtractor implements NovelSource {
               ..._headers,
               'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
               'X-Requested-With': 'XMLHttpRequest',
+              'Referer': novelUrl,
+              'Origin': baseUrl,
             },
             body: {
               'action': 'wi_getreleases_pagination',
@@ -282,6 +284,43 @@ class ScribbleHubExtractor implements NovelSource {
       }
       if (allAjaxChapters.length > chapters.length) {
         chapters = allAjaxChapters;
+      }
+    }
+
+    // Fallback: HTML ?toc=N pagination if admin-ajax.php was blocked or incomplete
+    final tocPagLinks = document.querySelectorAll('#pagination a, .pagination a, ul.pagination a, a.page-link');
+    int maxTocPage = 1;
+    for (final a in tocPagLinks) {
+      final href = a.attributes['href'] ?? '';
+      final tocMatch = RegExp(r'toc=(\d+)').firstMatch(href);
+      if (tocMatch != null) {
+        final p = int.tryParse(tocMatch.group(1)!);
+        if (p != null && p > maxTocPage) maxTocPage = p;
+      }
+      final pText = int.tryParse(a.text.trim());
+      if (pText != null && pText > maxTocPage) maxTocPage = pText;
+    }
+
+    if (maxTocPage > 1 && chapters.length <= 20) {
+      final seenUrls = chapters.map((c) => c.url).toSet();
+      final baseClean = novelUrl.split('?').first.split('#').first;
+      for (int p = 2; p <= maxTocPage && p <= 250; p++) {
+        try {
+          final pageHtml = await _fetchHtml('$baseClean?toc=$p');
+          final pageChs = parseChapterList(novelUrl, pageHtml);
+          if (pageChs.isEmpty) break;
+          bool added = false;
+          for (final ch in pageChs) {
+            if (!seenUrls.contains(ch.url)) {
+              seenUrls.add(ch.url);
+              chapters.add(ch);
+              added = true;
+            }
+          }
+          if (!added) break;
+        } catch (_) {
+          break;
+        }
       }
     }
 

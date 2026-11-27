@@ -505,20 +505,32 @@ class NovelFullExtractor implements NovelSource {
 
     // 2. FreeWebNovel & LibRead pagination (?ajax=chapters&page=N&pageSize=200)
     final indexListPage = document.querySelector('#indexListPage, [data-total-chapters]');
-    final totalChaptersStr = indexListPage?.attributes['data-total-chapters'] ?? '';
-    final totalChaptersNum = int.tryParse(totalChaptersStr) ?? 0;
-    final totalPagesNum = int.tryParse(indexListPage?.attributes['data-total-page'] ?? '') ?? 0;
+    var totalChaptersNum = int.tryParse(indexListPage?.attributes['data-total-chapters'] ?? '') ?? 0;
+    var totalPagesNum = int.tryParse(indexListPage?.attributes['data-total-page'] ?? '') ?? 0;
 
-    if (indexListPage != null && (totalChaptersNum > chapters.length || totalPagesNum > 1)) {
+    // LibRead exposes window.chapterPagination = { currentPage: 1, pageSize: 40, totalPage: 82, totalChapters: 3256 }
+    if (totalChaptersNum == 0 && totalPagesNum == 0) {
+      final cpMatch = RegExp(r'window\.chapterPagination\s*=\s*\{([^}]+)\}', dotAll: true).firstMatch(body);
+      if (cpMatch != null) {
+        final cpBlock = cpMatch.group(1)!;
+        final tcMatch = RegExp(r'totalChapters\s*:\s*(\d+)').firstMatch(cpBlock);
+        final tpMatch = RegExp(r'totalPage\s*:\s*(\d+)').firstMatch(cpBlock);
+        if (tcMatch != null) totalChaptersNum = int.tryParse(tcMatch.group(1)!) ?? 0;
+        if (tpMatch != null) totalPagesNum = int.tryParse(tpMatch.group(1)!) ?? 0;
+      }
+    }
+
+    if ((indexListPage != null || totalChaptersNum > 0 || totalPagesNum > 1) &&
+        (totalChaptersNum > chapters.length || totalPagesNum > 1)) {
       final int calcTotalPages = totalChaptersNum > 0
           ? (totalChaptersNum / 200).ceil()
           : (totalPagesNum > 0 ? (totalPagesNum * 40 / 200).ceil() : 30);
-      final int maxP = calcTotalPages.clamp(1, 100);
+      final int maxP = calcTotalPages.clamp(1, 150);
 
       final List<Chapter> pagedChapters = [];
       final Set<String> pagedSeen = {};
 
-      const int batchSize = 3;
+      const int batchSize = 4;
       for (int i = 1; i <= maxP; i += batchSize) {
         final end = (i + batchSize - 1) > maxP ? maxP : (i + batchSize - 1);
         final futures = <Future<String?>>[];
@@ -572,7 +584,8 @@ class NovelFullExtractor implements NovelSource {
     }
 
     // 3. Fallback: /book/<slug>/chapters dedicated chapter list page (e.g. NovelFire)
-    if (chapters.length <= 60) {
+    final hasDedicatedChaptersLink = document.querySelector('a[href*="/chapters"]') != null;
+    if (chapters.length <= 60 || (hasDedicatedChaptersLink && totalChaptersNum == 0)) {
       final chaptersUrl = novelUrl.endsWith('/chapters')
           ? novelUrl
           : (novelUrl.endsWith('/') ? '${novelUrl}chapters' : '$novelUrl/chapters');
@@ -604,69 +617,100 @@ class NovelFullExtractor implements NovelSource {
             if (pText != null && pText > maxChapterPage) maxChapterPage = pText;
           }
 
-          for (int p = 2; p <= maxChapterPage && p <= 60; p++) {
-            final pageUrl = '$chaptersUrl?page=$p';
-            final pBody = await _fetchWithFallback(pageUrl);
-            if (pBody == null || pBody.isEmpty) break;
-            final pChs = parseChapterList(novelUrl, pBody);
-            if (pChs.isEmpty) break;
-            for (final c in pChs) {
-              if (!seenUrls.contains(c.url)) {
-                seenUrls.add(c.url);
-                chapters.add(c);
+          final int cappedMaxPage = maxChapterPage.clamp(1, 200);
+          const int batchSize = 3;
+          int emptyBatches = 0;
+          for (int i = 2; i <= cappedMaxPage; i += batchSize) {
+            final end = (i + batchSize - 1) > cappedMaxPage ? cappedMaxPage : (i + batchSize - 1);
+            final futures = <Future<String?>>[];
+            for (int p = i; p <= end; p++) {
+              futures.add(_fetchWithFallback('$chaptersUrl?page=$p'));
+            }
+            var bodies = await Future.wait(futures);
+            bool addedInBatch = false;
+            for (int idx = 0; idx < bodies.length; idx++) {
+              var pBody = bodies[idx];
+              if (pBody == null || pBody.isEmpty) {
+                await Future.delayed(const Duration(milliseconds: 500));
+                pBody = await _fetchWithFallback('$chaptersUrl?page=${i + idx}');
+              }
+              if (pBody == null || pBody.isEmpty) continue;
+              final pChs = parseChapterList(novelUrl, pBody);
+              for (final c in pChs) {
+                if (!seenUrls.contains(c.url)) {
+                  seenUrls.add(c.url);
+                  chapters.add(c);
+                  addedInBatch = true;
+                }
               }
             }
-            onBatchLoaded?.call(List.from(chapters));
+            if (addedInBatch) {
+              emptyBatches = 0;
+              onBatchLoaded?.call(List.from(chapters));
+            } else {
+              emptyBatches++;
+              if (emptyBatches >= 3) break;
+            }
+            if (i + batchSize <= cappedMaxPage) {
+              await Future.delayed(const Duration(milliseconds: 200));
+            }
           }
         }
       }
     }
 
     // 4. Fallback for NovelBin / multi-page HTML pagination
-    if (chapters.length <= 60) {
-      final paginationLinks = document.querySelectorAll(
-        '.pagination a, ul.pagination li a, #pagination a, .pagenav a, .page-item a',
-      );
-      if (paginationLinks.isNotEmpty) {
-        int maxPage = 1;
-        String? pageUrlPattern;
+    final paginationLinks = document.querySelectorAll(
+      '.pagination a, ul.pagination li a, #pagination a, .pagenav a, .page-item a',
+    );
+    if (paginationLinks.isNotEmpty && totalChaptersNum == 0) {
+      int maxPage = 1;
+      String? pageUrlPattern;
 
-        for (final a in paginationLinks) {
-          final text = a.text.trim();
-          final p = int.tryParse(text);
-          if (p != null && p > maxPage) maxPage = p;
-          final href = a.attributes['href'] ?? '';
-          final clean = _cleanUrl(href);
+      for (final a in paginationLinks) {
+        final text = a.text.trim();
+        final p = int.tryParse(text);
+        if (p != null && p > maxPage) maxPage = p;
+        final href = a.attributes['href'] ?? '';
+        final clean = _cleanUrl(href);
 
-          final pageMatch = RegExp(r'page=(\d+)').firstMatch(href) ??
-              RegExp(r'/page/(\d+)').firstMatch(href) ??
-              RegExp(r'page-(\d+)').firstMatch(href);
-          if (pageMatch != null) {
-            final pMatch = int.tryParse(pageMatch.group(1)!);
-            if (pMatch != null && pMatch > maxPage) maxPage = pMatch;
-          }
-
-          if (pageUrlPattern == null && href.isNotEmpty) {
-            if (clean.contains('page=')) {
-              pageUrlPattern = clean.replaceAll(RegExp(r'page=\d+'), 'page={page}');
-            } else if (clean.contains('/page/')) {
-              pageUrlPattern = clean.replaceAll(RegExp(r'/page/\d+/?'), '/page/{page}/');
-            } else if (clean.contains('page-')) {
-              pageUrlPattern = clean.replaceAll(RegExp(r'page-\d+'), 'page-{page}');
-            }
-          }
+        final pageMatch = RegExp(r'page=(\d+)').firstMatch(href) ??
+            RegExp(r'/page/(\d+)').firstMatch(href) ??
+            RegExp(r'page-(\d+)').firstMatch(href);
+        if (pageMatch != null) {
+          final pMatch = int.tryParse(pageMatch.group(1)!);
+          if (pMatch != null && pMatch > maxPage) maxPage = pMatch;
         }
 
-        if (maxPage > 1) {
-          for (int p = 2; p <= maxPage && p <= 80; p++) {
+        if (pageUrlPattern == null && href.isNotEmpty) {
+          if (clean.contains('page=')) {
+            pageUrlPattern = clean.replaceAll(RegExp(r'page=\d+'), 'page={page}');
+          } else if (clean.contains('/page/')) {
+            pageUrlPattern = clean.replaceAll(RegExp(r'/page/\d+/?'), '/page/{page}/');
+          } else if (clean.contains('page-')) {
+            pageUrlPattern = clean.replaceAll(RegExp(r'page-\d+'), 'page-{page}');
+          }
+        }
+      }
+
+      if (maxPage > 1 && chapters.length < maxPage * 15) {
+        final int cappedMax = maxPage.clamp(1, 150);
+        const int batchSize = 4;
+        int emptyBatches = 0;
+        for (int i = 2; i <= cappedMax; i += batchSize) {
+          final end = (i + batchSize - 1) > cappedMax ? cappedMax : (i + batchSize - 1);
+          final futures = <Future<String?>>[];
+          for (int p = i; p <= end; p++) {
             final pUrl = pageUrlPattern != null
                 ? pageUrlPattern.replaceAll('{page}', p.toString())
                 : '$novelUrl${novelUrl.contains('?') ? '&' : '?'}page=$p';
-            final pBody = await _fetchWithFallback(pUrl);
-            if (pBody == null || pBody.isEmpty) break;
+            futures.add(_fetchWithFallback(pUrl));
+          }
+          final bodies = await Future.wait(futures);
+          bool added = false;
+          for (final pBody in bodies) {
+            if (pBody == null || pBody.isEmpty) continue;
             final pageChs = parseChapterList(novelUrl, pBody);
-            if (pageChs.isEmpty) break;
-            bool added = false;
             for (final ch in pageChs) {
               if (!seenUrls.contains(ch.url)) {
                 seenUrls.add(ch.url);
@@ -674,9 +718,13 @@ class NovelFullExtractor implements NovelSource {
                 added = true;
               }
             }
-            if (added) {
-              onBatchLoaded?.call(List.from(chapters));
-            }
+          }
+          if (added) {
+            emptyBatches = 0;
+            onBatchLoaded?.call(List.from(chapters));
+          } else {
+            emptyBatches++;
+            if (emptyBatches >= 2) break;
           }
         }
       }

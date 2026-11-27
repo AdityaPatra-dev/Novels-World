@@ -137,13 +137,22 @@ class EastOfTheWebExtractor implements NovelSource {
 
       seenUrls.add(storyUrl);
 
+      // Try extracting real story cover from surrounding card/row
+      var coverUrl = '$baseUrl/sites/default/files/web_l_shortstories.png';
+      final parentContainer = a.parent?.parent;
+      final imgEl = parentContainer?.querySelector('img[src*="story-covers"], img');
+      final imgSrc = imgEl?.attributes['src'] ?? '';
+      if (imgSrc.isNotEmpty && !imgSrc.contains('logo')) {
+        coverUrl = imgSrc.startsWith('http') ? imgSrc : '$baseUrl${imgSrc.startsWith('/') ? '' : '/'}$imgSrc';
+      }
+
       novels.add(
         Novel(
           id: storyUrl,
           sourceId: id,
           title: title,
           sourceUrl: storyUrl,
-          coverUrl: '$baseUrl/images/eotw-logo.png',
+          coverUrl: coverUrl,
           genres: const ['Short Story', 'Literature'],
           status: 'Completed',
         ),

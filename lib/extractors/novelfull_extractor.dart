@@ -817,9 +817,16 @@ class NovelFullExtractor implements NovelSource {
     final titleEl = document.querySelector('.chr-title, .chapter-title, h2.chapter-title, h1');
     final title = titleEl?.text.trim() ?? 'Chapter';
 
-    final container = document.querySelector(
-      '#chr-content, #chapter-content, .chr-content, .chapter-c, #article, .txt, #content, .content, .reading-content',
-    );
+    final container = document.querySelector('#chr-content') ??
+        document.querySelector('#chapter-content') ??
+        document.querySelector('.chr-content') ??
+        document.querySelector('.chapter-c') ??
+        document.querySelector('#chapter-container') ??
+        document.querySelector('#article') ??
+        document.querySelector('#content') ??
+        document.querySelector('.txt') ??
+        document.querySelector('.reading-content') ??
+        document.querySelector('.content');
     if (container == null) {
       throw Exception('Chapter reading container not found on $chapterUrl');
     }

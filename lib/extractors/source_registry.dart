@@ -40,6 +40,8 @@ import 'bespoke/hindisamay_extractor.dart';
 import 'bespoke/epustakalay_extractor.dart';
 import 'bespoke/odiabibhaba_extractor.dart';
 import 'bespoke/kavitakosh_extractor.dart';
+import 'bespoke/geetakavita_extractor.dart';
+import 'bespoke/bharatdiscovery_extractor.dart';
 
 /// Comprehensive Source Registry cataloging verified novel websites from
 /// NOVEL_SOURCES_AND_TEMPLATES.md across WordPress Madara, LightNovelWP,
@@ -404,6 +406,8 @@ class SourceRegistry {
     'kavitakosh': KavitaKoshExtractor(),
     'gadyakosh': GadyaKoshExtractor(),
     'hindisamay': HindiSamayExtractor(),
+    'geetakavita': GeetaKavitaExtractor(),
+    'bharatdiscovery': BharatDiscoveryExtractor(),
 
     // ==========================================
     // 13. Indic Sources: Odia (or)

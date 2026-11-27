@@ -51,9 +51,9 @@ Map<String, String> getCoverImageHeaders(String coverUrl, [String? sourceUrl]) {
   return headers;
 }
 
-/// Returns the proxied URL for web image covers to avoid hotlinking/CORS blocks.
+/// Returns the proxied URL for image covers when running on Web OR when a native host is ISP-blocked.
 String getWebProxiedImageUrl(String originalUrl) {
-  if (!kIsWeb || webProxyEndpoint.isEmpty || originalUrl.isEmpty) {
+  if (webProxyEndpoint.isEmpty || originalUrl.isEmpty) {
     return originalUrl;
   }
   if (!originalUrl.startsWith('http://') && !originalUrl.startsWith('https://')) {
@@ -64,6 +64,12 @@ String getWebProxiedImageUrl(String originalUrl) {
       originalUrl.contains('gstatic.com') ||
       originalUrl.startsWith(webProxyEndpoint)) {
     return originalUrl;
+  }
+  if (!kIsWeb) {
+    final host = Uri.tryParse(originalUrl)?.host ?? '';
+    if (!_NativeWithProxyFallbackClient.isProxyPreferred(host)) {
+      return originalUrl;
+    }
   }
   return '$webProxyEndpoint?url=${Uri.encodeComponent(originalUrl)}';
 }
@@ -94,6 +100,9 @@ class _NativeWithProxyFallbackClient extends http.BaseClient {
   final String proxyUrl;
 
   static final Set<String> _proxyPreferredHosts = {};
+
+  static bool isProxyPreferred(String host) =>
+      host.isNotEmpty && _proxyPreferredHosts.contains(host);
 
   _NativeWithProxyFallbackClient(this._inner, this.proxyUrl);
 

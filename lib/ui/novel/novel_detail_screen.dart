@@ -893,7 +893,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                             errorBuilder: (context, error, stackTrace) => Container(color: Colors.black87),
                           )
                         : Image.network(
-                            kIsWeb ? getWebProxiedImageUrl(_sanitizedCoverUrl) : _sanitizedCoverUrl,
+                            getWebProxiedImageUrl(_sanitizedCoverUrl),
                             headers: _imageHeaders,
                             fit: BoxFit.cover,
                             frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -958,7 +958,7 @@ class _NovelDetailScreenState extends State<NovelDetailScreen> {
                                         errorBuilder: (context, error, stackTrace) => _buildPlaceholderCover(),
                                       )
                                     : Image.network(
-                                        kIsWeb ? getWebProxiedImageUrl(_sanitizedCoverUrl) : _sanitizedCoverUrl,
+                                        getWebProxiedImageUrl(_sanitizedCoverUrl),
                                         headers: _imageHeaders,
                                         fit: BoxFit.cover,
                                         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {

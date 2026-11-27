@@ -146,7 +146,7 @@ class UncannyExtractor implements NovelSource {
           sourceId: id,
           title: title,
           sourceUrl: storyUrl,
-          coverUrl: '$baseUrl/wp-content/themes/uncanny/images/logo.png',
+          coverUrl: '$baseUrl/wp-content/themes/uncanny/images/masthead.png',
           genres: const ['Science Fiction', 'Fantasy', 'Speculative Fiction'],
           status: 'Completed',
         ),
@@ -177,7 +177,7 @@ class UncannyExtractor implements NovelSource {
     final metaCover = document.querySelector('meta[property="og:image"]')?.attributes['content'];
     final coverUrl = metaCover != null && metaCover.isNotEmpty
         ? _cleanUrl(metaCover)
-        : '$baseUrl/wp-content/themes/uncanny/images/logo.png';
+        : '$baseUrl/wp-content/themes/uncanny/images/masthead.png';
 
     // Author
     var author = 'Unknown Author';

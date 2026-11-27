@@ -193,6 +193,7 @@ class MadaraExtractor implements NovelSource {
 
       var img = item.querySelector('.nhv-library-card__cover img, .item-thumb img, .post-thumb img, img[data-src], img[data-lazy-src], img[data-original], img');
       img ??= item.parent?.querySelector('.item-thumb img, .post-thumb img, img[data-src], img');
+      img ??= item.parent?.parent?.querySelector('.item-thumb img, .post-thumb img, img[data-src], img');
       img ??= item.previousElementSibling?.querySelector('.item-thumb img, .post-thumb img, img[data-src], img');
 
       String cover = '';
@@ -242,8 +243,13 @@ class MadaraExtractor implements NovelSource {
         if (url == baseUrl || url.endsWith('/novel/') || url.endsWith('/series/')) continue;
         seenUrls.add(url);
 
-        final parent = anchor.parent?.parent;
-        final img = parent?.querySelector('img');
+        dom.Element? img;
+        var pNode = anchor.parent;
+        for (int depth = 0; depth < 5 && pNode != null; depth++) {
+          img = pNode.querySelector('.item-thumb img, .post-thumb img, .popular-img img, img');
+          if (img != null) break;
+          pNode = pNode.parent;
+        }
         String cover = '';
         if (img != null) {
           cover = _cleanUrl(img.attributes['data-src'] ??

@@ -73,7 +73,7 @@ class NovelCard extends StatelessWidget {
                                 errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
                               )
                             : Image.network(
-                                kIsWeb ? getWebProxiedImageUrl(cleanUrl) : cleanUrl,
+                                getWebProxiedImageUrl(cleanUrl),
                                 headers: _imageHeaders,
                                 fit: BoxFit.cover,
                                 frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {

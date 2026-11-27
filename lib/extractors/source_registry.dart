@@ -4,6 +4,7 @@ import 'lightnovelwp_extractor.dart';
 import 'novelfull_extractor.dart';
 import 'readwn_extractor.dart';
 import 'fictioneer_extractor.dart';
+import 'xenforo_extractor.dart';
 import 'bespoke/novelcool_extractor.dart';
 import 'bespoke/kakuyomu_extractor.dart';
 import 'bespoke/roliascan_extractor.dart';
@@ -27,6 +28,10 @@ import 'bespoke/eastoftheweb_extractor.dart';
 import 'bespoke/uncanny_extractor.dart';
 import 'bespoke/fadedpage_extractor.dart';
 import 'bespoke/strangehorizons_extractor.dart';
+import 'bespoke/escapepod_extractor.dart';
+import 'bespoke/beneathceaselessskies_extractor.dart';
+import 'bespoke/reactormag_extractor.dart';
+import 'bespoke/flashfictiononline_extractor.dart';
 import 'bespoke/gadyakosh_extractor.dart';
 import 'bespoke/or_wikisource_extractor.dart';
 import 'bespoke/hindisamay_extractor.dart';
@@ -60,6 +65,20 @@ class SourceRegistry {
     'asurascans': AsuraScansExtractor(),
     'royalroad': RoyalRoadExtractor(),
     'scribblehub': ScribbleHubExtractor(),
+    'spacebattles': XenForoExtractor(
+      id: 'spacebattles',
+      name: 'SpaceBattles',
+      baseUrl: 'https://forums.spacebattles.com',
+      forumPath: '/forums/creative-writing.18/',
+      estimatedNovelCount: 20000,
+    ),
+    'sufficientvelocity': XenForoExtractor(
+      id: 'sufficientvelocity',
+      name: 'Sufficient Velocity',
+      baseUrl: 'https://forums.sufficientvelocity.com',
+      forumPath: '/forums/user-fiction.2/',
+      estimatedNovelCount: 15000,
+    ),
     'woopread': WoopReadExtractor(),
     'relibrary': ReLibraryExtractor(),
     'clarkesworld': ClarkesworldExtractor(),
@@ -67,6 +86,10 @@ class SourceRegistry {
     'eastoftheweb': EastOfTheWebExtractor(),
     'uncannymagazine': UncannyExtractor(),
     'strangehorizons': StrangeHorizonsExtractor(),
+    'escapepod': EscapePodExtractor(),
+    'beneathceaselessskies': BeneathCeaselessSkiesExtractor(),
+    'reactormag': ReactorMagExtractor(),
+    'flashfictiononline': FlashFictionOnlineExtractor(),
     'fadedpage': FadedPageExtractor(),
     'local_epub': LocalEpubExtractor(),
 

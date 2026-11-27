@@ -73,7 +73,32 @@ class BeneathCeaselessSkiesExtractor implements NovelSource {
   Future<List<Novel>> getPopular({int page = 1}) async {
     final targetUrl = page > 1 ? '$baseUrl/stories/page/$page/' : '$baseUrl/stories/';
     final html = await _fetchHtml(targetUrl);
-    return _parseStories(html);
+    final list = _parseStories(html);
+    if (list.isEmpty) return list;
+
+    // /stories/ archive is text-only; fetch og:image covers in parallel for the page
+    final enriched = await Future.wait(list.take(12).map((n) async {
+      if (n.coverUrl.isNotEmpty) return n;
+      try {
+        final sHtml = await _fetchHtml(n.sourceUrl);
+        final sDoc = html_parser.parse(sHtml);
+        final ogImg = sDoc.querySelector('meta[property="og:image"]')?.attributes['content'] ?? '';
+        if (ogImg.isNotEmpty) {
+          return Novel(
+            id: n.id,
+            sourceId: n.sourceId,
+            title: n.title,
+            author: n.author,
+            coverUrl: _cleanUrl(ogImg),
+            sourceUrl: n.sourceUrl,
+            genres: n.genres,
+            status: n.status,
+          );
+        }
+      } catch (_) {}
+      return n;
+    }));
+    return [...enriched, ...list.skip(12)];
   }
 
   @override

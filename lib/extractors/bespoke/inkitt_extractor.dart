@@ -93,6 +93,24 @@ class InkittExtractor implements NovelSource {
     final doc = html_parser.parse(html);
     final novels = <Novel>[];
     final seen = <String>{};
+    final coverByStoryId = <String, String>{};
+
+    // First pass: collect cover images from anchor/card wrappers
+    for (final a in doc.querySelectorAll('a[href*="/stories/"]')) {
+      final href = a.attributes['href'] ?? '';
+      final match = RegExp(r'/stories/(\d+)').firstMatch(href);
+      if (match == null) continue;
+      final storyId = match.group(1)!;
+      if (coverByStoryId.containsKey(storyId)) continue;
+
+      final img = a.querySelector('img') ?? a.parent?.querySelector('img') ?? a.parent?.parent?.querySelector('img');
+      if (img != null) {
+        final src = img.attributes['data-src'] ?? img.attributes['src'] ?? '';
+        if (src.isNotEmpty && !src.startsWith('data:')) {
+          coverByStoryId[storyId] = _cleanUrl(src);
+        }
+      }
+    }
 
     for (final a in doc.querySelectorAll('a[href*="/stories/"]')) {
       final href = a.attributes['href'] ?? '';
@@ -108,13 +126,7 @@ class InkittExtractor implements NovelSource {
       if (title.isEmpty || title.length < 2) continue;
 
       seen.add(storyUrl);
-      final card = a.parent?.parent;
-      final img = card?.querySelector('img');
-      var coverUrl = '';
-      if (img != null) {
-        final src = img.attributes['data-src'] ?? img.attributes['src'] ?? '';
-        if (src.isNotEmpty && !src.startsWith('data:')) coverUrl = _cleanUrl(src);
-      }
+      final coverUrl = coverByStoryId[storyId] ?? '';
 
       novels.add(Novel(
         id: '${id}_$storyId',

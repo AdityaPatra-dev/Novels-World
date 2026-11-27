@@ -132,8 +132,32 @@ class VedicHeritageExtractor implements NovelSource {
       }
     }
 
-    _cachedCatalog = novels;
-    return novels;
+    // Resolve exact first page image (img/0001.jpg vs img/1.jpg) for catalog previews
+    await Future.wait(novels.map((n) async {
+      try {
+        await _loadFlipbookPages(n.sourceUrl);
+      } catch (_) {}
+    }));
+
+    final resolved = novels.map((n) {
+      final pages = _flipbookPagesCache[n.sourceUrl];
+      if (pages != null && pages.isNotEmpty) {
+        return Novel(
+          id: n.id,
+          sourceId: n.sourceId,
+          title: n.title,
+          author: n.author,
+          coverUrl: '${n.sourceUrl}${pages.first}',
+          sourceUrl: n.sourceUrl,
+          genres: n.genres,
+          status: n.status,
+        );
+      }
+      return n;
+    }).toList();
+
+    _cachedCatalog = resolved;
+    return resolved;
   }
 
   @override

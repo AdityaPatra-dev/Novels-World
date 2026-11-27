@@ -102,11 +102,14 @@ class ReactorMagExtractor implements NovelSource {
       final title = TextCleaner.cleanNovelTitle(a.text.trim());
       if (title.isEmpty) continue;
 
-      final card = a.parent?.parent;
+      final card = a.parent?.parent?.parent ?? a.parent?.parent;
       final img = card?.querySelector('img');
       var coverUrl = '';
       if (img != null) {
-        final src = img.attributes['data-src'] ?? img.attributes['src'] ?? '';
+        final src = img.attributes['data-lazy-src'] ??
+            img.attributes['data-src'] ??
+            img.attributes['src'] ??
+            '';
         if (src.isNotEmpty && !src.startsWith('data:')) coverUrl = _cleanUrl(src);
       }
 

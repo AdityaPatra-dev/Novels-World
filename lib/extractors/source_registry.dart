@@ -32,6 +32,8 @@ import 'bespoke/escapepod_extractor.dart';
 import 'bespoke/beneathceaselessskies_extractor.dart';
 import 'bespoke/reactormag_extractor.dart';
 import 'bespoke/flashfictiononline_extractor.dart';
+import 'bespoke/inkitt_extractor.dart';
+import 'bespoke/arthurconandoyle_extractor.dart';
 import 'bespoke/gadyakosh_extractor.dart';
 import 'bespoke/or_wikisource_extractor.dart';
 import 'bespoke/hindisamay_extractor.dart';
@@ -90,6 +92,8 @@ class SourceRegistry {
     'beneathceaselessskies': BeneathCeaselessSkiesExtractor(),
     'reactormag': ReactorMagExtractor(),
     'flashfictiononline': FlashFictionOnlineExtractor(),
+    'inkitt': InkittExtractor(),
+    'arthurconandoyle': ArthurConanDoyleExtractor(),
     'fadedpage': FadedPageExtractor(),
     'local_epub': LocalEpubExtractor(),
 

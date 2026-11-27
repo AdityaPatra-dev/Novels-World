@@ -341,7 +341,7 @@ class SourceRegistry {
     'novellucky': MadaraExtractor(
       id: 'novellucky',
       name: 'NovelLucky',
-      baseUrl: 'https://novel-lucky.com',
+      baseUrl: 'https://novel-lucky.net',
       lang: 'th',
       estimatedNovelCount: 5000,
     ),

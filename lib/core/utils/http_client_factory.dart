@@ -79,7 +79,88 @@ http.Client createPlatformHttpClient({Duration timeout = const Duration(seconds:
   native.userAgent = WebViewSessionManager.defaultUserAgent;
   native.badCertificateCallback = (cert, host, port) => true;
   native.connectionTimeout = timeout;
-  return IOClient(native);
+  final ioClient = IOClient(native);
+  if (webProxyEndpoint.isEmpty) {
+    return ioClient;
+  }
+  return _NativeWithProxyFallbackClient(ioClient, webProxyEndpoint);
+}
+
+/// Native HTTP client that tries direct OS sockets first (zero overhead)
+/// and transparently falls back to the Cloudflare Edge proxy when a host
+/// is blocked by ISP SNI resets, TLS errors, or connection timeouts.
+class _NativeWithProxyFallbackClient extends http.BaseClient {
+  final http.Client _inner;
+  final String proxyUrl;
+
+  static final Set<String> _proxyPreferredHosts = {};
+
+  _NativeWithProxyFallbackClient(this._inner, this.proxyUrl);
+
+  http.BaseRequest _cloneRequest(http.BaseRequest original, Uri targetUri) {
+    final cloned = http.Request(original.method, targetUri);
+    cloned.headers.addAll(original.headers);
+    cloned.followRedirects = original.followRedirects;
+    cloned.maxRedirects = original.maxRedirects;
+    if (original is http.Request) {
+      cloned.bodyBytes = original.bodyBytes;
+    }
+    return cloned;
+  }
+
+  bool _shouldSkipProxy(String urlStr) {
+    if (!urlStr.startsWith('http://') && !urlStr.startsWith('https://')) return true;
+    return urlStr.contains('firebase') ||
+        urlStr.contains('googleapis.com') ||
+        urlStr.contains('gstatic.com') ||
+        urlStr.startsWith(proxyUrl) ||
+        proxyUrl.isEmpty;
+  }
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final urlStr = request.url.toString();
+    if (_shouldSkipProxy(urlStr)) {
+      return _inner.send(request);
+    }
+
+    final host = request.url.host;
+    final proxiedUri = Uri.parse('$proxyUrl?url=${Uri.encodeComponent(urlStr)}');
+
+    if (_proxyPreferredHosts.contains(host)) {
+      return _inner.send(_cloneRequest(request, proxiedUri));
+    }
+
+    try {
+      return await _inner.send(_cloneRequest(request, request.url));
+    } on SocketException {
+      _proxyPreferredHosts.add(host);
+      return _inner.send(_cloneRequest(request, proxiedUri));
+    } on HandshakeException {
+      _proxyPreferredHosts.add(host);
+      return _inner.send(_cloneRequest(request, proxiedUri));
+    } on TimeoutException {
+      _proxyPreferredHosts.add(host);
+      return _inner.send(_cloneRequest(request, proxiedUri));
+    } on http.ClientException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('connection reset') ||
+          msg.contains('connection closed') ||
+          msg.contains('failed host lookup') ||
+          msg.contains('timed out') ||
+          msg.contains('socket')) {
+        _proxyPreferredHosts.add(host);
+        return _inner.send(_cloneRequest(request, proxiedUri));
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  void close() {
+    _inner.close();
+    super.close();
+  }
 }
 
 class _CachedResponse {

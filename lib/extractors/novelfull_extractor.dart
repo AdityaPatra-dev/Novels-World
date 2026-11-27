@@ -343,6 +343,9 @@ class NovelFullExtractor implements NovelSource {
           imgEl.attributes['src'] ??
           '';
       coverUrl = _cleanUrl(coverUrl);
+      if (coverUrl.contains('/thumb/t-200x89/')) {
+        coverUrl = coverUrl.replaceFirst('/thumb/t-200x89/', '/thumb/t-300x439/');
+      }
       if (!TextCleaner.isValidCoverUrl(coverUrl)) {
         coverUrl = '';
       }

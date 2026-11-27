@@ -6,6 +6,8 @@
 <img src="assets/icon/app_icon_1024.png" width="130" height="130" alt="Novels World App Icon" style="border-radius: 28px; box-shadow: 0 12px 30px rgba(139, 92, 246, 0.4); margin: 15px 0;" />
 
 <p align="center">
+  <a href="https://novels-world-app.web.app"><img src="https://img.shields.io/badge/Web%20App-Live%20Online-10B981?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Web App" /></a>
+  <a href="https://novels-world-app.web.app/download"><img src="https://img.shields.io/badge/Download%20Page-All%20Platforms-8B5CF6?style=for-the-badge&logo=firebase&logoColor=white" alt="Download Page" /></a>
   <a href="https://github.com/AdityaPatra-dev/Novels-World/releases/latest"><img src="https://img.shields.io/github/v/release/AdityaPatra-dev/Novels-World?color=8B5CF6&label=Latest%20Release&style=for-the-badge&logo=github" alt="Release" /></a>
   <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.x%20%7C%20Dart%203.x-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter" /></a>
   <a href="https://github.com/AdityaPatra-dev/Novels-World/actions"><img src="https://img.shields.io/badge/Tests-44%2F44%20Passing-10B981?style=for-the-badge&logo=githubactions&logoColor=white" alt="Tests" /></a>
@@ -52,6 +54,9 @@ Built with Flutter and high-performance native audio pipelines, Novels World agg
 ---
 
 ## 🚀 Installation & Downloads
+
+* **🌐 Launch Web App:** [https://novels-world-app.web.app](https://novels-world-app.web.app)
+* **📦 All-Platform Download Page:** [https://novels-world-app.web.app/download](https://novels-world-app.web.app/download)
 
 Choose your platform below to download the latest release:
 

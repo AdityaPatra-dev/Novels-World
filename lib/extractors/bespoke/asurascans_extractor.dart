@@ -29,7 +29,7 @@ class AsuraScansExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://asurascans.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 100;

@@ -36,12 +36,12 @@ class NovelFullExtractor implements NovelSource {
     required this.name,
     required this.baseUrl,
     this.lang = 'en',
-    this.iconUrl = '',
+    String iconUrl = '',
     this.estimatedNovelCount = 20000,
     this.popularPath = '/most-popular',
     this.latestPath = '/latest-release-novel',
     http.Client? client,
-  }) {
+  }) : iconUrl = iconUrl.isNotEmpty ? iconUrl : '$baseUrl/favicon.ico' {
     _client = client ?? createPlatformHttpClient();
   }
 

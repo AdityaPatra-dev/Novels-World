@@ -27,7 +27,7 @@ class KakuyomuExtractor implements NovelSource {
   final String lang = 'ja';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://kakuyomu.jp/favicon.ico';
 
   @override
   final int estimatedNovelCount = 600000;

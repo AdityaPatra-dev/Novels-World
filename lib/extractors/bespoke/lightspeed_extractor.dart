@@ -26,7 +26,7 @@ class LightspeedExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://www.lightspeedmagazine.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 2500;

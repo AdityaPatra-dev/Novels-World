@@ -27,7 +27,7 @@ class AllFreeNovelExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://allfreenovel.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 280000;

@@ -26,7 +26,7 @@ class EastOfTheWebExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://www.eastoftheweb.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 8000;

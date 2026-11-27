@@ -26,7 +26,7 @@ class UncannyExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://www.uncannymagazine.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 1800;

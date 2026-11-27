@@ -37,7 +37,7 @@ class MadaraExtractor implements NovelSource {
     required this.name,
     required this.baseUrl,
     this.lang = 'en',
-    this.iconUrl = '',
+    String iconUrl = '',
     this.estimatedNovelCount = 1000,
     this.useNewChapterEndpoint = false,
     this.customChapterAjaxUrl,
@@ -45,7 +45,7 @@ class MadaraExtractor implements NovelSource {
     this.customPopularPath,
     this.customSearchPostType,
     http.Client? client,
-  }) {
+  }) : iconUrl = iconUrl.isNotEmpty ? iconUrl : '$baseUrl/favicon.ico' {
     _client = client ?? createPlatformHttpClient();
   }
 

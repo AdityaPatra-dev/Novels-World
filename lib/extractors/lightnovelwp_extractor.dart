@@ -34,10 +34,10 @@ class LightNovelWpExtractor implements NovelSource {
     required this.name,
     required this.baseUrl,
     this.lang = 'en',
-    this.iconUrl = '',
+    String iconUrl = '',
     this.estimatedNovelCount = 1000,
     http.Client? client,
-  }) {
+  }) : iconUrl = iconUrl.isNotEmpty ? iconUrl : '$baseUrl/favicon.ico' {
     _client = client ?? createPlatformHttpClient();
   }
 

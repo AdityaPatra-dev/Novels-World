@@ -26,7 +26,7 @@ class NovelCoolExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://www.novelcool.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 120000;

@@ -26,7 +26,7 @@ class ReLibraryExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://re-library.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 12000;

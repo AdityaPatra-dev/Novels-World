@@ -26,7 +26,7 @@ class ClarkesworldExtractor implements NovelSource {
   final String lang = 'en';
 
   @override
-  final String iconUrl = '';
+  final String iconUrl = 'https://clarkesworldmagazine.com/favicon.ico';
 
   @override
   final int estimatedNovelCount = 2000;

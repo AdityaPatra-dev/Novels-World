@@ -87,8 +87,29 @@ class GroupedNovelMatch {
     required this.sourceVariants,
   });
 
-  /// The primary novel variant (preferred source, or first found)
-  Novel get primaryNovel => sourceVariants.values.first;
+  /// The primary novel variant, preferring valid cover, author, and priority source.
+  Novel get primaryNovel {
+    if (sourceVariants.length == 1) return sourceVariants.values.first;
+    Novel best = sourceVariants.values.first;
+    int bestScore = -1;
+    for (final entry in sourceVariants.entries) {
+      final n = entry.value;
+      int s = 0;
+      if (n.coverUrl.isNotEmpty &&
+          !n.coverUrl.contains('placeholder') &&
+          !n.coverUrl.contains('blank')) {
+        s += 3;
+      }
+      if (n.author.isNotEmpty && n.author != 'Unknown Author') s += 2;
+      if (GlobalSearchController._priorityIds.contains(entry.key.id)) s += 2;
+      if (!n.title.contains('[') && !n.title.contains('(')) s += 1;
+      if (s > bestScore) {
+        bestScore = s;
+        best = n;
+      }
+    }
+    return best;
+  }
 
   /// List of sources where this novel was found
   List<NovelSource> get sources => sourceVariants.keys.toList();
@@ -293,7 +314,7 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     List<Novel> localNovels = const [],
     bool bypassCache = false,
   }) async {
-    final cleanQuery = query.trim();
+    final cleanQuery = normalizeQueryForDispatch(query);
     if (cleanQuery.isEmpty) {
       clear();
       return;
@@ -341,8 +362,7 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
       }
     }
 
-    final initialGrouped = groupedMap.values.toList()
-      ..sort((a, b) => computeRelevanceScore(b, cleanQuery).compareTo(computeRelevanceScore(a, cleanQuery)));
+    final initialGrouped = _sortMatches(groupedMap.values, cleanQuery);
 
     // Initial state: searching started (with instant local matches if any)
     value = GlobalSearchState(
@@ -366,8 +386,7 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
       if (force || now.difference(lastEmission).inMilliseconds > 180 || resultsAccumulator.length == 1) {
         lastEmission = now;
         final isAllDone = resultsAccumulator.length >= allSources.length;
-        final sortedMatches = groupedMap.values.toList()
-          ..sort((a, b) => computeRelevanceScore(b, cleanQuery).compareTo(computeRelevanceScore(a, cleanQuery)));
+        final sortedMatches = _sortMatches(groupedMap.values, cleanQuery);
 
         value = value.copyWith(
           completedSources: resultsAccumulator.length,
@@ -468,8 +487,7 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     }, zoneValues: {#skipWebViewFallback: true});
 
     if (_currentGenerationId == generationId) {
-      final sortedMatches = groupedMap.values.toList()
-        ..sort((a, b) => computeRelevanceScore(b, cleanQuery).compareTo(computeRelevanceScore(a, cleanQuery)));
+      final sortedMatches = _sortMatches(groupedMap.values, cleanQuery);
 
       final finalState = value.copyWith(
         isSearching: false,
@@ -555,9 +573,54 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     }
   }
 
+  static const Map<String, String> _acronymExpansions = {
+    'lotm': 'lord of the mysteries',
+    'orv': 'omniscient reader s viewpoint',
+    'tbate': 'the beginning after the end',
+    'ri': 'reverend insanity',
+    'rotssg': 'reincarnation of the strongest sword god',
+    'cote': 'classroom of the elite',
+  };
+
+  static const Set<String> _stopwords = {'the', 'of', 'a', 'an', 'and', 'in', 'to', 'for'};
+
+  /// Normalizes smart quotes and whitespace before dispatching query to extractors.
+  static String normalizeQueryForDispatch(String query) {
+    return query
+        .replaceAll('’', "'")
+        .replaceAll('‘', "'")
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  /// Precomputes relevance scores once per match so List.sort() runs in O(N log N) without regexes.
+  static List<GroupedNovelMatch> _sortMatches(
+    Iterable<GroupedNovelMatch> matches,
+    String query,
+  ) {
+    final list = matches.toList();
+    if (list.length <= 1) return list;
+    final scores = <GroupedNovelMatch, int>{
+      for (final m in list) m: computeRelevanceScore(m, query),
+    };
+    list.sort((a, b) => scores[b]!.compareTo(scores[a]!));
+    return list;
+  }
+
+  static double _bigramSimilarity(String a, String b) {
+    if (a.length < 2 || b.length < 2) return 0.0;
+    final aBigrams = <String>{for (int i = 0; i < a.length - 1; i++) a.substring(i, i + 2)};
+    final bBigrams = <String>{for (int i = 0; i < b.length - 1; i++) b.substring(i, i + 2)};
+    final intersection = aBigrams.intersection(bBigrams).length;
+    return (2.0 * intersection) / (aBigrams.length + bBigrams.length);
+  }
+
   /// Calculates a ranking score for a grouped novel match against the user query.
   static int computeRelevanceScore(GroupedNovelMatch match, String query) {
-    final normQuery = normalizeTitle(query);
+    var normQuery = normalizeTitle(query);
+    normQuery = _acronymExpansions[normQuery] ?? normQuery;
     final normTitle = normalizeTitle(match.canonicalTitle);
 
     if (normQuery.isEmpty) return 0;
@@ -575,10 +638,20 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     } else if (normTitle.contains(normQuery)) {
       score += 2000;
     } else {
-      final qTokens = normQuery.split(' ').where((s) => s.isNotEmpty).toSet();
-      final tTokens = normTitle.split(' ').where((s) => s.isNotEmpty).toSet();
+      final qTokens = normQuery.split(' ').where((s) => s.isNotEmpty && !_stopwords.contains(s)).toSet();
+      final tTokens = normTitle.split(' ').where((s) => s.isNotEmpty && !_stopwords.contains(s)).toSet();
       final overlap = qTokens.intersection(tTokens).length;
-      score += overlap * 400;
+      if (overlap > 0) {
+        score += overlap * 400;
+        if (qTokens.isNotEmpty && overlap == qTokens.length) {
+          score += 1500;
+        }
+      } else {
+        final sim = _bigramSimilarity(normQuery, normTitle);
+        if (sim >= 0.55) {
+          score += (sim * 1800).round();
+        }
+      }
     }
 
     final lowerTitle = match.canonicalTitle.toLowerCase();
@@ -614,7 +687,8 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
 
   /// Calculates relevance for individual novels inside a source.
   static int computeNovelRelevance(String title, String author, String query) {
-    final normQuery = normalizeTitle(query);
+    var normQuery = normalizeTitle(query);
+    normQuery = _acronymExpansions[normQuery] ?? normQuery;
     final normTitle = normalizeTitle(title);
     final normAuthor = normalizeTitle(author);
 
@@ -628,11 +702,16 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
       if (normAuthor.contains(normQuery)) return 1500;
     }
 
-    final qTokens = normQuery.split(' ').where((s) => s.isNotEmpty).toSet();
-    final tTokens = normTitle.split(' ').where((s) => s.isNotEmpty).toSet();
+    final qTokens = normQuery.split(' ').where((s) => s.isNotEmpty && !_stopwords.contains(s)).toSet();
+    final tTokens = normTitle.split(' ').where((s) => s.isNotEmpty && !_stopwords.contains(s)).toSet();
     final overlap = qTokens.intersection(tTokens).length;
     if (overlap > 0) {
       return (overlap * 300 - (normTitle.length - normQuery.length).abs()).clamp(10, 2000);
+    }
+
+    final sim = _bigramSimilarity(normQuery, normTitle);
+    if (sim >= 0.55) {
+      return (sim * 1200).round();
     }
     return 0;
   }
@@ -642,7 +721,7 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     var clean = title.toLowerCase().trim();
     clean = clean.replaceAll(RegExp(r'\[.*?\]|\(.*?\)', caseSensitive: false), ' ');
     clean = clean.replaceAll(RegExp(r'\s*(?:web novel|light novel|novel|mtl)\s*$', caseSensitive: false), ' ');
-    clean = clean.replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), ' ');
+    clean = clean.replaceAll(RegExp(r'[^\p{L}\p{M}\p{N}\s]', unicode: true), ' ');
     clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
     return clean.isNotEmpty ? clean : title.toLowerCase().trim();
   }

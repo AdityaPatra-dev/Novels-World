@@ -307,6 +307,75 @@ void main() {
       expect(scoreAuthor, greaterThan(scoreRandom));
       expect(scoreRandom, 0);
     });
+
+    test('Unicode title normalizer preserves Hindi and Odia scripts', () {
+      expect(GlobalSearchController.normalizeTitle('गोदान (Hindi Novel)'), 'गोदान');
+      expect(GlobalSearchController.normalizeTitle('ଛ ମାଣ ଆଠ ଗୁଣ୍ଠ [Odia]'), 'ଛ ମାଣ ଆଠ ଗୁଣ୍ଠ');
+    });
+
+    test('Acronym expansion and fuzzy bigram similarity score relevant matches', () {
+      final lotmScore = GlobalSearchController.computeNovelRelevance('Lord of the Mysteries', 'Cuttlefish', 'LOTM');
+      final typoScore = GlobalSearchController.computeNovelRelevance('Shadow Slave', 'Guiltythree', 'Shadow Slav');
+      expect(lotmScore, greaterThanOrEqualTo(10000));
+      expect(typoScore, greaterThan(500));
+    });
+
+    test('Quality-aware primaryNovel prefers variant with cover and valid author', () {
+      final s1 = MockSearchSource(id: 'other', name: 'Other', baseUrl: 'https://other.com', searchHandler: (_) => []);
+      final s2 = MockSearchSource(id: 'readnovelfull', name: 'ReadNovelFull', baseUrl: 'https://readnovelfull.com', searchHandler: (_) => []);
+
+      final match = GroupedNovelMatch(
+        canonicalTitle: 'Shadow Slave',
+        author: 'Guiltythree',
+        coverUrl: 'https://readnovelfull.com/cover.jpg',
+        sourceVariants: {
+          s1: const Novel(id: '1', sourceId: 'other', title: 'Shadow Slave [MTL]', author: 'Unknown Author', coverUrl: '', sourceUrl: ''),
+          s2: const Novel(id: '2', sourceId: 'readnovelfull', title: 'Shadow Slave', author: 'Guiltythree', coverUrl: 'https://readnovelfull.com/cover.jpg', sourceUrl: ''),
+        },
+      );
+
+      expect(match.primaryNovel.sourceId, 'readnovelfull');
+    });
+
+    test('Script detection and scope selection route regional queries appropriately', () {
+      expect(GlobalSearchController.detectQueryLanguage('गोदान'), 'hi');
+      expect(GlobalSearchController.detectQueryLanguage('ଓଡ଼ିଆ ଗଳ୍ପ'), 'or');
+      expect(GlobalSearchController.detectQueryLanguage('Shadow Slave'), isNull);
+
+      final en = MockSearchSource(id: 'readnovelfull', name: 'RNF', baseUrl: 'https://rnf.com', lang: 'en', searchHandler: (_) => []);
+      final hi = MockSearchSource(id: 'hindwi', name: 'Hindwi', baseUrl: 'https://hindwi.org', lang: 'hi', searchHandler: (_) => []);
+      final or = MockSearchSource(id: 'ova', name: 'OVA', baseUrl: 'https://ova.gov.in', lang: 'or', searchHandler: (_) => []);
+
+      final fastHindi = GlobalSearchController.selectSourcesForScope([en, hi, or], GlobalSearchScope.fast, 'गोदान');
+      expect(fastHindi.map((s) => s.id), ['hindwi']);
+
+      final odiaOnly = GlobalSearchController.selectSourcesForScope([en, hi, or], GlobalSearchScope.odia, 'test');
+      expect(odiaOnly.map((s) => s.id), ['ova']);
+    });
+
+    test('Circuit breaker trips after 3 consecutive failures and resets cleanly', () async {
+      GlobalSearchController.resetCircuitBreakers();
+      int calls = 0;
+      final failing = MockSearchSource(
+        id: 'flaky_source',
+        name: 'Flaky',
+        baseUrl: 'https://flaky.com',
+        searchHandler: (_) {
+          calls++;
+          throw Exception('403 Forbidden');
+        },
+      );
+
+      await controller.search('test1', targetSources: [failing]);
+      await controller.search('test2', targetSources: [failing]);
+      await controller.search('test3', targetSources: [failing]);
+      expect(calls, 3);
+      expect(controller.value.sourceResults.first.status, SearchOutcomeStatus.blocked);
+
+      GlobalSearchController.resetCircuitBreakers();
+      await controller.search('test4', targetSources: [failing]);
+      expect(calls, 4);
+    });
   });
 }
 

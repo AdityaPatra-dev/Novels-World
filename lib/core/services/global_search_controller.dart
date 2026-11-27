@@ -4,6 +4,56 @@ import '../models/novel.dart';
 import '../../extractors/novel_source.dart';
 import '../../extractors/source_registry.dart';
 
+/// Search scope for filtering or prioritizing sources before dispatch.
+enum GlobalSearchScope {
+  fast('Fast (Top 15)'),
+  all('All Sources'),
+  english('English'),
+  hindi('Hindi'),
+  odia('Odia'),
+  classics('Classics');
+
+  final String label;
+  const GlobalSearchScope(this.label);
+}
+
+/// Structured outcome status for a single source search.
+enum SearchOutcomeStatus {
+  ok,
+  empty,
+  timedOut,
+  blocked,
+  skippedCircuitBreaker,
+  error,
+}
+
+/// Tracks per-source latency and consecutive failures for circuit-breaking.
+class SourceHealthStats {
+  int consecutiveFailures = 0;
+  DateTime? cooldownUntil;
+  double? avgLatencyMs;
+  String? lastError;
+
+  bool isCircuitOpen(DateTime now) =>
+      cooldownUntil != null && now.isBefore(cooldownUntil!);
+
+  void recordSuccess(Duration elapsed) {
+    consecutiveFailures = 0;
+    cooldownUntil = null;
+    lastError = null;
+    final ms = elapsed.inMilliseconds.toDouble();
+    avgLatencyMs = avgLatencyMs == null ? ms : (avgLatencyMs! * 0.7 + ms * 0.3);
+  }
+
+  void recordFailure(String error, DateTime now) {
+    consecutiveFailures++;
+    lastError = error;
+    if (consecutiveFailures >= 3) {
+      cooldownUntil = now.add(const Duration(minutes: 10));
+    }
+  }
+}
+
 /// Result emitted by a single source during a global search session.
 class SourceSearchResult {
   final NovelSource source;
@@ -11,6 +61,7 @@ class SourceSearchResult {
   final bool isSuccess;
   final String? errorMessage;
   final Duration elapsed;
+  final SearchOutcomeStatus status;
 
   const SourceSearchResult({
     required this.source,
@@ -18,6 +69,7 @@ class SourceSearchResult {
     required this.isSuccess,
     this.errorMessage,
     required this.elapsed,
+    this.status = SearchOutcomeStatus.ok,
   });
 }
 
@@ -48,6 +100,7 @@ class GroupedNovelMatch {
 /// Immutable state snapshot of the active global search session.
 class GlobalSearchState {
   final String query;
+  final GlobalSearchScope scope;
   final bool isSearching;
   final int totalSources;
   final int completedSources;
@@ -57,6 +110,7 @@ class GlobalSearchState {
 
   const GlobalSearchState({
     this.query = '',
+    this.scope = GlobalSearchScope.fast,
     this.isSearching = false,
     this.totalSources = 0,
     this.completedSources = 0,
@@ -68,9 +122,17 @@ class GlobalSearchState {
   double get progress => totalSources > 0 ? (completedSources / totalSources).clamp(0.0, 1.0) : 0.0;
   bool get isCompleted => totalSources > 0 && completedSources >= totalSources;
   int get totalNovelsFound => allNovelsRaw.length;
+  int get failedOrSkippedCount => sourceResults
+      .where((r) =>
+          r.status == SearchOutcomeStatus.timedOut ||
+          r.status == SearchOutcomeStatus.blocked ||
+          r.status == SearchOutcomeStatus.error ||
+          r.status == SearchOutcomeStatus.skippedCircuitBreaker)
+      .length;
 
   GlobalSearchState copyWith({
     String? query,
+    GlobalSearchScope? scope,
     bool? isSearching,
     int? totalSources,
     int? completedSources,
@@ -80,6 +142,7 @@ class GlobalSearchState {
   }) {
     return GlobalSearchState(
       query: query ?? this.query,
+      scope: scope ?? this.scope,
       isSearching: isSearching ?? this.isSearching,
       totalSources: totalSources ?? this.totalSources,
       completedSources: completedSources ?? this.completedSources,
@@ -90,70 +153,217 @@ class GlobalSearchState {
   }
 }
 
+class _CachedSearchEntry {
+  final GlobalSearchState state;
+  final DateTime cachedAt;
+  const _CachedSearchEntry(this.state, this.cachedAt);
+}
+
 /// Central controller orchestrating parallel multi-source global searches.
-/// Fully fault-tolerant: individual source timeouts or errors never stall other sources.
+/// Includes instant local matching, script-aware routing, circuit breakers,
+/// latency-ordered dispatch, and adaptive concurrency.
 class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
   GlobalSearchController() : super(const GlobalSearchState());
 
   int _currentGenerationId = 0;
-  static const Duration sourceTimeout = Duration(seconds: 8);
+  static const Duration sourceTimeout = Duration(seconds: 5);
+  static const Duration _cacheTtl = Duration(minutes: 10);
 
-  // In-memory query cache for instant (0ms) global search repeat lookups
-  static final Map<String, GlobalSearchState> _queryCache = {};
+  // In-memory TTL query cache for instant (0ms) global search repeat lookups
+  static final Map<String, _CachedSearchEntry> _queryCache = {};
   static const int _maxCacheEntries = 40;
 
-  /// Executes global search across all cataloged sources with controlled concurrency (5 workers max).
-  /// Results stream incrementally into [value] in real time without thread or socket exhaustion.
-  Future<void> search(String query, {List<NovelSource>? targetSources}) async {
+  // Per-source health & latency stats for circuit breaking
+  static final Map<String, SourceHealthStats> _sourceHealth = {};
+
+  static const List<String> _priorityIds = [
+    'readnovelfull',
+    'novelfull',
+    'royalroad',
+    'scribblehub',
+    'freewebnovel',
+    'wuxiaworld',
+    'novelfire',
+    'novelbin',
+    'allnovelfull',
+    'libread',
+    'gutenberg',
+    'standardebooks',
+    'openlibrary',
+    'internetarchive',
+    'lightnovelpub',
+  ];
+
+  static const Set<String> _classicIds = {
+    'gutenberg',
+    'standardebooks',
+    'openlibrary',
+    'internetarchive',
+    'arthurconandoyle',
+    'vedicheritage',
+    'hindwi',
+    'gadyakosh',
+    'kavitakosh',
+    'bharatdiscovery',
+    'odiabibhaba',
+    'or_wikisource',
+    'ova',
+    'aamaodisha',
+    'odiasahitya',
+  };
+
+  /// Resets all tripped source circuit breakers.
+  static void resetCircuitBreakers() {
+    _sourceHealth.clear();
+  }
+
+  /// Detects regional script language from the query string.
+  static String? detectQueryLanguage(String query) {
+    if (RegExp(r'[\u0900-\u097F]').hasMatch(query)) return 'hi';
+    if (RegExp(r'[\u0B00-\u0B7F]').hasMatch(query)) return 'or';
+    if (RegExp(r'[\u0600-\u06FF]').hasMatch(query)) return 'ar';
+    return null;
+  }
+
+  /// Selects and orders sources based on [scope], detected query script, and health.
+  static List<NovelSource> selectSourcesForScope(
+    List<NovelSource> all,
+    GlobalSearchScope scope,
+    String query,
+  ) {
+    final detectedLang = detectQueryLanguage(query);
+    List<NovelSource> filtered;
+
+    switch (scope) {
+      case GlobalSearchScope.english:
+        filtered = all.where((s) => s.lang.toLowerCase() == 'en').toList();
+        break;
+      case GlobalSearchScope.hindi:
+        filtered = all.where((s) => s.lang.toLowerCase() == 'hi').toList();
+        break;
+      case GlobalSearchScope.odia:
+        filtered = all.where((s) => s.lang.toLowerCase() == 'or').toList();
+        break;
+      case GlobalSearchScope.classics:
+        filtered = all.where((s) => _classicIds.contains(s.id)).toList();
+        break;
+      case GlobalSearchScope.fast:
+        if (detectedLang != null) {
+          final regional = all.where((s) => s.lang.toLowerCase() == detectedLang).toList();
+          filtered = regional.isNotEmpty ? regional.take(15).toList() : all.take(15).toList();
+        } else {
+          final prioritized = all.where((s) => _priorityIds.contains(s.id)).toList();
+          if (prioritized.length < 15) {
+            for (final s in all) {
+              if (!prioritized.contains(s) && s.lang.toLowerCase() == 'en') {
+                prioritized.add(s);
+                if (prioritized.length >= 15) break;
+              }
+            }
+          }
+          filtered = prioritized;
+        }
+        break;
+      case GlobalSearchScope.all:
+        filtered = List<NovelSource>.from(all);
+        break;
+    }
+
+    filtered.sort((a, b) {
+      final aPri = _priorityIds.indexOf(a.id);
+      final bPri = _priorityIds.indexOf(b.id);
+      if (aPri != -1 && bPri != -1) return aPri.compareTo(bPri);
+      if (aPri != -1) return -1;
+      if (bPri != -1) return 1;
+
+      final aLat = _sourceHealth[a.id]?.avgLatencyMs ?? 99999;
+      final bLat = _sourceHealth[b.id]?.avgLatencyMs ?? 99999;
+      return aLat.compareTo(bLat);
+    });
+
+    return filtered;
+  }
+
+  /// Executes global search across selected sources with controlled concurrency.
+  /// Results stream incrementally into [value] in real time.
+  Future<void> search(
+    String query, {
+    List<NovelSource>? targetSources,
+    GlobalSearchScope scope = GlobalSearchScope.fast,
+    List<Novel> localNovels = const [],
+    bool bypassCache = false,
+  }) async {
     final cleanQuery = query.trim();
     if (cleanQuery.isEmpty) {
       clear();
       return;
     }
 
-    final cacheKey = cleanQuery.toLowerCase();
-    final cached = _queryCache[cacheKey];
-    if (cached != null) {
-      _currentGenerationId++;
-      value = cached;
-      return;
+    final cacheKey = '${scope.name}:${cleanQuery.toLowerCase()}';
+    if (!bypassCache && targetSources == null) {
+      final cached = _queryCache[cacheKey];
+      if (cached != null && DateTime.now().difference(cached.cachedAt) < _cacheTtl) {
+        _currentGenerationId++;
+        value = cached.state;
+        return;
+      }
     }
 
     final generationId = ++_currentGenerationId;
-    final allSources = List<NovelSource>.from(targetSources ?? SourceRegistry.getAllSources());
-
-    // Prioritize fastest and highest-reliability aggregator sources first
-    const priorityIds = ['readnovelfull', 'novelfull', 'royalroad', 'lightnovelpub', 'freewebnovel', 'wuxiaworld', 'scribblehub'];
-    allSources.sort((a, b) {
-      final aPri = priorityIds.indexOf(a.id);
-      final bPri = priorityIds.indexOf(b.id);
-      if (aPri != -1 && bPri != -1) return aPri.compareTo(bPri);
-      if (aPri != -1) return -1;
-      if (bPri != -1) return 1;
-      return 0;
-    });
-
-    // Initial state: searching started
-    value = GlobalSearchState(
-      query: cleanQuery,
-      isSearching: true,
-      totalSources: allSources.length,
-      completedSources: 0,
-      sourceResults: [],
-      groupedMatches: [],
-      allNovelsRaw: [],
-    );
+    final allSources = targetSources != null
+        ? List<NovelSource>.from(targetSources)
+        : selectSourcesForScope(SourceRegistry.getAllSources(), scope, cleanQuery);
 
     final List<SourceSearchResult> resultsAccumulator = [];
     final List<Novel> novelsAccumulator = [];
     final Map<String, GroupedNovelMatch> groupedMap = {};
+
+    // Instant t = 0ms local matches (Library + cached Browse novels)
+    if (localNovels.isNotEmpty) {
+      final seenLocalIds = <String>{};
+      final localHits = <Novel>[];
+      for (final novel in localNovels) {
+        if (seenLocalIds.contains(novel.id)) continue;
+        if (computeNovelRelevance(novel.title, novel.author, cleanQuery) > 0) {
+          seenLocalIds.add(novel.id);
+          localHits.add(novel);
+        }
+      }
+      if (localHits.isNotEmpty) {
+        final sourcesById = {for (final s in SourceRegistry.getAllSources()) s.id: s};
+        for (final novel in localHits) {
+          novelsAccumulator.add(novel);
+          final src = sourcesById[novel.sourceId];
+          if (src != null) {
+            _mergeNovelIntoGroup(groupedMap, novel, src, cleanQuery);
+          }
+        }
+      }
+    }
+
+    final initialGrouped = groupedMap.values.toList()
+      ..sort((a, b) => computeRelevanceScore(b, cleanQuery).compareTo(computeRelevanceScore(a, cleanQuery)));
+
+    // Initial state: searching started (with instant local matches if any)
+    value = GlobalSearchState(
+      query: cleanQuery,
+      scope: scope,
+      isSearching: allSources.isNotEmpty,
+      totalSources: allSources.length,
+      completedSources: 0,
+      sourceResults: [],
+      groupedMatches: List.unmodifiable(initialGrouped),
+      allNovelsRaw: List.unmodifiable(novelsAccumulator),
+    );
+
+    if (allSources.isEmpty) return;
 
     DateTime lastEmission = DateTime.now();
 
     void maybeEmitUpdate(bool force) {
       if (_currentGenerationId != generationId) return;
       final now = DateTime.now();
-      if (force || now.difference(lastEmission).inMilliseconds > 200 || resultsAccumulator.length == 1) {
+      if (force || now.difference(lastEmission).inMilliseconds > 180 || resultsAccumulator.length == 1) {
         lastEmission = now;
         final isAllDone = resultsAccumulator.length >= allSources.length;
         final sortedMatches = groupedMap.values.toList()
@@ -170,7 +380,7 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     }
 
     int nextSourceIndex = 0;
-    const int maxConcurrent = 5;
+    final int maxConcurrent = kIsWeb ? 6 : 12;
 
     Future<void> runWorker() async {
       while (true) {
@@ -182,85 +392,80 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
           return;
         }
 
+        final health = _sourceHealth.putIfAbsent(source.id, () => SourceHealthStats());
+        final now = DateTime.now();
+
+        // Circuit breaker: skip repeatedly failing sources during cooldown
+        if (targetSources == null && health.isCircuitOpen(now)) {
+          resultsAccumulator.add(SourceSearchResult(
+            source: source,
+            novels: const [],
+            isSuccess: false,
+            errorMessage: 'Skipped (temporarily unavailable)',
+            elapsed: Duration.zero,
+            status: SearchOutcomeStatus.skippedCircuitBreaker,
+          ));
+          maybeEmitUpdate(false);
+          continue;
+        }
+
         final stopwatch = Stopwatch()..start();
         List<Novel> sourceNovels = [];
         bool isSuccess = false;
         String? errorMessage;
+        SearchOutcomeStatus status = SearchOutcomeStatus.ok;
 
         try {
           sourceNovels = await source.search(cleanQuery).timeout(sourceTimeout);
           isSuccess = true;
+          status = sourceNovels.isEmpty ? SearchOutcomeStatus.empty : SearchOutcomeStatus.ok;
+          health.recordSuccess(stopwatch.elapsed);
         } on TimeoutException {
-          errorMessage = 'Source search timed out after ${sourceTimeout.inSeconds}s';
+          status = SearchOutcomeStatus.timedOut;
+          errorMessage = 'Timed out after ${sourceTimeout.inSeconds}s';
+          health.recordFailure(errorMessage, DateTime.now());
         } catch (e) {
-          errorMessage = e.toString().replaceAll('Exception:', '').trim();
+          final msg = e.toString().replaceAll('Exception:', '').trim();
+          status = (msg.contains('403') || msg.toLowerCase().contains('cloudflare'))
+              ? SearchOutcomeStatus.blocked
+              : SearchOutcomeStatus.error;
+          errorMessage = msg;
+          health.recordFailure(msg, DateTime.now());
         } finally {
           stopwatch.stop();
         }
 
         if (_currentGenerationId != generationId) return;
 
-        final result = SourceSearchResult(
+        resultsAccumulator.add(SourceSearchResult(
           source: source,
           novels: sourceNovels,
           isSuccess: isSuccess,
           errorMessage: errorMessage,
           elapsed: stopwatch.elapsed,
-        );
+          status: status,
+        ));
 
-        resultsAccumulator.add(result);
-
-        // Sort novels within this source by relevance to query
-        sourceNovels.sort((a, b) => computeNovelRelevance(b.title, b.author, cleanQuery).compareTo(computeNovelRelevance(a.title, a.author, cleanQuery)));
+        sourceNovels.sort((a, b) => computeNovelRelevance(b.title, b.author, cleanQuery)
+            .compareTo(computeNovelRelevance(a.title, a.author, cleanQuery)));
 
         for (final novel in sourceNovels) {
           novelsAccumulator.add(novel);
-
-          final normalizedKey = normalizeTitle(novel.title);
-          if (groupedMap.containsKey(normalizedKey)) {
-            final existing = groupedMap[normalizedKey]!;
-            existing.sourceVariants[source] = novel;
-
-            if (novel.title.toLowerCase().trim() == cleanQuery.toLowerCase().trim() ||
-                (novel.title.length < existing.canonicalTitle.length &&
-                    novel.title.toLowerCase().contains(cleanQuery.toLowerCase()))) {
-              existing.canonicalTitle = novel.title;
-            }
-
-            if ((existing.author == 'Unknown Author' || existing.author.isEmpty) &&
-                novel.author.isNotEmpty &&
-                novel.author != 'Unknown Author') {
-              existing.author = novel.author;
-            }
-
-            if (novel.coverUrl.isNotEmpty &&
-                (existing.coverUrl.isEmpty ||
-                    existing.coverUrl.contains('400') ||
-                    existing.coverUrl.contains('placeholder') ||
-                    existing.coverUrl.contains('blank'))) {
-              existing.coverUrl = novel.coverUrl;
-            }
-          } else {
-            groupedMap[normalizedKey] = GroupedNovelMatch(
-              canonicalTitle: novel.title,
-              author: novel.author.isNotEmpty ? novel.author : 'Unknown Author',
-              coverUrl: novel.coverUrl,
-              sourceVariants: {source: novel},
-            );
-          }
+          _mergeNovelIntoGroup(groupedMap, novel, source, cleanQuery);
         }
 
         maybeEmitUpdate(false);
       }
     }
 
-    final workerFutures = <Future<void>>[];
-    final activeWorkers = allSources.length < maxConcurrent ? allSources.length : maxConcurrent;
-    for (int i = 0; i < activeWorkers; i++) {
-      workerFutures.add(runWorker());
-    }
-
-    await Future.wait(workerFutures);
+    await runZoned(() async {
+      final workerFutures = <Future<void>>[];
+      final activeWorkers = allSources.length < maxConcurrent ? allSources.length : maxConcurrent;
+      for (int i = 0; i < activeWorkers; i++) {
+        workerFutures.add(runWorker());
+      }
+      await Future.wait(workerFutures);
+    }, zoneValues: {#skipWebViewFallback: true});
 
     if (_currentGenerationId == generationId) {
       final sortedMatches = groupedMap.values.toList()
@@ -275,18 +480,82 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
       );
       value = finalState;
 
-      if (_queryCache.length >= _maxCacheEntries) {
-        _queryCache.remove(_queryCache.keys.first);
+      final hasHealthyResult = resultsAccumulator.any((r) => r.isSuccess);
+      if (targetSources == null && hasHealthyResult) {
+        if (_queryCache.length >= _maxCacheEntries) {
+          _queryCache.remove(_queryCache.keys.first);
+        }
+        _queryCache[cacheKey] = _CachedSearchEntry(finalState, DateTime.now());
       }
-      _queryCache[cacheKey] = finalState;
+    }
+  }
+
+  /// Retries all failed or circuit-skipped sources from the current search.
+  Future<void> retryFailedSources() async {
+    final current = value;
+    if (current.query.isEmpty || current.isSearching) return;
+    final failedSources = current.sourceResults
+        .where((r) =>
+            r.status == SearchOutcomeStatus.timedOut ||
+            r.status == SearchOutcomeStatus.blocked ||
+            r.status == SearchOutcomeStatus.error ||
+            r.status == SearchOutcomeStatus.skippedCircuitBreaker)
+        .map((r) => r.source)
+        .toList();
+    if (failedSources.isEmpty) return;
+
+    for (final s in failedSources) {
+      _sourceHealth.remove(s.id);
+    }
+    await search(
+      current.query,
+      targetSources: failedSources,
+      scope: current.scope,
+      bypassCache: true,
+    );
+  }
+
+  static void _mergeNovelIntoGroup(
+    Map<String, GroupedNovelMatch> groupedMap,
+    Novel novel,
+    NovelSource source,
+    String cleanQuery,
+  ) {
+    final normalizedKey = normalizeTitle(novel.title);
+    if (groupedMap.containsKey(normalizedKey)) {
+      final existing = groupedMap[normalizedKey]!;
+      existing.sourceVariants[source] = novel;
+
+      if (novel.title.toLowerCase().trim() == cleanQuery.toLowerCase().trim() ||
+          (novel.title.length < existing.canonicalTitle.length &&
+              novel.title.toLowerCase().contains(cleanQuery.toLowerCase()))) {
+        existing.canonicalTitle = novel.title;
+      }
+
+      if ((existing.author == 'Unknown Author' || existing.author.isEmpty) &&
+          novel.author.isNotEmpty &&
+          novel.author != 'Unknown Author') {
+        existing.author = novel.author;
+      }
+
+      if (novel.coverUrl.isNotEmpty &&
+          (existing.coverUrl.isEmpty ||
+              existing.coverUrl.contains('400') ||
+              existing.coverUrl.contains('placeholder') ||
+              existing.coverUrl.contains('blank'))) {
+        existing.coverUrl = novel.coverUrl;
+      }
+    } else {
+      groupedMap[normalizedKey] = GroupedNovelMatch(
+        canonicalTitle: novel.title,
+        author: novel.author.isNotEmpty ? novel.author : 'Unknown Author',
+        coverUrl: novel.coverUrl,
+        sourceVariants: {source: novel},
+      );
     }
   }
 
   /// Calculates a ranking score for a grouped novel match against the user query.
-  /// 1. Exact match gets highest score (20,000 pts).
-  /// 2. Multi-source availability gives heavy boost (+500 pts per source) as canonical novels are on multiple aggregators.
-  /// 3. Fanfiction, adaptation, or spin-off keywords are demoted (-5,000 pts).
-  /// 4. Length difference penalty keeps clean, canonical titles ranked above bloated titles.
   static int computeRelevanceScore(GroupedNovelMatch match, String query) {
     final normQuery = normalizeTitle(query);
     final normTitle = normalizeTitle(match.canonicalTitle);
@@ -295,35 +564,23 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
 
     int score = 0;
 
-    // 1. Exact match tier (Highest possible)
     if (normTitle == normQuery) {
       score += 20000;
-    } 
-    // 2. Starts with query as a full word prefix
-    else if (normTitle.startsWith('$normQuery ') || normTitle.startsWith('$normQuery:')) {
+    } else if (normTitle.startsWith('$normQuery ') || normTitle.startsWith('$normQuery:')) {
       score += 10000;
-    }
-    // 3. Starts with query
-    else if (normTitle.startsWith(normQuery)) {
+    } else if (normTitle.startsWith(normQuery)) {
       score += 7000;
-    }
-    // 4. Exact word match boundary within title (e.g. "Shadow Slave")
-    else if (RegExp('\\b${RegExp.escape(normQuery)}\\b', caseSensitive: false).hasMatch(normTitle)) {
+    } else if (RegExp('\\b${RegExp.escape(normQuery)}\\b', caseSensitive: false).hasMatch(normTitle)) {
       score += 4000;
-    }
-    // 5. Contains query substring
-    else if (normTitle.contains(normQuery)) {
+    } else if (normTitle.contains(normQuery)) {
       score += 2000;
-    }
-    // 6. Token overlap
-    else {
+    } else {
       final qTokens = normQuery.split(' ').where((s) => s.isNotEmpty).toSet();
       final tTokens = normTitle.split(' ').where((s) => s.isNotEmpty).toSet();
       final overlap = qTokens.intersection(tTokens).length;
       score += overlap * 400;
     }
 
-    // Heavy penalty for fanfictions, adaptations, and spin-offs when searching for canon titles
     final lowerTitle = match.canonicalTitle.toLowerCase();
     if (lowerTitle.contains('adaptation') ||
         lowerTitle.contains('fanfic') ||
@@ -336,17 +593,11 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
       score -= 5000;
     }
 
-    // Heavy multi-source availability boost:
-    // Real, popular novels exist across 2, 3, 5, 8+ aggregators (NovelFire, ReadNovelFull, WuxiaBox, NovelFull, etc.)
-    // Fanfics typically only exist on 1 source (e.g. Royal Road).
     score += match.sourceCount * 500;
 
-    // Length difference penalty:
-    // "Shadow Slave" (12 chars) is much more relevant than a 60-character fan-fiction title
     final lenDiff = (normTitle.length - normQuery.length).abs();
     score -= (lenDiff * 8).clamp(0, 1500);
 
-    // Valid author boost
     if (match.author.isNotEmpty && match.author != 'Unknown Author') {
       score += 100;
       if (normalizeTitle(match.author).contains(normQuery)) {
@@ -354,7 +605,6 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
       }
     }
 
-    // Cover image presence boost
     if (match.coverUrl.isNotEmpty && !match.coverUrl.contains('placeholder') && !match.coverUrl.contains('400')) {
       score += 200;
     }
@@ -373,7 +623,6 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     if (normTitle.startsWith('$normQuery ')) return 5000;
     if (normTitle.contains(normQuery)) return 2000;
 
-    // Author match support
     if (normAuthor.isNotEmpty) {
       if (normAuthor == normQuery) return 3000;
       if (normAuthor.contains(normQuery)) return 1500;
@@ -389,16 +638,11 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
   }
 
   /// Normalizes novel title to group identical works across different CMS sources.
-  /// Handles variants like "Shadow Slave", "Shadow Slave (Web Novel)", "Shadow Slave [LN]"
   static String normalizeTitle(String title) {
     var clean = title.toLowerCase().trim();
-    // Remove parenthesized notes: (Web Novel), [WN], (Light Novel), (LN), etc.
     clean = clean.replaceAll(RegExp(r'\[.*?\]|\(.*?\)', caseSensitive: false), ' ');
-    // Remove common CMS suffixes
     clean = clean.replaceAll(RegExp(r'\s*(?:web novel|light novel|novel|mtl)\s*$', caseSensitive: false), ' ');
-    // Strip non-alphanumeric characters for fuzzy key matching
-    clean = clean.replaceAll(RegExp(r'[^a-z0-9\s]'), ' ');
-    // Collapse whitespace
+    clean = clean.replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), ' ');
     clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
     return clean.isNotEmpty ? clean : title.toLowerCase().trim();
   }
@@ -408,5 +652,11 @@ class GlobalSearchController extends ValueNotifier<GlobalSearchState> {
     _currentGenerationId++;
     value = const GlobalSearchState();
   }
-}
 
+  /// Stops an active search while keeping already-collected results visible.
+  void stopSearch() {
+    if (!value.isSearching) return;
+    _currentGenerationId++;
+    value = value.copyWith(isSearching: false);
+  }
+}

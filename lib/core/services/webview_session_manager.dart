@@ -189,7 +189,7 @@ class WebViewSessionManager {
   /// this uses the underlying Chromium engine on mobile, or curl on desktop/CI environments
   /// to retrieve the fully rendered DOM.
   Future<String?> fetchHtmlViaWebView(String url, {Duration timeout = const Duration(seconds: 12)}) async {
-    if (kIsWeb) return null;
+    if (kIsWeb || Zone.current[#skipWebViewFallback] == true) return null;
     // 1. Mobile WebViewController (Android / iOS)
     if (Platform.isAndroid || Platform.isIOS) {
       try {

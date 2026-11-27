@@ -19,6 +19,9 @@ import '../widgets/update_dialog.dart';
 class BrowseScreen extends StatefulWidget {
   const BrowseScreen({super.key});
 
+  static List<Novel> getCachedNovels() =>
+      _BrowseScreenState._sourceNovelsCache.values.expand((list) => list).toList();
+
   @override
   State<BrowseScreen> createState() => _BrowseScreenState();
 }

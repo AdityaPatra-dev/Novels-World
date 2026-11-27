@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:html/parser.dart' as html_parser;
@@ -30,6 +31,7 @@ class NovelFullExtractor implements NovelSource {
   late final http.Client _client;
   final String popularPath;
   final String latestPath;
+  static final Map<String, int> _workingSearchCandidateIndex = {};
 
   NovelFullExtractor({
     required this.id,
@@ -91,19 +93,36 @@ class NovelFullExtractor implements NovelSource {
       page == 1 ? '$baseUrl/?s=$cleanQuery' : '$baseUrl/?s=$cleanQuery&page=$page',
     ];
 
-    for (final targetUrl in searchCandidates) {
+    final orderedIndices = <int>[
+      if (_workingSearchCandidateIndex.containsKey(id)) _workingSearchCandidateIndex[id]!,
+      for (int i = 0; i < searchCandidates.length; i++)
+        if (_workingSearchCandidateIndex[id] != i) i,
+    ];
+
+    final skipWebView = Zone.current[#skipWebViewFallback] == true;
+
+    for (final idx in orderedIndices) {
+      final targetUrl = searchCandidates[idx];
       try {
         final response = await _client.get(Uri.parse(targetUrl), headers: _headers);
         if (response.statusCode == 200 && !response.body.contains('Just a moment...')) {
           final list = parseNovelList(response.body);
-          if (list.isNotEmpty) return list;
+          if (list.isNotEmpty) {
+            _workingSearchCandidateIndex[id] = idx;
+            return list;
+          }
         }
       } catch (_) {}
 
-      final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrl);
-      if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
-        final list = parseNovelList(wvHtml);
-        if (list.isNotEmpty) return list;
+      if (!skipWebView) {
+        final wvHtml = await WebViewSessionManager.instance.fetchHtmlViaWebView(targetUrl);
+        if (wvHtml != null && !wvHtml.contains('Just a moment...')) {
+          final list = parseNovelList(wvHtml);
+          if (list.isNotEmpty) {
+            _workingSearchCandidateIndex[id] = idx;
+            return list;
+          }
+        }
       }
     }
 

@@ -11,6 +11,7 @@ import '../../core/services/global_search_controller.dart';
 import '../../core/utils/http_client_factory.dart';
 import '../../data/download_service.dart';
 import '../../providers/library_provider.dart';
+import '../browse/browse_screen.dart';
 import '../novel/novel_detail_screen.dart';
 
 /// Global Multi-Source Search Screen.
@@ -39,6 +40,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   Timer? _debounceTimer;
 
   bool _isGroupedView = true;
+  GlobalSearchScope _scope = GlobalSearchScope.fast;
 
   final List<String> _popularSuggestions = const [
     'Shadow Slave',
@@ -163,16 +165,26 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     }
   }
 
-  void _executeSearch(String query) {
+  void _executeSearch(String query, {GlobalSearchScope? scope}) {
     final clean = query.trim();
     if (clean.isEmpty) return;
     _debounceTimer?.cancel();
     _focusNode.unfocus();
+    final activeScope = scope ?? _scope;
     setState(() {
+      _scope = activeScope;
       _hasSubmitted = true;
     });
     _saveRecentSearch(clean);
-    _searchController.search(clean);
+    final localNovels = <Novel>[
+      ...context.read<LibraryProvider>().novels,
+      ...BrowseScreen.getCachedNovels(),
+    ];
+    _searchController.search(
+      clean,
+      scope: activeScope,
+      localNovels: localNovels,
+    );
   }
 
   void _openNovel(Novel novel) {
@@ -650,8 +662,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               ],
               Text(
                 state.isSearching
-                    ? 'Searching: ${state.completedSources}/${state.totalSources} sources completed'
-                    : 'Search complete across ${state.totalSources} sources',
+                    ? 'Searching (${state.scope.label}): ${state.completedSources}/${state.totalSources}'
+                    : 'Found ${state.totalNovelsFound} matches across ${state.totalSources} sources',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.8),
                   fontSize: 12,
@@ -659,6 +671,59 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                 ),
               ),
               const Spacer(),
+              if (state.isSearching)
+                InkWell(
+                  onTap: () => _searchController.stopSearch(),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                    ),
+                    child: const Text(
+                      'Stop',
+                      style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                )
+              else if (_scope == GlobalSearchScope.fast && state.query.isNotEmpty)
+                InkWell(
+                  onTap: () => _executeSearch(state.query, scope: GlobalSearchScope.all),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6C5CE7).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+                    ),
+                    child: const Text(
+                      'Search All',
+                      style: TextStyle(color: Color(0xFFC4B5FD), fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              if (!state.isSearching && state.failedOrSkippedCount > 0)
+                InkWell(
+                  onTap: () => _searchController.retryFailedSources(),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.orangeAccent.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'Retry (${state.failedOrSkippedCount})',
+                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
@@ -677,6 +742,40 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             ],
           ),
           const SizedBox(height: 6),
+          SizedBox(
+            height: 28,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: GlobalSearchScope.values.map((s) {
+                final selected = _scope == s;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    label: Text(s.label),
+                    selected: selected,
+                    onSelected: (_) {
+                      if (_scope == s) return;
+                      setState(() => _scope = s);
+                      if (state.query.isNotEmpty) {
+                        _executeSearch(state.query);
+                      }
+                    },
+                    labelStyle: TextStyle(
+                      fontSize: 11,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      color: selected ? Colors.white : Colors.white70,
+                    ),
+                    selectedColor: const Color(0xFF6C5CE7),
+                    backgroundColor: const Color(0xFF222232),
+                    side: BorderSide(color: selected ? const Color(0xFF8B5CF6) : Colors.white12),
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 6),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
@@ -686,6 +785,98 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               valueColor: AlwaysStoppedAnimation<Color>(
                 state.isCompleted ? Colors.greenAccent : const Color(0xFF6C5CE7),
               ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 28,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: GlobalSearchScope.values.map((scope) {
+                final selected = _scope == scope;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    label: Text(scope.label, style: TextStyle(fontSize: 11, color: selected ? Colors.white : Colors.white70)),
+                    selected: selected,
+                    selectedColor: const Color(0xFF6C5CE7),
+                    backgroundColor: const Color(0xFF222230),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    onSelected: (_) {
+                      if (_scope != scope && _textController.text.trim().isNotEmpty) {
+                        _executeSearch(_textController.text, scope: scope);
+                      } else {
+                        setState(() => _scope = scope);
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 28,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final scope in GlobalSearchScope.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: InkWell(
+                      onTap: () {
+                        if (_scope != scope) {
+                          _executeSearch(state.query.isNotEmpty ? state.query : _textController.text, scope: scope);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _scope == scope ? const Color(0xFF6C5CE7) : const Color(0xFF222232),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: _scope == scope ? const Color(0xFF8B5CF6) : Colors.white12,
+                          ),
+                        ),
+                        child: Text(
+                          scope.label,
+                          style: TextStyle(
+                            color: _scope == scope ? Colors.white : Colors.white70,
+                            fontSize: 11,
+                            fontWeight: _scope == scope ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_scope == GlobalSearchScope.fast && !state.isSearching)
+                  InkWell(
+                    onTap: () => _executeSearch(
+                      state.query.isNotEmpty ? state.query : _textController.text,
+                      scope: GlobalSearchScope.all,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.5)),
+                      ),
+                      child: const Text(
+                        'Search All Sources →',
+                        style: TextStyle(
+                          color: Color(0xFF34D399),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],

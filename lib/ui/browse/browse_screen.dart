@@ -46,7 +46,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
     super.initState();
     _currentSource = SourceRegistry.getDefaultSource();
     _loadPopular();
-    if (!_prewarmingStarted && !Platform.environment.containsKey('FLUTTER_TEST')) {
+    if (!_prewarmingStarted && !kIsWeb && !Platform.environment.containsKey('FLUTTER_TEST')) {
       _prewarmingStarted = true;
       _prewarmPopularSources();
     }

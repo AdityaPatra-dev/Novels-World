@@ -52,7 +52,7 @@ class _OriginalBookReaderScreenState extends State<OriginalBookReaderScreen> {
   }
 
   int _extractPageNumber(String path) {
-    final fileName = path.split(Platform.pathSeparator).last;
+    final fileName = path.split(RegExp(r'[/\\]')).last;
     final match = RegExp(r'page_?(\d+)').firstMatch(fileName);
     return match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
   }

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Novels World — Read Web Novels, Books & AI Audiobooks</title>
+  <meta name="description" content="Download Novels World for Android, Windows, Linux, macOS, or launch the Web App instantly. Read web novels, classic literature, PDFs, and listen with AI TTS." />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <style>
+    :root {
+      --bg: #0b0d14;
+      --surface: #141824;
+      --surface-hover: #1b2132;
+      --border: #252c40;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #8b5cf6;
+      --accent-2: #38bdf8;
+      --accent-glow: rgba(139, 92, 246, 0.25);
+      --green: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: radial-gradient(circle at 20% 0%, #1a1333 0%, var(--bg) 45%),
+                  radial-gradient(circle at 85% 20%, #0d2136 0%, var(--bg) 50%);
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 1.2rem;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid;
+      place-items: center;
+      font-size: 1.2rem;
+      box-shadow: 0 6px 20px var(--accent-glow);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+    }
+
+    .hero {
+      text-align: center;
+      padding: 72px 0 48px;
+    }
+
+    .version-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(139, 92, 246, 0.14);
+      border: 1px solid rgba(139, 92, 246, 0.35);
+      color: #c4b5fd;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 18px;
+      background: linear-gradient(135deg, #ffffff 30%, #c4b5fd 70%, #7dd3fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      max-width: 660px;
+      margin: 0 auto 32px;
+      color: var(--muted);
+      font-size: 1.08rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 14px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 0.98rem;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #6d28d9);
+      color: #fff;
+      box-shadow: 0 10px 28px var(--accent-glow);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: var(--surface-hover);
+    }
+
+    .section-title {
+      font-size: 1.65rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .section-sub {
+      color: var(--muted);
+      margin-bottom: 28px;
+      font-size: 0.98rem;
+    }
+
+    .downloads-section {
+      padding: 36px 0 56px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.2s ease, transform 0.15s ease;
+    }
+
+    .card:hover {
+      border-color: rgba(139, 92, 246, 0.5);
+      transform: translateY(-2px);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .platform-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      display: grid;
+      place-items: center;
+      font-size: 1.45rem;
+    }
+
+    .card h3 {
+      font-size: 1.12rem;
+      font-weight: 700;
+    }
+
+    .card-meta {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .card p {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-bottom: 20px;
+    }
+
+    .card .btn {
+      width: 100%;
+      padding: 11px 16px;
+      font-size: 0.92rem;
+    }
+
+    .features-section {
+      padding: 24px 0 64px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .feature-item {
+      background: rgba(20, 24, 36, 0.65);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .feature-item h4 {
+      font-size: 1rem;
+      margin-bottom: 6px;
+      color: #e2e8f0;
+    }
+
+    .feature-item p {
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 28px 0 42px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    footer a {
+      color: #c4b5fd;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="brand-badge">📖</div>
+        <span>Novels World</span>
+      </div>
+      <nav class="nav-links">
+        <a href="#downloads">Downloads</a>
+        <a href="#features">Features</a>
+        <a href="https://github.com/AdityaPatra-dev/Novels-World" target="_blank" rel="noopener">GitHub</a>
+        <a href="/" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.88rem;">Open Web App</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="version-pill" id="version-badge">Latest Release • v1.8.0</div>
+      <h1>Your Universal Web Novel &amp; Audiobook Reader</h1>
+      <p>
+        Browse 100+ web novel, Hindi, Odia, and classic literature sources, read original scanned PDFs,
+        download EPUBs offline, and listen with natural AI Text-to-Speech across all your devices.
+      </p>
+      <div class="hero-actions">
+        <a href="/" class="btn btn-primary">🌐 Launch Web App</a>
+        <a id="hero-android-btn" href="https://github.com/AdityaPatra-dev/Novels-World/releases/latest/download/Novels-World-Android.apk" class="btn btn-secondary">
+          📱 Download Android APK
+        </a>
+      </div>
+    </section>
+
+    <section id="downloads" class="downloads-section">
+      <h2 class="section-title">Download for Your Device</h2>
+      <p class="section-sub">
+        Direct downloads pulled from the latest GitHub Release, or launch instantly in your browser.
+      </p>
+
+      <div class="grid">
+        <div class="card">
+          <div>
+            <div class="card-top">
+              <div class="platform-icon">🤖</div>
+              <div>
+                <h3>Android</h3>
+                <div class="card-meta" id="meta-android">Novels-World-Android.apk</div>
+              </div>
+            </div>
+            <p>Full native Android app with offline EPUB/PDF downloads, background AI audiobook playback, and WebView support.</p>
+          </div>
+          <a id="dl-android" href="https://github.com/AdityaPatra-dev/Novels-World/releases/latest/download/Novels-World-Android.apk" class="btn btn-primary">
+            ⬇ Download APK
+          </a>
+        </div>
+
+        <div class="card">
+          <div>
+            <div class="card-top">
+              <div class="platform-icon">🪟</div>
+              <div>
+                <h3>Windows</h3>
+                <div class="card-meta" id="meta-windows">Novels-World-Windows-x64.zip</div>
+              </div>
+            </div>
+            <p>Portable Windows x64 desktop build. Extract the ZIP archive and run <code>novels_world.exe</code>.</p>
+          </div>
+          <a id="dl-windows" href="https://github.com/AdityaPatra-dev/Novels-World/releases/latest/download/Novels-World-Windows-x64.zip" class="btn btn-secondary">
+            ⬇ Download Windows ZIP
+          </a>
+        </div>
+
+        <div class="card">
+          <div>
+            <div class="card-top">
+              <div class="platform-icon">🐧</div>
+              <div>
+                <h3>Linux</h3>
+                <div class="card-meta" id="meta-linux">Novels-World-Linux-x64.tar.gz</div>
+              </div>
+            </div>
+            <p>Portable Linux x64 bundle. Extract with <code>tar -xzf</code> and launch the native GTK desktop app.</p>
+          </div>
+          <a id="dl-linux" href="https://github.com/AdityaPatra-dev/Novels-World/releases/latest/download/Novels-World-Linux-x64.tar.gz" class="btn btn-secondary">
+            ⬇ Download Linux tar.gz
+          </a>
+        </div>
+
+        <div class="card">
+          <div>
+            <div class="card-top">
+              <div class="platform-icon">🍎</div>
+              <div>
+                <h3>macOS</h3>
+                <div class="card-meta" id="meta-macos">Novels-World-macOS-Universal.zip</div>
+              </div>
+            </div>
+            <p>Universal macOS desktop app bundle for Apple Silicon and Intel Macs.</p>
+          </div>
+          <a id="dl-macos" href="https://github.com/AdityaPatra-dev/Novels-World/releases/latest/download/Novels-World-macOS-Universal.zip" class="btn btn-secondary">
+            ⬇ Download macOS ZIP
+          </a>
+        </div>
+
+        <div class="card">
+          <div>
+            <div class="card-top">
+              <div class="platform-icon">📲</div>
+              <div>
+                <h3>iOS / iPadOS</h3>
+                <div class="card-meta">Safari Web App (PWA)</div>
+              </div>
+            </div>
+            <p>Open the Web App in Safari, tap <strong>Share → Add to Home Screen</strong> for a full-screen iOS experience.</p>
+          </div>
+          <a href="/" class="btn btn-secondary">
+            🌐 Open in Safari
+          </a>
+        </div>
+
+        <div class="card">
+          <div>
+            <div class="card-top">
+              <div class="platform-icon">🌐</div>
+              <div>
+                <h3>Web Mode</h3>
+                <div class="card-meta">No installation required</div>
+              </div>
+            </div>
+            <p>Read online from any browser with cloud library sync, proxy-assisted source browsing, and browser speech TTS.</p>
+          </div>
+          <a href="/" class="btn btn-primary">
+            🚀 Launch Web App
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="features-section">
+      <h2 class="section-title">Everything You Need to Read &amp; Listen</h2>
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h4>📚 100+ Integrated Sources</h4>
+          <p>English web novels, RoyalRoad, ScribbleHub, Hindi &amp; Odia archives, and classic literature catalogues.</p>
+        </div>
+        <div class="feature-item">
+          <h4>📖 Original Book PDF Reader</h4>
+          <p>Page-by-page visual reader with pinch-to-zoom, page scrubber, and clean reflowed text mode.</p>
+        </div>
+        <div class="feature-item">
+          <h4>🎧 AI Audiobook &amp; TTS</h4>
+          <p>Listen to any chapter with background audio playback, sleep timer, and customizable voice controls.</p>
+        </div>
+        <div class="feature-item">
+          <h4>☁️ Cloud Sync &amp; Offline</h4>
+          <p>Sync your library and reading progress across devices, or download chapters &amp; EPUBs for offline reading.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>
+        Novels World • Open Source on
+        <a href="https://github.com/AdityaPatra-dev/Novels-World/releases" target="_blank" rel="noopener">GitHub Releases</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    (async function syncLatestRelease() {
+      try {
+        const res = await fetch('https://api.github.com/repos/AdityaPatra-dev/Novels-World/releases/latest');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.tag_name) {
+          document.getElementById('version-badge').textContent = 'Latest Release • ' + data.tag_name;
+        }
+        if (Array.isArray(data.assets)) {
+          const map = {
+            'Novels-World-Android.apk': ['dl-android', 'meta-android', 'hero-android-btn'],
+            'Novels-World-Windows-x64.zip': ['dl-windows', 'meta-windows'],
+            'Novels-World-Linux-x64.tar.gz': ['dl-linux', 'meta-linux'],
+            'Novels-World-macOS-Universal.zip': ['dl-macos', 'meta-macos'],
+          };
+          for (const asset of data.assets) {
+            const ids = map[asset.name];
+            if (!ids) continue;
+            const mb = asset.size ? (asset.size / (1024 * 1024)).toFixed(1) + ' MB' : '';
+            document.getElementById(ids[0]).href = asset.browser_download_url;
+            if (ids[2]) document.getElementById(ids[2]).href = asset.browser_download_url;
+            if (mb) document.getElementById(ids[1]).textContent = asset.name + ' • ' + mb;
+          }
+        }
+      } catch (_) {}
+    })();
+  </script>
+</body>
+</html>
